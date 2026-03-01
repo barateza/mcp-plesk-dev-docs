@@ -431,6 +431,27 @@ Contributions are welcome! Consider the following workflow:
 
 ## 🐛 Troubleshooting
 
+### MCP Inspector on Windows
+
+If you encounter a `Failed to spawn: ... program not found` error when running the MCP Inspector on Windows:
+
+```powershell
+npx @modelcontextprotocol/inspector uv run .\plesk_unified\server.py
+# error: Failed to spawn: .plesk_unifiedserver.py
+```
+
+This is because backslashes `\` are sometimes misinterpreted as escape characters. To fix this, use forward slashes `/` or use the console script name:
+
+**Recommended Fix (using console script):**
+```powershell
+npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
+```
+
+**Alternative Fix (using forward slashes):**
+```powershell
+npx @modelcontextprotocol/inspector uv run plesk_unified/server.py
+```
+
 ### Models not downloading
 
 Ensure you have internet connectivity and sufficient disk space (~2GB for

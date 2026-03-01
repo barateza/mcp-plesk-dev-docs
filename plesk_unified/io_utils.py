@@ -3,6 +3,9 @@ import logging
 import os
 import shutil
 import stat
+import tempfile
+import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +28,9 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
         return True
 
     repo_url = source.get("repo_url")
+    zip_url = source.get("zip_url")
+
+    # If repo_url is present, clone from Git.
     if repo_url and source_path:
         logger.info("Downloading %s from %s...", source.get("cat"), repo_url)
         try:
@@ -47,6 +53,31 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
         except Exception:
             logger.error("Clone failed for %s", source.get("cat"), exc_info=True)
             return False
+
+    # If zip_url is present, download and extract the Zip file.
+    if zip_url and source_path:
+        logger.info("Downloading zip %s from %s...", source.get("cat"), zip_url)
+        try:
+            source_path.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+                urllib.request.urlretrieve(zip_url, tmp.name)
+
+            with zipfile.ZipFile(tmp.name, "r") as zip_ref:
+                zip_ref.extractall(source_path)
+
+            os.unlink(tmp.name)
+            logger.info(
+                "Zip download and extraction succeeded for %s", source.get("cat")
+            )
+            return True
+        except Exception:
+            logger.error(
+                "Zip download/extraction failed for %s",
+                source.get("cat"),
+                exc_info=True,
+            )
+            return False
+
     return False
 
 

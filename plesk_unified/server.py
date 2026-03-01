@@ -133,18 +133,21 @@ SOURCES = [
         "cat": "api",
         "type": "md",
         "repo_url": None,
+        "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/api-rpc.zip",
     },
     {
         "path": KB_DIR / "cli-linux",
         "cat": "cli",
         "type": "md",
         "repo_url": None,
+        "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/cli-linux.zip",
     },
     {
         "path": KB_DIR / "extensions-guide",
         "cat": "guide",
         "type": "md",
         "repo_url": None,
+        "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/extensions-guide.zip",
     },
 ]
 

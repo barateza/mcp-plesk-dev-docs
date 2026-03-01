@@ -1,17 +1,3 @@
-# /// script
-# dependencies = [
-#   "fastmcp",
-#   "lancedb",
-#   "beautifulsoup4",
-#   "GitPython",
-#   "torch",
-#   "transformers",
-#   "sentence-transformers",
-#   "numpy",
-#   "pydantic"
-# ]
-# ///
-
 import logging
 
 # ruff: noqa: E402

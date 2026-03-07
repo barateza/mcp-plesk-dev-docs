@@ -12,38 +12,59 @@
 
 ## Why this exists
 
-Plesk documentation is spread across four separate sources: an admin guide, a REST API reference, a CLI reference, and PHP/JS SDKs. Answering a single support question often means searching all of them manually, cross-referencing results, and still missing the relevant section.
+Plesk documentation is spread across five separate sources: an admin guide, a REST API reference, a CLI reference, a PHP SDK, and a JS SDK. Answering a single support question often means searching all of them manually, cross-referencing results, and still missing the relevant section.
 
-This server ingests all four sources, embeds them with a multilingual model, and exposes a single `search_plesk_unified` MCP tool. You ask a question in plain English; it returns the most relevant documentation chunks, reranked by a cross-encoder. Built for use in daily Plesk support work, where resolution time matters.
+This server ingests all five sources, embeds them with a multilingual model, and exposes a single `search_plesk_unified` MCP tool. You ask a question in plain English; it returns the most relevant documentation chunks, reranked by a cross-encoder. Built for use in daily Plesk support work, where resolution time matters.
 
 ---
 
 ## Demo
 
+```bash
+$ query: "How do I define default configuration settings for my extension?"
+
+=== PHP-STUBS | ConfigDefaults.php ===
+Path:
+File: ConfigDefaults.php
+Score/Distance: 250.7434
+
+[PHP-STUBS] ConfigDefaults.php
+---
+/**
+ * Hook for extension config defaults (panel.ini settings)
+ * @package Plesk_Modules
+ */
+abstract class pm_Hook_ConfigDefaults implements pm_Hook_Interface
+{
+    /**
+     * Retrieve the list of default settings
+     * @return array
+     */
+    abstract public function getDefaults();
+}
+
+=== PHP-STUBS | Config.php ===
+Path:
+File: Config.php
+Score/Distance: 344.7940
+
+[PHP-STUBS] Config.php
+---
+class pm_Config
+{
+    /**
+     * Retrieve extension's default configuration settings
+     * @return array
+     * */
+    public static function getDefaults() { }
+}
 ```
-$ query: "How do I configure PHP-FPM pool settings per domain?"
-
-Result 1 [score: 0.94] — Admin Guide / PHP Settings
-  "Each domain can run its own PHP-FPM pool. To configure per-domain settings,
-   navigate to Domains > example.com > PHP Settings and select 'FPM application
-   served by nginx'..."
-
-Result 2 [score: 0.81] — CLI Reference / plesk bin php_handler
-  "plesk bin php_handler --reread
-   Reloads PHP handler configuration. Use after modifying pool settings to apply
-   changes without a full server restart..."
-
-Result 3 [score: 0.76] — API Reference / /api/v2/cli/php_handler
-  ...
-```
-
-> ⚠️ **[FILL IN]** Replace the above with actual terminal output from your server. Even one real query/response block is worth more than any amount of documentation.
 
 ---
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                   MCP Client                        │
 │         (Claude Desktop / Cursor / etc.)            │
@@ -67,15 +88,15 @@ Result 3 [score: 0.76] — API Reference / /api/v2/cli/php_handler
 ┌───────────────────▼─────────────────────────────────┐
 │               LanceDB Vector Store                  │
 │                                                     │
-│  ┌──────────┐ ┌─────────┐ ┌──────┐ ┌────────────┐  │
-│  │Admin Guide│ │REST API │ │ CLI  │ │ PHP/JS SDK │  │
-│  │  (HTML)  │ │  (HTML) │ │(HTML)│ │  (stubs)   │  │
-│  └──────────┘ └─────────┘ └──────┘ └────────────┘  │
+│ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌─────────┐ │
+│ │ Guide │ │  API  │ │  CLI  │ │  PHP  │ │   JS    │ │
+│ │(HTML) │ │(HTML) │ │(HTML) │ │(stubs)│ │  (src)  │ │
+│ └───────┘ └───────┘ └───────┘ └───────┘ └─────────┘ │
 └─────────────────────────────────────────────────────┘
 ```
 
 | Component | Technology | Role |
-|---|---|---|
+| --- | --- | --- |
 | Embeddings | BAAI/bge-m3 | Multilingual semantic embeddings |
 | Reranker | BAAI/bge-reranker-base | Cross-encoder result reranking |
 | Vector DB | LanceDB | Apache Arrow-based ANN search |
@@ -83,7 +104,7 @@ Result 3 [score: 0.76] — API Reference / /api/v2/cli/php_handler
 | HTML Parser | BeautifulSoup4 | Documentation ingestion |
 | Git integration | GitPython | Auto-fetches PHP stubs and JS SDK |
 
-**Index stats:** ~[FILL IN: X] documents across 5 sources · ~[FILL IN: Xms] retrieval on CPU · ~2GB disk for models + index
+**Index stats:** ~790 documents across 5 sources · ~300ms retrieval on CPU · ~2GB disk for models + index
 
 ---
 
@@ -130,7 +151,7 @@ The server will fetch documentation, generate embeddings, and start listening fo
 The server auto-detects available hardware:
 
 | Hardware | Acceleration |
-|---|---|
+| --- | --- |
 | NVIDIA (CUDA) | ✅ Automatic |
 | Apple Silicon (MPS) | ✅ Automatic |
 | CPU | ✅ Fallback |

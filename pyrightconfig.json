@@ -1,0 +1,14 @@
+{
+    "venvPath": ".",
+    "venv": ".venv",
+    "pythonVersion": "3.12",
+    "include": [
+        "plesk_unified",
+        "scripts",
+        "tests"
+    ],
+    "exclude": [
+        ".venv",
+        "**/__pycache__", "**/node_modules", "**/.*"
+    ]
+}

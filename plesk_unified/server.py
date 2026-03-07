@@ -61,37 +61,15 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 from typing import Any, Dict, List, Optional, Tuple
 
 import lancedb  # type: ignore
-from bs4 import BeautifulSoup
 from fastmcp import FastMCP
-from lancedb.embeddings import get_registry  # type: ignore
-from lancedb.pydantic import LanceModel, Vector  # type: ignore
 from pydantic import Field
 
-from plesk_unified import chunking, html_utils, io_utils
-
-# Detect best device
-# Priority: CUDA (NVIDIA) > MPS (Apple Silicon) > CPU
-device = "cpu"
 try:
-    import torch
-
-    # Check for CUDA first (NVIDIA GPUs on Windows/Linux)
-    if torch.cuda.is_available():
-        device = "cuda"
-        logger.info("NVIDIA GPU (CUDA) detected. Using for acceleration.")
-    # Check for MPS (Apple Silicon on macOS)
-    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        device = "mps"
-        logger.info("Apple Silicon GPU (MPS) detected. Using for acceleration.")
-    else:
-        logger.info("No GPU acceleration available. Using CPU.")
+    from plesk_unified import chunking, html_utils, io_utils
 except ImportError:
-    logger.warning("Torch not available; using CPU.", exc_info=True)
-except Exception:
-    logger.warning("Error detecting device; using CPU.", exc_info=True)
+    import chunking, html_utils, io_utils
 
-
-# Initialize MCP
+# Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
 
 # --- Configuration ---
@@ -137,37 +115,88 @@ SOURCES = [
     },
 ]
 
-# --- Database Setup ---
-logger.info("Initializing embedding model BAAI/bge-m3 on %s...", device)
-try:
+# --- Lazy Initialization ---
+# The embedding model (~1.5 GB) is loaded on first tool call, NOT at import time.
+# This lets the MCP server respond to `initialize` in <2 seconds.
+
+_embedding_model: Any = None
+_schema_class: Any = None
+
+
+def _detect_device() -> str:
+    """Detect the best available compute device (CUDA > MPS > CPU)."""
     try:
-        embedding_model = (
-            get_registry().get("huggingface").create(name="BAAI/bge-m3", device=device)
-        )
-    except TypeError:
-        # Provider may not accept `device` kwarg; retry without it
-        logger.debug("Device argument failed, retrying without device kwarg.")
-        embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
-    logger.info("Embedding model initialized successfully.")
-except Exception:
-    logger.warning("Embedding model init failed. Retrying CPU-only.", exc_info=True)
-    try:
-        embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
-        logger.info("Embedding model initialized (CPU fallback).")
+        import torch
+
+        if torch.cuda.is_available():
+            logger.info("NVIDIA GPU (CUDA) detected. Using for acceleration.")
+            return "cuda"
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            logger.info("Apple Silicon GPU (MPS) detected. Using for acceleration.")
+            return "mps"
+        logger.info("No GPU acceleration available. Using CPU.")
+        return "cpu"
+    except ImportError:
+        logger.warning("Torch not available; using CPU.")
+        return "cpu"
     except Exception:
-        logger.critical("Embedding model could not be initialized.", exc_info=True)
-        raise
+        logger.warning("Error detecting device; using CPU.", exc_info=True)
+        return "cpu"
 
 
-class UnifiedSchema(LanceModel):
-    # Use LanceDB's Vector type to ensure a FixedSizeList Arrow column is created.
-    # BAAI/bge-m3 uses 1024-dimensional embeddings.
-    vector: Vector(1024) = embedding_model.VectorField()  # type: ignore
-    text: str = embedding_model.SourceField()
-    title: str
-    filename: str
-    category: str
-    breadcrumb: str
+def get_embedding_model() -> Any:
+    """Return the embedding model, initializing it on first call."""
+    global _embedding_model
+    if _embedding_model is not None:
+        return _embedding_model
+
+    from lancedb.embeddings import get_registry  # type: ignore
+
+    device = _detect_device()
+    logger.info("Initializing embedding model BAAI/bge-m3 on %s...", device)
+    try:
+        try:
+            _embedding_model = (
+                get_registry().get("huggingface").create(name="BAAI/bge-m3", device=device)
+            )
+        except TypeError:
+            # Provider may not accept `device` kwarg; retry without it
+            logger.debug("Device argument failed, retrying without device kwarg.")
+            _embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
+        logger.info("Embedding model initialized successfully.")
+    except Exception:
+        logger.warning("Embedding model init failed. Retrying CPU-only.", exc_info=True)
+        try:
+            _embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
+            logger.info("Embedding model initialized (CPU fallback).")
+        except Exception:
+            logger.critical("Embedding model could not be initialized.", exc_info=True)
+            raise
+
+    return _embedding_model
+
+
+def get_schema() -> Any:
+    """Return the LanceDB schema class, creating it on first call."""
+    global _schema_class
+    if _schema_class is not None:
+        return _schema_class
+
+    from lancedb.pydantic import LanceModel, Vector  # type: ignore
+
+    em = get_embedding_model()
+
+    class UnifiedSchema(LanceModel):
+        # BAAI/bge-m3 uses 1024-dimensional embeddings.
+        vector: Vector(1024) = em.VectorField()  # type: ignore
+        text: str = em.SourceField()
+        title: str
+        filename: str
+        category: str
+        breadcrumb: str
+
+    _schema_class = UnifiedSchema
+    return _schema_class
 
 
 def get_table(create_new: bool = False) -> Any:
@@ -178,56 +207,20 @@ def get_table(create_new: bool = False) -> Any:
         if create_new:
             logger.info("Creating/overwriting table 'plesk_knowledge'")
             return db.create_table(
-                "plesk_knowledge", schema=UnifiedSchema, mode="overwrite"
+                "plesk_knowledge", schema=get_schema(), mode="overwrite"
             )
         return db.open_table("plesk_knowledge")
     except Exception:
         logger.info(
             "Table not found or error opening. Creating new 'plesk_knowledge' table."
         )
-        return db.create_table("plesk_knowledge", schema=UnifiedSchema, mode="create")
+        return db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
 
 
 # --- Source Handling are now in plesk_unified.io_utils ---
 
 
 # --- Content Parsers ---
-def parse_html(
-    file_path: Path,
-    toc_metadata: Optional[Dict[str, str]] = None,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Parse an HTML file and extract title, breadcrumb, and text content."""
-    try:
-        html = file_path.read_text(encoding="utf-8", errors="ignore")
-        soup = BeautifulSoup(html, "html.parser")
-        title = "Untitled"
-        breadcrumb = ""
-        if toc_metadata:
-            title = toc_metadata.get("title", title)
-            breadcrumb = toc_metadata.get("breadcrumb", "")
-        elif soup.title and soup.title.string:
-            title = soup.title.string.replace(
-                " — Plesk Obsidian documentation", ""
-            ).strip()
-
-        content = soup.find("div", attrs={"itemprop": "articleBody"})
-        if not content:
-            content = soup.body
-
-        if content:
-            for tag in content(["script", "style", "nav", "footer", "iframe"]):
-                tag.decompose()
-            clean_text = content.get_text(separator="\n", strip=True)
-        else:
-            clean_text = ""
-        if breadcrumb:
-            clean_text = f"Context: {breadcrumb}\n\n{clean_text}"
-        return title, breadcrumb, clean_text
-    except Exception:
-        logger.warning("Error parsing HTML file: %s", file_path.name, exc_info=True)
-        return None, None, None
-
-
 def parse_code(file_path: Path) -> Tuple[Optional[str], str, Optional[str]]:
     """Parse a code file and return filename, empty string, and content."""
     try:
@@ -241,40 +234,12 @@ def parse_code(file_path: Path) -> Tuple[Optional[str], str, Optional[str]]:
         return None, "", None
 
 
-# --- Chunking Strategies ---
-def chunk_by_lines(text: str, chunk_size: int, overlap: int = 0) -> List[str]:
-    """Chunks text by lines with overlap."""
-    lines = text.splitlines()
-    if not lines:
-        return []
-    chunks = []
-    step = max(1, chunk_size - overlap)
-    for i in range(0, len(lines), step):
-        chunk = "\n".join(lines[i : i + chunk_size])
-        if chunk.strip():
-            chunks.append(chunk)
-    return chunks
-
-
-def chunk_by_chars(text: str, chunk_size: int, overlap: int = 0) -> List[str]:
-    """Chunks text by characters with overlap."""
-    if not text:
-        return []
-    chunks = []
-    step = max(1, chunk_size - overlap)
-    for i in range(0, len(text), step):
-        chunk = text[i : i + chunk_size]
-        if chunk.strip():
-            chunks.append(chunk)
-    return chunks
-
-
 # --- Tools ---
-def get_file_parser_and_toc(source):
-    """Returns the correct parser and load TOC map for the given source type."""
+def get_toc_map_for_source(source: Dict[str, Any]) -> Dict[str, Any]:
+    """Returns the TOC map for HTML sources, or empty dict for others."""
     if source["type"] == "html":
-        return html_utils.parse_html_file, io_utils.load_toc_map(source["path"])
-    return parse_code, {}
+        return io_utils.load_toc_map(source["path"])
+    return {}
 
 
 def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
@@ -306,7 +271,7 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
 
 def process_source_files(source, table, existing_files):
     """Processes all files for a given source and indexes them."""
-    parser, toc_map = get_file_parser_and_toc(source)
+    toc_map = get_toc_map_for_source(source)
     files = io_utils.collect_files_for_source(source)
     logger.info("Found %d files for source %s", len(files), source["cat"])
 
@@ -321,9 +286,9 @@ def process_source_files(source, table, existing_files):
         meta = toc_map.get(f.name) if toc_map else None
 
         if source["type"] == "html":
-            title, breadcrumb, text = parser(f, meta)
+            title, breadcrumb, text = html_utils.parse_html_file(f, meta)
         else:
-            title, breadcrumb, text = parser(f)
+            title, breadcrumb, text = parse_code(f)
 
         records = build_and_chunk_docs(source, f, title, breadcrumb, text)
         cat_docs.extend(records)

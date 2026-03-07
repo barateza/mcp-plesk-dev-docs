@@ -262,6 +262,7 @@ uv run plesk-unified-mcp
 ## Troubleshooting
 
 **MCP Inspector fails on Windows with backslash errors:**
+
 ```powershell
 # Use the console script name instead of a file path
 npx @modelcontextprotocol/inspector uv run plesk-unified-mcp

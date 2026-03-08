@@ -97,14 +97,39 @@ class pm_Config
 
 | Component | Technology | Role |
 | --- | --- | --- |
-| Embeddings | BAAI/bge-m3 | Multilingual semantic embeddings |
-| Reranker | BAAI/bge-reranker-base | Cross-encoder result reranking |
+| Embeddings | BAAI/bge-small/base/m3 (profile) | Semantic embeddings — see [Model profiles](#model-profiles) |
+| Reranker | ms-marco-MiniLM / bge-reranker-base | Cross-encoder result reranking |
 | Vector DB | LanceDB | Apache Arrow-based ANN search |
 | MCP Server | FastMCP | Tool exposure to AI clients |
 | HTML Parser | BeautifulSoup4 | Documentation ingestion |
 | Git integration | GitPython | Auto-fetches PHP stubs and JS SDK |
 
-**Index stats:** ~790 documents across 5 sources · ~300ms retrieval on CPU · ~2GB disk for models + index
+**Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
+
+---
+
+## Model profiles
+
+The server ships with three profiles that trade RAM and latency against retrieval quality.
+Set `PLESK_MODEL_PROFILE` before starting the server:
+
+```env
+PLESK_MODEL_PROFILE=medium   # light | medium | full (default: full)
+```
+
+| Profile | Embed model | Dim | HR@5 | MRR@5 | Avg latency\* | Est. RAM |
+|---------|-------------|-----|------|-------|--------------|----------|
+| `light` | BAAI/bge-small-en-v1.5 | 384 | 100% | 0.933 | 1.0 s | ~200 MB |
+| `medium` | BAAI/bge-base-en-v1.5 | 768 | 100% | **0.938** | 1.2 s | ~600 MB |
+| `full` | BAAI/bge-m3 | 1024 | 100% | 0.889 | 4.6 s | ~1 800 MB |
+
+\* Measured on NVIDIA CUDA. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology, per-query breakdown, and reproduction steps.
+
+> **Tip:** `medium` has the best MRR on the English-only Plesk corpus and is ~4× faster than
+> `full`. Prefer `full` only if you add non-English documentation sources.
+
+Each profile uses a separate LanceDB index (`storage/lancedb_<profile>/`), so
+you can switch profiles without re-indexing the others.
 
 ---
 
@@ -123,17 +148,17 @@ git clone https://github.com/barateza/mcp-plesk-unified.git
 cd mcp-plesk-unified
 
 python -m venv .venv
-source .venv/bin/activate  # Windows (PowerShell): .venv\Scripts\Activate.ps1
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-python -m pip install -e .  # or: pip install -e .
+uv pip install -e .        # or: pip install -e .
 ```
 
 ### Warm up models (required before first use)
 
-MCP clients enforce ~60s request timeouts. On first run, the server downloads ~2GB of models. Run the warm-up step once in a terminal (after activating your venv) before registering with any client to avoid timeouts:
+MCP clients enforce ~60s request timeouts. On first run, the server downloads ~1.8GB of models. Run the warm-up step once before registering with any client:
 
 ```bash
-source .venv/bin/activate && uv run plesk-unified-mcp --help
+uv run plesk-unified-mcp --help
 ```
 
 You'll see progress output as models download and cache locally. Subsequent starts are near-instantaneous.
@@ -141,11 +166,7 @@ You'll see progress output as models download and cache locally. Subsequent star
 ### Build the index
 
 ```bash
-# Recommended: activate the virtualenv first, then start the index/build step
-source .venv/bin/activate && uv run plesk-unified-mcp
-
-# Or run the server directly (after activating venv):
-source .venv/bin/activate && python -m plesk_unified.server
+uv run plesk-unified-mcp
 ```
 
 The server will fetch documentation, generate embeddings, and start listening for MCP connections.
@@ -166,7 +187,7 @@ To install PyTorch with CUDA support:
 # NVIDIA
 pip install torch --index-url https://download.pytorch.org/whl/cu124
 
-# Apple Silicon — standard torch includes MPS; install with the normal wheel
+# Apple Silicon — standard torch includes MPS
 pip install torch
 ```
 
@@ -214,18 +235,21 @@ Edit `~/.cursor/mcp.json`:
 
 ## Project structure
 
-```
+``` text
 mcp-plesk-unified/
 ├── plesk_unified/
 │   ├── server.py            # FastMCP tool definitions and query pipeline
 │   ├── platform_utils.py    # GPU/device detection
 │   └── ai_client.py         # Embedding and reranker wrappers
 ├── scripts/
-│   ├── enrich_toc.py        # LLM-assisted TOC description generation
+│   ├── benchmark_profiles.py  # Retrieval quality benchmark
+│   ├── enrich_toc.py          # LLM-assisted TOC description generation
 │   ├── generate_virtual_toc.py
 │   └── manage_plesk_docs.py
+├── docs/
+│   └── benchmarks.md        # Benchmark results and methodology
 ├── knowledge_base/          # Fetched and parsed documentation sources
-├── storage/                 # LanceDB vector index (generated)
+├── storage/                 # LanceDB vector indexes (generated, per-profile)
 ├── pyproject.toml
 └── README.md
 ```
@@ -278,7 +302,8 @@ pre-commit run --all-files
 To rebuild the vector index from scratch:
 
 ```bash
-rm -rf storage/lancedb && source .venv/bin/activate && uv run plesk-unified-mcp
+rm -rf storage/lancedb
+uv run plesk-unified-mcp
 ```
 
 ---

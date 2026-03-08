@@ -91,7 +91,7 @@ BUILTIN_QUERIES: list[dict] = [
     # api
     {
         "query": "list all domains via Plesk REST API",
-        "relevant": ["GET /domains", "/api/v2/domains"],
+        "relevant": ["List of Domains", "admin-domain-list", "domain-list"],
         "category": "api",
     },
     {

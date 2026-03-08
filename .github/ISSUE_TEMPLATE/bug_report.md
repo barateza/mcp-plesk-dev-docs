@@ -12,15 +12,15 @@ labels: ["bug"]
 ## Environment
 
 - **OS**: (macOS / Linux / Windows)
-- **Python Version**: 
-- **Plesk Unified Version**: 
+- **Python Version**:
+- **Plesk Unified Version**:
 - **Installation Method**: (pip / git clone)
 
 ## Steps to Reproduce
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
 ## Expected Behavior
 

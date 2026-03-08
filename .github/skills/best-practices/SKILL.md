@@ -42,8 +42,8 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 <!-- Basic CSP via meta tag -->
 <meta
   http-equiv="Content-Security-Policy"
-  content="default-src 'self'; 
-               script-src 'self' https://trusted-cdn.com; 
+  content="default-src 'self';
+               script-src 'self' https://trusted-cdn.com;
                style-src 'self' 'unsafe-inline';
                img-src 'self' data: https:;
                connect-src 'self' https://api.example.com;"

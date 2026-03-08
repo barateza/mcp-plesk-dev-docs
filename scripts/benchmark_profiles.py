@@ -220,7 +220,9 @@ def run_benchmark(
         if reranker and results:
             texts_raw = [r.get("text", "") for r in results]
             scores = reranker.predict([(q["query"], t) for t in texts_raw])
-            ranked = sorted(zip(scores, results), key=lambda x: x[0], reverse=True)
+            ranked = sorted(
+                zip(scores, results, strict=True), key=lambda x: x[0], reverse=True
+            )
             results = [r for _, r in ranked[:final_k]]
 
         latency = time.perf_counter() - t0
@@ -259,7 +261,9 @@ def run_benchmark(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Benchmark retrieval quality across mcp-plesk-unified model profiles."
+        description=(
+            "Benchmark retrieval quality across mcp-plesk-unified model profiles."
+        )
     )
     parser.add_argument(
         "--profiles",
@@ -324,16 +328,15 @@ def main() -> None:
             print(f"  Model RSS delta  : {result['model_rss_mb']:.0f} MB")
 
             # Per-query breakdown
-            print(f"\n  Per-query results:")
+            print("\n  Per-query results:")
             for pq in result["per_query"]:
                 status = "✓" if pq["hit"] else "✗"
-                print(
-                    f"    {status} [{pq['latency_s']:.2f}s] {pq['query'][:70]}"
-                )
+                print(f"    {status} [{pq['latency_s']:.2f}s] {pq['query'][:70]}")
 
         except Exception as exc:
             print(f"  ERROR running profile '{profile_name}': {exc}")
             import traceback
+
             traceback.print_exc()
 
     # --- Summary table ---
@@ -341,7 +344,9 @@ def main() -> None:
         print(f"\n{'=' * 60}")
         print("SUMMARY")
         print("=" * 60)
-        header = f"{'Profile':<10} {'HR@5':>8} {'MRR@5':>8} {'Latency':>10} {'RSS MB':>10}"
+        header = (
+            f"{'Profile':<10} {'HR@5':>8} {'MRR@5':>8} {'Latency':>10} {'RSS MB':>10}"
+        )
         print(header)
         print("-" * len(header))
         for r in all_results:
@@ -355,7 +360,9 @@ def main() -> None:
 
     # --- Optional JSON output ---
     if args.output:
-        Path(args.output).write_text(json.dumps(all_results, indent=2), encoding="utf-8")
+        Path(args.output).write_text(
+            json.dumps(all_results, indent=2), encoding="utf-8"
+        )
         print(f"\nFull results written to {args.output}")
 
 

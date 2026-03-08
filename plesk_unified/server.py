@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).parent
 LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 from dotenv import load_dotenv
+
 load_dotenv()
 
 LOG_FILE = os.environ.get("LOG_FILE", str(LOG_DIR / "plesk_unified.log"))
@@ -60,7 +61,7 @@ logger.info(f"Logging initialized. Level: {LOG_LEVEL_NAME}, File: {LOG_FILE}")
 os.environ["TQDM_DISABLE"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import lancedb  # type: ignore
 from fastmcp import FastMCP
@@ -70,7 +71,10 @@ try:
     from plesk_unified import chunking, html_utils, io_utils
     from plesk_unified.model_config import get_active_profile, list_profiles
 except ImportError:
-    import chunking, html_utils, io_utils
+    import chunking
+    import html_utils
+    import io_utils
+
     try:
         from model_config import get_active_profile, list_profiles  # type: ignore
     except Exception:
@@ -170,19 +174,17 @@ def get_embedding_model() -> Any:
         return _embedding_model
 
     from lancedb.embeddings import get_registry  # type: ignore
+
     profile = _get_profile()
     device = _detect_device()
     logger.info("Initializing embedding model %s on %s...", profile.embed_model, device)
     try:
+        reg = get_registry().get("huggingface")
         try:
-            _embedding_model = (
-                get_registry().get("huggingface").create(name=profile.embed_model, device=device)
-            )
+            _embedding_model = reg.create(name=profile.embed_model, device=device)
         except TypeError:
             logger.debug("Device argument rejected, retrying without device kwarg.")
-            _embedding_model = (
-                get_registry().get("huggingface").create(name=profile.embed_model)
-            )
+            _embedding_model = reg.create(name=profile.embed_model)
         logger.info("Embedding model initialized successfully.")
     except Exception:
         logger.critical("Embedding model could not be initialized.", exc_info=True)
@@ -238,7 +240,10 @@ def get_reranker() -> Any:
         _reranker = CrossEncoder(profile.reranker_model, device=device)
         logger.info("Reranker initialized on %s.", device)
     except Exception:
-        logger.warning("Reranker initialization failed. Proceeding without reranking.", exc_info=True)
+        logger.warning(
+            "Reranker initialization failed. Proceeding without reranking.",
+            exc_info=True,
+        )
         return None
 
     return _reranker
@@ -262,29 +267,39 @@ def get_table(create_new: bool = False) -> Any:
         return db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
 
 
-    @mcp.tool
-    def list_model_profiles() -> str:
-        """
-        List all available model profiles and the currently active one.
-        """
-        if list_profiles is None or get_active_profile is None:
-            return "Model profiles not available in this environment."
+@mcp.tool
+def list_model_profiles() -> str:
+    """
+    List built-in model profiles and show the active profile.
 
-        profile = _get_profile()
-        profiles = list_profiles()
+    Displays the available profiles (`light`, `medium`, `full`) and a
+    short summary per profile: `embed_model`, `embed_dim`, `reranker_model`,
+    and `approx_ram_mb`. The active profile is marked with `*`.
+    """
+    if list_profiles is None or get_active_profile is None:
+        return "Model profiles not available in this environment."
 
-        lines = ["=== Available Model Profiles ===\n"]
-        for name, info in profiles.items():
-            active_mark = "*" if name == profile.name else " "
-            lines.append(
-                f"{active_mark} {name}: embed_model={info['embed_model']}, dim={info['embed_dim']}, reranker={info['reranker_model']} (~{info['approx_ram_mb']} MB)"
-            )
+    profile = _get_profile()
+    profiles = list_profiles()
 
-        lines.append("To change profile: set PLESK_MODEL_PROFILE=<name> and restart the server.")
-        lines.append(
-            "If embed_dim changes between profiles, delete storage/lancedb and run refresh_knowledge."
+    lines = ["=== Available Model Profiles ===\n"]
+    for name, info in profiles.items():
+        active_mark = "*" if name == profile.name else " "
+        line = (
+            f"{active_mark} {name}: embed_model={info['embed_model']}, "
+            f"dim={info['embed_dim']}, reranker={info['reranker_model']} "
+            f"(~{info['approx_ram_mb']} MB)"
         )
-        return "\n".join(lines)
+        lines.append(line)
+
+    lines.append(
+        "To change profile: set PLESK_MODEL_PROFILE=<name> and restart the server."
+    )
+    lines.append(
+        "If embed_dim changes between profiles, delete storage/lancedb "
+        "and run refresh_knowledge."
+    )
+    return "\n".join(lines)
 
 
 # --- Source Handling are now in plesk_unified.io_utils ---
@@ -398,7 +413,15 @@ def refresh_knowledge(
     ),
 ):
     """
-    Indexes Plesk documentation into LanceDB.
+    Index Plesk documentation into LanceDB.
+
+    Parameters
+    - `target_category`: one of 'guide', 'cli', 'api', 'php-stubs', 'js-sdk',
+      or 'all'. When not 'all' this indexes only that category.
+    - `reset_db`: when True, wipe the DB and perform a full reindex.
+
+    Behavior: incremental by filename when `reset_db` is False; skips files
+    already present in the DB. Returns a short per-source report.
     """
     logger.info(
         "Starting refresh_knowledge: target=%s, reset_db=%s", target_category, reset_db
@@ -446,22 +469,20 @@ def refresh_knowledge(
             logger.exception("Error processing source %s", source["cat"])
 
         msg = f"Finished pass for {source['cat']}."
-        logger.info(msg)
         report.append(msg)
 
     return "\n".join(report)
 
 
 @mcp.tool
-def search_plesk_unified(
-    query: str = Field(..., description="The search query (e.g. 'how to add button')"),
-    category: str | None = Field(
-        None,
-        description="Filter by category: 'guide', 'cli', 'api', 'php-stubs', 'js-sdk'",
-    ),
-):
+def search_plesk_unified(query: str, category: str | None = None) -> str:
     """
-    Search the Unified Knowledge Base.
+    Search the unified knowledge base and return up to 5 formatted results.
+
+    `category` may be used to filter results to one of the indexed
+    source categories (e.g. 'api', 'cli', 'guide', 'php-stubs', 'js-sdk').
+    Results are returned as readable text blocks including title, path,
+    filename and a numeric score/distance.
     """
     # Truncate query for logging to avoid leaking sensitive data
     safe_query = (query[:100] + "...") if len(query) > 100 else query

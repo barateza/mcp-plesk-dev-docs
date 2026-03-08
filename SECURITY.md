@@ -107,7 +107,7 @@ security updates and keep versions current.
 
 ## Acknowledgments
 
-Thank you for keeping Plesk Unified secure. We credit researchers who 
+Thank you for keeping Plesk Unified secure. We credit researchers who
 responsibly disclose vulnerabilities, if desired.
 
 ## Additional resources
@@ -115,4 +115,3 @@ responsibly disclose vulnerabilities, if desired.
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [CWE/SANS Top 25](https://cwe.mitre.org/top25/)
 - [Python Security Best Practices](https://python.readthedocs.io/en/latest/library/security_warnings.html)
-

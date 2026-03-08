@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <strong>Author:</strong> <a href="https://github.com/felipfr">Felipe Rodrigues</a> · 
+  <strong>Author:</strong> <a href="https://github.com/felipfr">Felipe Rodrigues</a> ·
   <a href="https://linkedin.com/in/felipfr">LinkedIn</a>
 </p>
 
@@ -317,7 +317,7 @@ The skill is designed to work within context limits:
 | **On-demand**          | Current spec, design, or tasks   | +5-10k |
 | **Never simultaneous** | Multiple feature specs           | —      |
 
-**Target:** <40k tokens loaded (20% of context)  
+**Target:** <40k tokens loaded (20% of context)
 **Reserve:** 160k+ tokens for work, reasoning, outputs
 
 When context exceeds 40k tokens, the skill displays a status indicator and suggests optimizations.
@@ -402,22 +402,22 @@ This skill works with **any AI coding agent** that supports skills or custom ins
 
 ## ❓ FAQ
 
-**Q: Can I skip phases (e.g., go straight to implementation)?**  
+**Q: Can I skip phases (e.g., go straight to implementation)?**
 A: Not recommended. Skipping phases leads to scope creep, ambiguity, and rework. The methodology is designed to prevent common AI coding mistakes.
 
-**Q: What if my project already has code?**  
+**Q: What if my project already has code?**
 A: Use `"Map codebase"` first. This creates 6 documents analyzing your existing architecture, conventions, and stack before you start adding features.
 
-**Q: How do I reset and start over?**  
+**Q: How do I reset and start over?**
 A: Delete the `.specs/` folder and say `"Initialize project"` to start fresh.
 
-**Q: Can I use this for small tasks or quick fixes?**  
+**Q: Can I use this for small tasks or quick fixes?**
 A: The skill is optimized for feature-level work. For small fixes, you might not need the full 4-phase process—but even a quick spec helps prevent scope creep.
 
-**Q: What happens if I close my session mid-task?**  
+**Q: What happens if I close my session mid-task?**
 A: Say `"Pause work"` before ending your session. This creates a handoff document. Next session, say `"Resume work"` to continue exactly where you left off.
 
-**Q: Does this work with any tech stack?**  
+**Q: Does this work with any tech stack?**
 A: Yes! The skill is completely stack-agnostic. It works with any language, framework, or architecture.
 
 ---

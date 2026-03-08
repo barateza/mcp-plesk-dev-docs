@@ -4,14 +4,13 @@ Tests for plesk_unified.model_config
 All tests are pure-unit (no model downloads, no LanceDB, no torch).
 """
 
-import os
 import importlib
-import pytest
-
+import os
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def reload_config(env: dict):
     """
@@ -27,12 +26,14 @@ def reload_config(env: dict):
     importlib.reload(mc)
     # Re-import after reload so we get the fresh module object
     import plesk_unified.model_config as mc2
+
     return mc2
 
 
 # ---------------------------------------------------------------------------
 # Profile selection
 # ---------------------------------------------------------------------------
+
 
 class TestProfileSelection:
     def test_default_profile_is_full(self):
@@ -67,6 +68,7 @@ class TestProfileSelection:
     def test_unknown_profile_falls_back_to_full(self, caplog):
         mc = reload_config({"PLESK_MODEL_PROFILE": "nonexistent"})
         import logging
+
         with caplog.at_level(logging.WARNING, logger="plesk_unified"):
             p = mc.get_active_profile()
         assert p.name == "full"
@@ -82,67 +84,83 @@ class TestProfileSelection:
 # Per-component overrides
 # ---------------------------------------------------------------------------
 
+
 class TestComponentOverrides:
     def test_embed_model_override(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "light",
-            "PLESK_EMBED_MODEL": "BAAI/bge-base-en-v1.5",
-            "PLESK_EMBED_DIM": "768",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "light",
+                "PLESK_EMBED_MODEL": "BAAI/bge-base-en-v1.5",
+                "PLESK_EMBED_DIM": "768",
+            }
+        )
         p = mc.get_active_profile()
         assert p.embed_model == "BAAI/bge-base-en-v1.5"
         assert p.embed_dim == 768
 
     def test_embed_dim_override_without_model_uses_profile_dim(self, caplog):
         """Changing model without setting dim should warn and use profile default."""
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "light",
-            "PLESK_EMBED_MODEL": "some/custom-model",
-            # No PLESK_EMBED_DIM
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "light",
+                "PLESK_EMBED_MODEL": "some/custom-model",
+                # No PLESK_EMBED_DIM
+            }
+        )
         import logging
+
         with caplog.at_level(logging.WARNING, logger="plesk_unified"):
             p = mc.get_active_profile()
         assert p.embed_dim == 384  # light profile default
         assert "PLESK_EMBED_DIM" in caplog.text
 
     def test_reranker_model_override(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "full",
-            "PLESK_RERANKER_MODEL": "cross-encoder/ms-marco-MiniLM-L-6-v2",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "full",
+                "PLESK_RERANKER_MODEL": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+            }
+        )
         p = mc.get_active_profile()
         assert p.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     def test_disable_reranker_via_env_false(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "full",
-            "PLESK_RERANKER_ENABLED": "false",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "full",
+                "PLESK_RERANKER_ENABLED": "false",
+            }
+        )
         p = mc.get_active_profile()
         assert p.reranker_enabled is False
 
     def test_disable_reranker_via_env_zero(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "full",
-            "PLESK_RERANKER_ENABLED": "0",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "full",
+                "PLESK_RERANKER_ENABLED": "0",
+            }
+        )
         p = mc.get_active_profile()
         assert p.reranker_enabled is False
 
     def test_enable_reranker_via_env_true(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "full",
-            "PLESK_RERANKER_ENABLED": "true",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "full",
+                "PLESK_RERANKER_ENABLED": "true",
+            }
+        )
         p = mc.get_active_profile()
         assert p.reranker_enabled is True
 
     def test_reranker_disabled_when_model_is_empty(self):
-        mc = reload_config({
-            "PLESK_MODEL_PROFILE": "full",
-            "PLESK_RERANKER_MODEL": "",
-        })
+        mc = reload_config(
+            {
+                "PLESK_MODEL_PROFILE": "full",
+                "PLESK_RERANKER_MODEL": "",
+            }
+        )
         p = mc.get_active_profile()
         assert p.reranker_enabled is False
         assert p.reranker_model is None
@@ -152,6 +170,7 @@ class TestComponentOverrides:
 # list_profiles
 # ---------------------------------------------------------------------------
 
+
 class TestListProfiles:
     def test_list_profiles_returns_all_three(self):
         mc = reload_config({})
@@ -160,7 +179,7 @@ class TestListProfiles:
 
     def test_list_profiles_has_required_keys(self):
         mc = reload_config({})
-        for name, info in mc.list_profiles().items():
+        for _name, info in mc.list_profiles().items():
             assert "embed_model" in info
             assert "embed_dim" in info
             assert "reranker_model" in info

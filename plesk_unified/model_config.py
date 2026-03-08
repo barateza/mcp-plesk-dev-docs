@@ -26,11 +26,12 @@ logger = logging.getLogger("plesk_unified")
 # Profile definitions
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ModelProfile:
     name: str
     embed_model: str
-    embed_dim: int          # must match LanceDB vector column dimension
+    embed_dim: int  # must match LanceDB vector column dimension
     reranker_model: str | None
     reranker_enabled: bool
     description: str
@@ -44,7 +45,9 @@ _PROFILES: dict[str, ModelProfile] = {
         embed_dim=384,
         reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         reranker_enabled=True,
-        description="~200 MB total. Ideal for M2 MacBook Air or any memory-constrained host.",
+        description=(
+            "~200 MB total. Ideal for M2 MacBook Air or any memory-constrained host."
+        ),
         approx_ram_mb=200,
     ),
     "medium": ModelProfile(
@@ -62,7 +65,9 @@ _PROFILES: dict[str, ModelProfile] = {
         embed_dim=1024,
         reranker_model="BAAI/bge-reranker-base",
         reranker_enabled=True,
-        description="~1.8 GB total. Maximum quality. Recommended for RTX 4070 Super / CUDA.",
+        description=(
+            "~1.8 GB total. Maximum quality. Recommended for RTX 4070 Super / CUDA."
+        ),
         approx_ram_mb=1800,
     ),
 }
@@ -84,7 +89,8 @@ def get_active_profile() -> ModelProfile:
       2. PLESK_MODEL_PROFILE                        (named profile)
       3. Compiled-in default ("full")
     """
-    profile_name = os.environ.get("PLESK_MODEL_PROFILE", DEFAULT_PROFILE).lower().strip()
+    profile_name = os.environ.get("PLESK_MODEL_PROFILE", DEFAULT_PROFILE)
+    profile_name = profile_name.lower().strip()
 
     if profile_name not in _PROFILES:
         logger.warning(
@@ -99,8 +105,10 @@ def get_active_profile() -> ModelProfile:
 
     # Apply per-component overrides on top of the profile
     embed_model = os.environ.get("PLESK_EMBED_MODEL", base.embed_model).strip()
-    reranker_model_env = os.environ.get("PLESK_RERANKER_MODEL", base.reranker_model or "")
-    reranker_model: str | None = reranker_model_env.strip() or None
+    reranker_model_env = os.environ.get(
+        "PLESK_RERANKER_MODEL", base.reranker_model or ""
+    )
+    reranker_model = reranker_model_env.strip() or None
 
     reranker_enabled_env = os.environ.get("PLESK_RERANKER_ENABLED", "").strip().lower()
     if reranker_enabled_env in ("false", "0", "no"):
@@ -137,7 +145,8 @@ def get_active_profile() -> ModelProfile:
     )
 
     logger.info(
-        "Active model profile: %s | embed=%s (dim=%d) | reranker=%s (enabled=%s) | ~%d MB",
+        "Active model profile: %s | embed=%s (dim=%d) | reranker=%s "
+        "(enabled=%s) | ~%d MB",
         active.name,
         active.embed_model,
         active.embed_dim,

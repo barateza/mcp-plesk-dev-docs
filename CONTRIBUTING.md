@@ -74,11 +74,11 @@ harassment-free environment for everyone.
   def search_knowledge_base(query: str, max_results: int = 10) -> list[dict]:
       """
       Search the Plesk knowledge base for relevant documentation.
-      
+
       Args:
           query: The search query string
           max_results: Maximum number of results to return
-          
+
       Returns:
           List of documentation entries matching the query
       """
@@ -175,4 +175,3 @@ pre-commit run --all-files  # optional: verify everything passes
 The hooks include `ruff` (lint + auto-fix), `isort` (import sorting), and
 `black` (code formatting). If a hook modifies files, re-run `git add` and
 commit again.
-

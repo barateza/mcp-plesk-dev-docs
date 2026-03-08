@@ -12,6 +12,8 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+from dotenv import load_dotenv
+load_dotenv()
 
 LOG_FILE = os.environ.get("LOG_FILE", str(LOG_DIR / "plesk_unified.log"))
 # Convert string level (e.g. "INFO") to integer
@@ -66,8 +68,14 @@ from pydantic import Field
 
 try:
     from plesk_unified import chunking, html_utils, io_utils
+    from plesk_unified.model_config import get_active_profile, list_profiles
 except ImportError:
     import chunking, html_utils, io_utils
+    try:
+        from model_config import get_active_profile, list_profiles  # type: ignore
+    except Exception:
+        get_active_profile = None  # type: ignore
+        list_profiles = None  # type: ignore
 
 # Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
@@ -121,6 +129,17 @@ SOURCES = [
 
 _embedding_model: Any = None
 _schema_class: Any = None
+_reranker: Any = None
+_active_profile: Any = None
+
+
+def _get_profile():
+    global _active_profile
+    if _active_profile is None:
+        if get_active_profile is None:
+            raise RuntimeError("model_config.get_active_profile not available")
+        _active_profile = get_active_profile()
+    return _active_profile
 
 
 def _detect_device() -> str:
@@ -151,27 +170,23 @@ def get_embedding_model() -> Any:
         return _embedding_model
 
     from lancedb.embeddings import get_registry  # type: ignore
-
+    profile = _get_profile()
     device = _detect_device()
-    logger.info("Initializing embedding model BAAI/bge-m3 on %s...", device)
+    logger.info("Initializing embedding model %s on %s...", profile.embed_model, device)
     try:
         try:
             _embedding_model = (
-                get_registry().get("huggingface").create(name="BAAI/bge-m3", device=device)
+                get_registry().get("huggingface").create(name=profile.embed_model, device=device)
             )
         except TypeError:
-            # Provider may not accept `device` kwarg; retry without it
-            logger.debug("Device argument failed, retrying without device kwarg.")
-            _embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
+            logger.debug("Device argument rejected, retrying without device kwarg.")
+            _embedding_model = (
+                get_registry().get("huggingface").create(name=profile.embed_model)
+            )
         logger.info("Embedding model initialized successfully.")
     except Exception:
-        logger.warning("Embedding model init failed. Retrying CPU-only.", exc_info=True)
-        try:
-            _embedding_model = get_registry().get("huggingface").create(name="BAAI/bge-m3")
-            logger.info("Embedding model initialized (CPU fallback).")
-        except Exception:
-            logger.critical("Embedding model could not be initialized.", exc_info=True)
-            raise
+        logger.critical("Embedding model could not be initialized.", exc_info=True)
+        raise
 
     return _embedding_model
 
@@ -184,11 +199,12 @@ def get_schema() -> Any:
 
     from lancedb.pydantic import LanceModel, Vector  # type: ignore
 
+    profile = _get_profile()
     em = get_embedding_model()
+    dim = profile.embed_dim
 
     class UnifiedSchema(LanceModel):
-        # BAAI/bge-m3 uses 1024-dimensional embeddings.
-        vector: Vector(1024) = em.VectorField()  # type: ignore
+        vector: Vector(dim) = em.VectorField()  # type: ignore
         text: str = em.SourceField()
         title: str
         filename: str
@@ -197,6 +213,35 @@ def get_schema() -> Any:
 
     _schema_class = UnifiedSchema
     return _schema_class
+
+
+def get_reranker() -> Any:
+    """Return the cross-encoder reranker, initializing it on first call.
+
+    Returns None if the active profile has reranking disabled.
+    """
+    global _reranker
+    if _reranker is not None:
+        return _reranker
+
+    profile = _get_profile()
+
+    if not profile.reranker_enabled or not profile.reranker_model:
+        logger.info("Reranker disabled by profile '%s'.", profile.name)
+        return None
+
+    logger.info("Initializing reranker %s...", profile.reranker_model)
+    try:
+        from sentence_transformers import CrossEncoder  # type: ignore
+
+        device = _detect_device()
+        _reranker = CrossEncoder(profile.reranker_model, device=device)
+        logger.info("Reranker initialized on %s.", device)
+    except Exception:
+        logger.warning("Reranker initialization failed. Proceeding without reranking.", exc_info=True)
+        return None
+
+    return _reranker
 
 
 def get_table(create_new: bool = False) -> Any:
@@ -215,6 +260,31 @@ def get_table(create_new: bool = False) -> Any:
             "Table not found or error opening. Creating new 'plesk_knowledge' table."
         )
         return db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
+
+
+    @mcp.tool
+    def list_model_profiles() -> str:
+        """
+        List all available model profiles and the currently active one.
+        """
+        if list_profiles is None or get_active_profile is None:
+            return "Model profiles not available in this environment."
+
+        profile = _get_profile()
+        profiles = list_profiles()
+
+        lines = ["=== Available Model Profiles ===\n"]
+        for name, info in profiles.items():
+            active_mark = "*" if name == profile.name else " "
+            lines.append(
+                f"{active_mark} {name}: embed_model={info['embed_model']}, dim={info['embed_dim']}, reranker={info['reranker_model']} (~{info['approx_ram_mb']} MB)"
+            )
+
+        lines.append("To change profile: set PLESK_MODEL_PROFILE=<name> and restart the server.")
+        lines.append(
+            "If embed_dim changes between profiles, delete storage/lancedb and run refresh_knowledge."
+        )
+        return "\n".join(lines)
 
 
 # --- Source Handling are now in plesk_unified.io_utils ---
@@ -346,6 +416,7 @@ def refresh_knowledge(
                 results = (
                     table.search()
                     .where(f"category='{target_category}'")
+                    .select(["filename"])
                     .limit(10000)
                     .to_list()
                 )

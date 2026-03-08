@@ -2,13 +2,13 @@
     "venvPath": ".",
     "venv": ".venv",
     "pythonVersion": "3.12",
-    "include": [
-        "plesk_unified",
-        "scripts",
-        "tests"
-    ],
-    "exclude": [
-        ".venv",
-        "**/__pycache__", "**/node_modules", "**/.*"
-    ]
+    "include": ["plesk_unified", "scripts", "tests"],
+    "exclude": [".venv", "**/__pycache__", "**/node_modules", "**/.*"],
+    "typeshedPath": "./typeshed",
+    "indexing": {
+        "enabled": true,
+        "packageIndexDepths": [
+            { "name": "", "depth": 1 }
+        ]
+    }
 }

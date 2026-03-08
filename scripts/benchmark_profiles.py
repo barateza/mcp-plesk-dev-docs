@@ -172,6 +172,7 @@ def run_benchmark(
     profile_name: str,
     top_k: int = 10,
     final_k: int = 5,
+    refresh: bool = False,
 ) -> dict[str, Any]:
     """
     Run the full query set against the currently loaded server module
@@ -196,6 +197,11 @@ def run_benchmark(
     # Force model initialisation
     _ = srv.get_embedding_model()
     _ = srv.get_reranker()
+
+    if refresh:
+        print(f"  Refreshing knowledge base for profile '{profile_name}'...")
+        report = srv.refresh_knowledge(target_category="all", reset_db=True)
+        print(f"  Refresh complete:\n{report}")
 
     rss_after = _rss_mb()
     model_rss = rss_after - rss_before
@@ -295,6 +301,12 @@ def main() -> None:
         "--output",
         help="Write full JSON results to this file.",
     )
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        default=False,
+        help="Re-index all documentation (reset_db=True) for each profile before benchmarking.",
+    )
     args = parser.parse_args()
 
     profiles_to_run = [args.profile] if args.profile else args.profiles
@@ -319,6 +331,7 @@ def main() -> None:
                 profile_name=profile_name,
                 top_k=args.top_k,
                 final_k=args.final_k,
+                refresh=args.refresh,
             )
             all_results.append(result)
 

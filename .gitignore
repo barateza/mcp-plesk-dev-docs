@@ -138,6 +138,10 @@ knowledge_base/
 *.bin
 *.safetensors
 
+# Benchmark output files
+benchmark_output.txt
+*.benchmark.json
+
 # uv package manager
 .uv/
 uv.lock

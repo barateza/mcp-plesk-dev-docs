@@ -86,7 +86,6 @@ mcp = FastMCP("mcp-plesk-unified")
 
 # --- Configuration ---
 KB_DIR = BASE_DIR / "knowledge_base"
-DB_PATH = BASE_DIR / "storage" / "lancedb"
 
 KB_DIR.mkdir(exist_ok=True)
 (BASE_DIR / "storage").mkdir(exist_ok=True)
@@ -107,21 +106,21 @@ SOURCES = [
     {
         "path": KB_DIR / "api-rpc",
         "cat": "api",
-        "type": "md",
+        "type": "html",
         "repo_url": None,
         "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/api-rpc.zip",
     },
     {
         "path": KB_DIR / "cli-linux",
         "cat": "cli",
-        "type": "md",
+        "type": "html",
         "repo_url": None,
         "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/cli-linux.zip",
     },
     {
         "path": KB_DIR / "extensions-guide",
         "cat": "guide",
-        "type": "md",
+        "type": "html",
         "repo_url": None,
         "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/extensions-guide.zip",
     },
@@ -144,6 +143,9 @@ def _get_profile():
             raise RuntimeError("model_config.get_active_profile not available")
         _active_profile = get_active_profile()
     return _active_profile
+
+
+DB_PATH = BASE_DIR / "storage" / f"lancedb_{_get_profile().name}"
 
 
 def _detect_device() -> str:

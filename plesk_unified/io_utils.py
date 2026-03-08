@@ -13,6 +13,25 @@ from git import Repo
 
 logger = logging.getLogger(__name__)
 
+# Sphinx documentation infrastructure files bundled in documentation zips.
+# These are search-UI assets with no Plesk-specific content; indexing them
+# pollutes retrieval results and displaces real documentation.
+_SKIP_FILES: frozenset[str] = frozenset(
+    {
+        "doctools.js",
+        "searchtools.js",
+        "websupport.js",
+        "jquery.js",
+        "jquery-3.2.1.js",
+        "underscore.js",
+        "underscore-1.3.1.js",
+        "documentation_options.js",
+        "language_data.js",
+        "basic.js",
+        "_sphinx_javascript_frameworks_compat.js",
+    }
+)
+
 
 def ensure_source_exists(source: Dict[str, Any]) -> bool:
     """Ensure the source repository exists and is not empty."""
@@ -102,10 +121,18 @@ def parse_toc_recursive(
 
 
 def load_toc_map(folder_path: Path) -> Dict[str, Dict[str, str]]:
-    """Load and parse a TOC map from a folder's toc.json file."""
+    """Load and parse a TOC map from a folder's toc.json file.
+
+    Searches ``folder_path / toc.json`` first, then falls back to the first
+    ``toc.json`` found anywhere under ``folder_path`` (handles zip-extracted
+    sources that unpack into a nested subdirectory).
+    """
     toc_path = folder_path / "toc.json"
     if not toc_path.exists():
-        return {}
+        candidates = list(folder_path.rglob("toc.json"))
+        if not candidates:
+            return {}
+        toc_path = candidates[0]
     try:
         data = json.loads(toc_path.read_text(encoding="utf-8"))
         # handle case where toc structure might have a top level "files" array
@@ -140,8 +167,10 @@ def collect_files_for_source(source: Dict[str, Any]) -> List[Path]:
     stype = source.get("type")
 
     if stype == "html":
-        return list(source_path.rglob("*.htm")) + list(source_path.rglob("*.html"))
+        files = list(source_path.rglob("*.htm")) + list(source_path.rglob("*.html"))
     elif stype == "php":
-        return list(source_path.rglob("*.php"))
+        files = list(source_path.rglob("*.php"))
     else:
-        return list(source_path.rglob("*.js")) + list(source_path.rglob("*.md"))
+        files = list(source_path.rglob("*.js")) + list(source_path.rglob("*.md"))
+
+    return [f for f in files if f.name not in _SKIP_FILES]

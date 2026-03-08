@@ -51,7 +51,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
                 "title": meta.get("title"),
                 "filename": filename,
                 "category": meta.get("category"),
-                "breadcrumb": meta.get("breadcrumb"),
+                "breadcrumb": meta.get("breadcrumb") or "",
             }
         )
     return records

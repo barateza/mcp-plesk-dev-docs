@@ -343,7 +343,7 @@ def main() -> None:
             # Per-query breakdown
             print("\n  Per-query results:")
             for pq in result["per_query"]:
-                status = "✓" if pq["hit"] else "✗"
+                status = "HIT " if pq["hit"] else "MISS"
                 print(f"    {status} [{pq['latency_s']:.2f}s] {pq['query'][:70]}")
 
         except Exception as exc:

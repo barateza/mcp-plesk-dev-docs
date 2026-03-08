@@ -72,7 +72,7 @@ _PROFILES: dict[str, ModelProfile] = {
     ),
 }
 
-DEFAULT_PROFILE = "full"
+DEFAULT_PROFILE = "medium"
 
 
 # ---------------------------------------------------------------------------

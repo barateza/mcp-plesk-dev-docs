@@ -5,7 +5,54 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
-## Latest results — 2026-03-08
+## Latest results — 2026-03-08 (Apple M2, MacBook Air 2022)
+
+**Hardware:** Apple M2 (8-core CPU, 8-core GPU) — MacBook Air 2022
+**Python:** 3.12
+**Query set:** 12 queries across all five documentation sources (see [Query set](#query-set) below)
+
+> **Note:** The `full` profile (`BAAI/bge-m3`, ~1.5 GB weights) was intentionally skipped on this
+> machine. During indexing, bge-m3 materialises intermediate attention tensors in float32 on CPU
+> (MPS lacks full bge-m3 op support), temporarily consuming 5–10× the model's static size and
+> pushing the M2's unified memory into heavy swap. The benchmark already shows `medium` outperforms
+> `full` on this English-only corpus, so there is no quality benefit to running it here.
+
+### Summary
+
+|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|------------|---|----|-----|----------|--------|
+|`light`|BAAI/bge-small-en-v1.5|384|**100%**|0.933|1.25 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.938**|1.31 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|—|—|— (skipped — OOM risk on M2)|~1 800 MB|
+
+All profiles use the reranker `cross-encoder/ms-marco-MiniLM-L-6-v2` (`light`/`medium`).
+
+### Observations
+
+1. **Both runnable profiles hit 100% HR@5.** Same result as the CUDA machine — the index quality
+   is hardware-independent.
+
+2. **`medium` again has the best MRR@5 (0.938).** Matches the CUDA result exactly.
+
+3. **Latency is ~1.25–1.31 s per query on M2.** This is comparable to the CUDA baseline
+   (1.04–1.19 s) despite being CPU-only; the M2's unified memory bandwidth keeps query latency
+   competitive for the `light` and `medium` models.
+
+4. **`full` should be run on the Windows machine (4070 Super)** where VRAM handles tensor
+   expansion off the main memory bus. The `lancedb_full` index should live there; the M2 only
+   needs `lancedb_medium`.
+
+### Recommendation (M2 / Apple Silicon)
+
+|Scenario|Recommended profile|
+|--------|-------------------|
+|Memory-constrained (< 1 GB unified memory available)|`light`|
+|Standard usage on M2|`medium` — best MRR, safe memory footprint|
+|Non-English docs or multilingual queries|`full` on a CUDA machine only|
+
+---
+
+## Previous results — 2026-03-08
 
 **Hardware:** NVIDIA GPU (CUDA)
 **Python:** 3.12.10

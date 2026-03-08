@@ -79,7 +79,7 @@ class pm_Config
           ┌─────────▼──────────┐
           │   Query Pipeline   │
           │                    │
-          │  1. Embed query    │  BAAI/bge-m3 (~1.5GB)
+          │  1. Embed query    │  BAAI/bge-m3 (~2GB)
           │  2. ANN search     │  LanceDB (Apache Arrow)
           │  3. Rerank top-N   │  BAAI/bge-reranker-base (~300MB)
           │  4. Return chunks  │
@@ -123,17 +123,17 @@ git clone https://github.com/barateza/mcp-plesk-unified.git
 cd mcp-plesk-unified
 
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # Windows (PowerShell): .venv\Scripts\Activate.ps1
 
-uv pip install -e .        # or: pip install -e .
+python -m pip install -e .  # or: pip install -e .
 ```
 
 ### Warm up models (required before first use)
 
-MCP clients enforce ~60s request timeouts. On first run, the server downloads ~1.8GB of models. Run the warm-up step once before registering with any client:
+MCP clients enforce ~60s request timeouts. On first run, the server downloads ~2GB of models. Run the warm-up step once in a terminal (after activating your venv) before registering with any client to avoid timeouts:
 
 ```bash
-uv run plesk-unified-mcp --help
+source .venv/bin/activate && uv run plesk-unified-mcp --help
 ```
 
 You'll see progress output as models download and cache locally. Subsequent starts are near-instantaneous.
@@ -141,7 +141,11 @@ You'll see progress output as models download and cache locally. Subsequent star
 ### Build the index
 
 ```bash
-uv run plesk-unified-mcp
+# Recommended: activate the virtualenv first, then start the index/build step
+source .venv/bin/activate && uv run plesk-unified-mcp
+
+# Or run the server directly (after activating venv):
+source .venv/bin/activate && python -m plesk_unified.server
 ```
 
 The server will fetch documentation, generate embeddings, and start listening for MCP connections.
@@ -162,7 +166,7 @@ To install PyTorch with CUDA support:
 # NVIDIA
 pip install torch --index-url https://download.pytorch.org/whl/cu124
 
-# Apple Silicon — standard torch includes MPS
+# Apple Silicon — standard torch includes MPS; install with the normal wheel
 pip install torch
 ```
 
@@ -274,8 +278,7 @@ pre-commit run --all-files
 To rebuild the vector index from scratch:
 
 ```bash
-rm -rf storage/lancedb
-uv run plesk-unified-mcp
+rm -rf storage/lancedb && source .venv/bin/activate && uv run plesk-unified-mcp
 ```
 
 ---

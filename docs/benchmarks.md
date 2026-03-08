@@ -7,8 +7,8 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ## Latest results — 2026-03-08
 
-**Hardware:** NVIDIA GPU (CUDA)  
-**Python:** 3.12.10  
+**Hardware:** NVIDIA GPU (CUDA)
+**Python:** 3.12.10
 **Query set:** 12 queries across all five documentation sources (see [Query set](#query-set) below)
 
 ### Summary
@@ -70,6 +70,7 @@ The benchmark uses 12 hand-labelled queries spread across all five sources.
 Each query has a list of keyword substrings that must appear in at least one top-5 result to count as a hit.
 
 |#|Query|Category|Relevant keywords|
+|-|-----|--------|-----------------|
 |1|how to define default config settings for a Plesk extension|php-stubs|ConfigDefaults, getDefaults|
 |2|retrieve extension configuration values|php-stubs|pm_Config, getDefaults|
 |3|hook interface for Plesk modules|php-stubs|pm_Hook_Interface, Hook|

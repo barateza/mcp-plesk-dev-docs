@@ -13,11 +13,11 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ### Summary
 
-| Profile | Embed model | Dim | HR@5 | MRR@5 | Avg latency | Est. RAM |
-|---------|-------------|-----|------|-------|-------------|----------|
-| `light` | BAAI/bge-small-en-v1.5 | 384 | **100%** | 0.933 | 1.04 s | ~200 MB |
-| `medium` | BAAI/bge-base-en-v1.5 | 768 | **100%** | **0.938** | 1.19 s | ~600 MB |
-| `full` | BAAI/bge-m3 | 1024 | **100%** | 0.889 | 4.58 s | ~1 800 MB |
+|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|------------|---|----|-----|----------|--------|
+|`light`|BAAI/bge-small-en-v1.5|384|**100%**|0.933|1.04 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.938**|1.19 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|**100%**|0.889|4.58 s|~1 800 MB|
 
 All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2` for `light`/`medium`,
 `BAAI/bge-reranker-base` for `full`).
@@ -26,12 +26,12 @@ All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v
 
 ## Metrics
 
-| Metric | Definition |
-|--------|-----------|
-| **HR@5** (Hit Rate at 5) | Fraction of queries where at least one relevant chunk appears in the top-5 results. A query is a "hit" if any of its `relevant` substrings appear (case-insensitive) in any result text. |
-| **MRR@5** (Mean Reciprocal Rank at 5) | Average of `1/(rank of first hit)` across queries. A first hit at rank 1 scores 1.0; at rank 2 scores 0.5; no hit scores 0.0. Measures how high up relevant content appears, not just whether it appears. |
-| **Avg latency** | Wall-clock time per query including ANN search and reranking, measured on the benchmark host. |
-| **Est. RAM** | Approximate resident-set-size increase from loading the embedding model and reranker, as reported by the model profile definition. |
+|Metric|Definition|
+|------|----------|
+|**HR@5** (Hit Rate at 5)|Fraction of queries where at least one relevant chunk appears in the top-5 results. A query is a "hit" if any of its `relevant` substrings appear (case-insensitive) in any result text.|
+|**MRR@5** (Mean Reciprocal Rank at 5)|Average of `1/(rank of first hit)` across queries. A first hit at rank 1 scores 1.0; at rank 2 scores 0.5; no hit scores 0.0. Measures how high up relevant content appears, not just whether it appears.|
+|**Avg latency**|Wall-clock time per query including ANN search and reranking, measured on the benchmark host.|
+|**Est. RAM**|Approximate resident-set-size increase from loading the embedding model and reranker, as reported by the model profile definition.|
 
 ---
 
@@ -56,11 +56,11 @@ All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v
 
 ### Recommendation
 
-| Scenario | Recommended profile |
-|----------|---------------------|
-| Memory-constrained host (< 1 GB) | `light` |
-| Most production deployments | `medium` — best MRR, moderate latency |
-| Non-English docs or multilingual queries | `full` |
+|Scenario|Recommended profile|
+|--------|-------------------|
+|Memory-constrained host (< 1 GB)|`light`|
+|Most production deployments|`medium` — best MRR, moderate latency|
+|Non-English docs or multilingual queries|`full`|
 
 ---
 
@@ -69,20 +69,19 @@ All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v
 The benchmark uses 12 hand-labelled queries spread across all five sources.
 Each query has a list of keyword substrings that must appear in at least one top-5 result to count as a hit.
 
-| # | Query | Category | Relevant keywords |
-|---|-------|----------|-------------------|
-| 1 | how to define default config settings for a Plesk extension | php-stubs | ConfigDefaults, getDefaults |
-| 2 | retrieve extension configuration values | php-stubs | pm_Config, getDefaults |
-| 3 | hook interface for Plesk modules | php-stubs | pm_Hook_Interface, Hook |
-| 4 | restart Plesk service from command line | cli | plesk repair, restart |
-| 5 | create a new subscription via CLI | cli | subscription, add |
-| 6 | list all domains via Plesk REST API | api | GET /domains, /api/v2/domains |
-| 7 | authenticate with Plesk API using secret key | api | X-API-Key, secret_key, Authorization |
-| 8 | add a custom button to Plesk panel | guide | button, custom_buttons, addButton |
-| 9 | package a Plesk extension for distribution | guide | plesk ext, package, .zip |
-| 10 | register a new page in Plesk JS SDK | js-sdk | registerPage, router |
-| 11 | SSL certificate management | *(all)* | certificate, SSL, TLS |
-| 12 | backup and restore Plesk | *(all)* | backup, restore |
+|#|Query|Category|Relevant keywords|
+|1|how to define default config settings for a Plesk extension|php-stubs|ConfigDefaults, getDefaults|
+|2|retrieve extension configuration values|php-stubs|pm_Config, getDefaults|
+|3|hook interface for Plesk modules|php-stubs|pm_Hook_Interface, Hook|
+|4|restart Plesk service from command line|cli|plesk repair, restart|
+|5|create a new subscription via CLI|cli|subscription, add|
+|6|list all domains via Plesk REST API|api|GET /domains, /api/v2/domains|
+|7|authenticate with Plesk API using secret key|api|X-API-Key, secret_key, Authorization|
+|8|add a custom button to Plesk panel|guide|button, custom_buttons, addButton|
+|9|package a Plesk extension for distribution|guide|plesk ext, package, .zip|
+|10|register a new page in Plesk JS SDK|js-sdk|registerPage, router|
+|11|SSL certificate management|*(all)*|certificate, SSL, TLS|
+|12|backup and restore Plesk|*(all)*|backup, restore|
 
 The built-in query set lives in [`scripts/benchmark_profiles.py`](../scripts/benchmark_profiles.py#L29).
 You can provide your own queries with `--queries my_queries.json` (see the script docstring for format).
@@ -91,14 +90,14 @@ You can provide your own queries with `--queries my_queries.json` (see the scrip
 
 ## Index statistics (at time of benchmark)
 
-| Source | Files | Approx chunks |
-|--------|-------|---------------|
-| php-stubs | 124 | ~139 |
-| js-sdk | 53 | ~80 |
-| api | 466 | ~1 139 |
-| cli | 81 | ~582 |
-| guide | 105 | ~281 |
-| **Total** | **829** | **~2 221** |
+|Source|Files|Approx chunks|
+|------|-----|-------------|
+|php-stubs|124|~139|
+|js-sdk|53|~80|
+|api|466|~1 139|
+|cli|81|~582|
+|guide|105|~281|
+|**Total**|**829**|**~2 221**|
 
 ---
 

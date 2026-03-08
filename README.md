@@ -95,14 +95,14 @@ class pm_Config
 └─────────────────────────────────────────────────────┘
 ```
 
-| Component | Technology | Role |
-| --- | --- | --- |
-| Embeddings | BAAI/bge-small/base/m3 (profile) | Semantic embeddings — see [Model profiles](#model-profiles) |
-| Reranker | ms-marco-MiniLM / bge-reranker-base | Cross-encoder result reranking |
-| Vector DB | LanceDB | Apache Arrow-based ANN search |
-| MCP Server | FastMCP | Tool exposure to AI clients |
-| HTML Parser | BeautifulSoup4 | Documentation ingestion |
-| Git integration | GitPython | Auto-fetches PHP stubs and JS SDK |
+|Component|Technology|Role|
+|---|---|---|
+|Embeddings|BAAI/bge-small/base/m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
+|Reranker|ms-marco-MiniLM / bge-reranker-base|Cross-encoder result reranking|
+|Vector DB|LanceDB|Apache Arrow-based ANN search|
+|MCP Server|FastMCP|Tool exposure to AI clients|
+|HTML Parser|BeautifulSoup4|Documentation ingestion|
+|Git integration|GitPython|Auto-fetches PHP stubs and JS SDK|
 
 **Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
 
@@ -117,11 +117,11 @@ Set `PLESK_MODEL_PROFILE` before starting the server:
 PLESK_MODEL_PROFILE=medium   # light | medium | full (default: full)
 ```
 
-| Profile | Embed model | Dim | HR@5 | MRR@5 | Avg latency\* | Est. RAM |
-|---------|-------------|-----|------|-------|--------------|----------|
-| `light` | BAAI/bge-small-en-v1.5 | 384 | 100% | 0.933 | 1.0 s | ~200 MB |
-| `medium` | BAAI/bge-base-en-v1.5 | 768 | 100% | **0.938** | 1.2 s | ~600 MB |
-| `full` | BAAI/bge-m3 | 1024 | 100% | 0.889 | 4.6 s | ~1 800 MB |
+|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency*|Est. RAM|
+|---|---|---|---|---|---|---|
+|`light`|BAAI/bge-small-en-v1.5|384|100%|0.933|1.0 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|100%|**0.938**|1.2 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|100%|0.889|4.6 s|~1 800 MB|
 
 \* Measured on NVIDIA CUDA. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology, per-query breakdown, and reproduction steps.
 
@@ -175,11 +175,11 @@ The server will fetch documentation, generate embeddings, and start listening fo
 
 The server auto-detects available hardware:
 
-| Hardware | Acceleration |
-| --- | --- |
-| NVIDIA (CUDA) | ✅ Automatic |
-| Apple Silicon (MPS) | ✅ Automatic |
-| CPU | ✅ Fallback |
+|Hardware|Acceleration|
+|---|---|
+|NVIDIA (CUDA)|✅ Automatic|
+|Apple Silicon (MPS)|✅ Automatic|
+|CPU|✅ Fallback|
 
 To install PyTorch with CUDA support:
 

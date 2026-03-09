@@ -3,13 +3,14 @@ import logging
 # ruff: noqa: E402
 import os
 import sys
-from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from plesk_unified.log_handler import create_os_handlers
 
 # --- LOGGING SETUP ---
 # Must be done before importing heavy libraries.
 # This ensures we capture their initialization warnings if needed.
-BASE_DIR = Path(__file__).parent
+BASE_DIR = Path(__file__).parent.parent
 LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 from dotenv import load_dotenv
@@ -30,15 +31,9 @@ formatter = logging.Formatter(
     fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
 
-# 1. File Handler (Rotating)
-file_handler = RotatingFileHandler(
-    LOG_FILE,
-    maxBytes=10_485_760,
-    backupCount=5,
-    encoding="utf-8",  # 10MB
-)
-file_handler.setFormatter(formatter)
-file_handler.setLevel(LOG_LEVEL)
+# 1. OS-native / file handler(s) — chosen by LOG_HANDLER env var
+# Possible values: "os" (default), "file", "both"
+os_handlers = create_os_handlers(LOG_LEVEL, formatter, LOG_FILE)
 
 # 2. Stream Handler (stderr) - CRITICAL for MCP protocol
 stream_handler = logging.StreamHandler(sys.stderr)
@@ -47,14 +42,21 @@ stream_handler.setLevel(LOG_LEVEL)
 
 # Avoid adding duplicate handlers if reloaded
 if not logger.handlers:
-    logger.addHandler(file_handler)
+    for _h in os_handlers:
+        logger.addHandler(_h)
     logger.addHandler(stream_handler)
 
 # Silence noisy third-party libraries unless they error
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("git").setLevel(logging.WARNING)
 
-logger.info(f"Logging initialized. Level: {LOG_LEVEL_NAME}, File: {LOG_FILE}")
+_log_handler_mode = os.environ.get("LOG_HANDLER", "os").lower().strip()
+logger.info(
+    "Logging initialized. Level: %s, Handler mode: %s, File: %s",
+    LOG_LEVEL_NAME,
+    _log_handler_mode,
+    LOG_FILE,
+)
 
 
 # --- SILENCE THE NOISE ---

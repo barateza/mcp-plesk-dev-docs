@@ -239,6 +239,7 @@ Edit `~/.cursor/mcp.json`:
 mcp-plesk-unified/
 ├── plesk_unified/
 │   ├── server.py            # FastMCP tool definitions and query pipeline
+│   ├── log_handler.py       # Cross-platform native OS logging handler factory
 │   ├── platform_utils.py    # GPU/device detection
 │   └── ai_client.py         # Embedding and reranker wrappers
 ├── scripts/
@@ -278,6 +279,27 @@ Create a `.env` file in the project root:
 OPENROUTER_API_KEY=sk-or-v1-...   # for enrich_toc.py
 FORCE_DEVICE=cpu                   # optional: override GPU detection
 KB_ROOT=/custom/path               # optional: override knowledge_base dir
+LOG_HANDLER=os                     # os | file | both (default: os)
+LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR
+```
+
+### Logging
+
+The server writes logs to the native OS logging system by default, with stderr always on for the MCP protocol.
+
+| Platform | Default handler | How to view |
+|----------|----------------|-------------|
+| **macOS** | Apple Unified Logging (`/var/run/syslog`) | `log stream --predicate 'eventMessage CONTAINS "plesk_unified"' --level info` |
+| **Linux** | systemd journal / syslog (`/dev/log`) | `journalctl -t plesk-unified-mcp --follow` |
+| **Windows** | Windows Event Log (requires `pywin32`) | Event Viewer → Windows Logs → Application → Source: PleskUnifiedMCP |
+| **Fallback** | Rotating file at `storage/logs/plesk_unified.log` | `tail -f storage/logs/plesk_unified.log` |
+
+Control the handler via `LOG_HANDLER` in your `.env`:
+
+```env
+LOG_HANDLER=os    # native OS handler only (default)
+LOG_HANDLER=file  # rotating file only (legacy behaviour)
+LOG_HANDLER=both  # native OS handler + rotating file
 ```
 
 ---

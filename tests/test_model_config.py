@@ -36,12 +36,12 @@ def reload_config(env: dict):
 
 
 class TestProfileSelection:
-    def test_default_profile_is_full(self):
+    def test_default_profile_is_medium(self):
         mc = reload_config({})
         p = mc.get_active_profile()
-        assert p.name == "full"
-        assert p.embed_model == "BAAI/bge-m3"
-        assert p.embed_dim == 1024
+        assert p.name == "medium"
+        assert p.embed_model == "BAAI/bge-base-en-v1.5"
+        assert p.embed_dim == 768
 
     def test_light_profile(self):
         mc = reload_config({"PLESK_MODEL_PROFILE": "light"})
@@ -65,13 +65,13 @@ class TestProfileSelection:
         assert p.embed_model == "BAAI/bge-m3"
         assert p.reranker_model == "BAAI/bge-reranker-base"
 
-    def test_unknown_profile_falls_back_to_full(self, caplog):
+    def test_unknown_profile_falls_back_to_medium(self, caplog):
         mc = reload_config({"PLESK_MODEL_PROFILE": "nonexistent"})
         import logging
 
         with caplog.at_level(logging.WARNING, logger="plesk_unified"):
             p = mc.get_active_profile()
-        assert p.name == "full"
+        assert p.name == "medium"
         assert "Unknown PLESK_MODEL_PROFILE" in caplog.text
 
     def test_profile_name_is_case_insensitive(self):

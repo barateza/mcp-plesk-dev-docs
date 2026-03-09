@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-09
+
+### Added
+- New cross-platform native OS logging handler (`log_handler.py`) supporting:
+  - macOS: Unified Logging via `/var/run/syslog`
+  - Linux: journald/syslog via `/dev/log`
+  - Windows: Windows Event Log (requires `pywin32`)
+- `LOG_HANDLER` environment variable to toggle between `os`, `file`, or `both`.
+- Unit tests for the new log handler.
+- Explicit `pytest` dependency in `pyproject.toml`.
+
+### Changed
+- Updated `model_config.py` to use `medium` as the default model profile (was `full`) for better resource efficiency.
+- Refined `io_utils.py` with specific file exclusions for `api`, `guide`, and `js-sdk` categories.
+- Enhanced zip extraction in `io_utils.py` to automatically strip single top-level directories.
+- Adjusted `server.py` to use the new native OS logging handler.
+
+### Fixed
+- Base directory calculation in `server.py` to correctly locate the `storage` directory.
+
 ## [0.3.1] - 2026-02-22
 
 ### Changed
@@ -84,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.4.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.0
 [0.3.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.1
 [0.3.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.0
 [0.2.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.2.0

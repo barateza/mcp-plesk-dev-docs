@@ -32,6 +32,70 @@ _SKIP_FILES: frozenset[str] = frozenset(
     }
 )
 
+# Documentation pages that are boilerplate or redundant summaries (api-rpc specific).
+_API_RPC_SKIP_FILES: frozenset[str] = frozenset(
+    {
+        "45121.htm",  # Before Using The Reference
+        "45023.htm",  # Data Types
+        "28784.htm",  # Reference
+        "36543.htm",  # Uploading Files Using .NET
+    }
+)
+
+# Documentation pages that are boilerplate or redundant summaries
+# (extensions-guide specific).
+_GUIDE_SKIP_FILES: frozenset[str] = frozenset(
+    {
+        "73625.htm",
+        "76104.htm",
+        "76105.htm",
+        "76343.htm",
+        "76103.htm",
+    }
+)
+
+# Internal build scripts, test utilities, and configuration irrelevant to
+# SDK API Reference
+_JS_SDK_SKIP_DIRS: frozenset[str] = frozenset(
+    {
+        "test",
+        "__tests__",
+        "bin",
+        "lib",
+    }
+)
+
+_JS_SDK_SKIP_FILES: frozenset[str] = frozenset(
+    {
+        "CNAGELOG.md",
+    }
+)
+
+
+def _on_rm_error(func, path, _exc_info):
+    """Helper for shutil.rmtree to handle read-only files."""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)
+
+
+def _extract_zip_with_strip(zip_ref: zipfile.ZipFile, source_path: Path) -> None:
+    """Extract zip content, automatically stripping a single top-level directory."""
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
+        zip_ref.extractall(temp_dir)
+
+        # Check if zip contains only one top-level directory
+        items = list(temp_dir.iterdir())
+        if len(items) == 1 and items[0].is_dir():
+            # Extract contents of the top-level directory directly into source_path
+            for item in items[0].iterdir():
+                shutil.move(str(item), str(source_path / item.name))
+            logger.info("Stripped top-level directory '%s' from zip", items[0].name)
+        else:
+            # Move all items to source_path
+            for item in items:
+                shutil.move(str(item), str(source_path / item.name))
+
 
 def ensure_source_exists(source: Dict[str, Any]) -> bool:
     """Ensure the source repository exists and is not empty."""
@@ -43,7 +107,7 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
         and source_path.exists()
         and any(source_path.iterdir())
     ):
-        logger.debug("Source %s already exists at %s", source.get("cat"), source_path)
+        logger.debug("Source %s already exists", source.get("cat"))
         return True
 
     repo_url = source.get("repo_url")
@@ -54,20 +118,11 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
         logger.info("Downloading %s from %s...", source.get("cat"), repo_url)
         try:
             Repo.clone_from(repo_url, source_path)
-            logger.info("Clone succeeded for %s", source.get("cat"))
-
-            def on_rm_error(func, path, exc_info):
-                # path contains the path of the file that couldn't be removed
-                # let's just assume that it's read-only and unlink it.
-                os.chmod(path, stat.S_IWRITE)
-                func(path)
-
             # Cleanup unnecessary artifacts
             for folder in [".git", ".github", "tests"]:
                 target = source_path / folder
                 if target.exists() and target.is_dir():
-                    shutil.rmtree(target, onerror=on_rm_error)
-
+                    shutil.rmtree(target, onerror=_on_rm_error)
             return True
         except Exception:
             logger.error("Clone failed for %s", source.get("cat"), exc_info=True)
@@ -80,21 +135,15 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
             source_path.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
                 urllib.request.urlretrieve(zip_url, tmp.name)
-
-            with zipfile.ZipFile(tmp.name, "r") as zip_ref:
-                zip_ref.extractall(source_path)
-
-            os.unlink(tmp.name)
-            logger.info(
-                "Zip download and extraction succeeded for %s", source.get("cat")
-            )
-            return True
+            try:
+                with zipfile.ZipFile(tmp.name, "r") as zip_ref:
+                    _extract_zip_with_strip(zip_ref, source_path)
+                return True
+            finally:
+                if os.path.exists(tmp.name):
+                    os.unlink(tmp.name)
         except Exception:
-            logger.error(
-                "Zip download/extraction failed for %s",
-                source.get("cat"),
-                exc_info=True,
-            )
+            logger.error("Zip failed for %s", source.get("cat"), exc_info=True)
             return False
 
     return False
@@ -173,4 +222,22 @@ def collect_files_for_source(source: Dict[str, Any]) -> List[Path]:
     else:
         files = list(source_path.rglob("*.js")) + list(source_path.rglob("*.md"))
 
-    return [f for f in files if f.name not in _SKIP_FILES]
+    skip_set = _SKIP_FILES
+    if source.get("cat") == "api":
+        skip_set = skip_set.union(_API_RPC_SKIP_FILES)
+    elif source.get("cat") == "guide":
+        skip_set = skip_set.union(_GUIDE_SKIP_FILES)
+
+    # Base filtering
+    filtered_files = [f for f in files if f.name not in skip_set]
+
+    # Additional filtering for js-sdk
+    if source.get("cat") == "js-sdk":
+        filtered_files = [
+            f
+            for f in filtered_files
+            if f.name not in _JS_SDK_SKIP_FILES
+            and not any(part in _JS_SDK_SKIP_DIRS for part in f.parts)
+        ]
+
+    return filtered_files

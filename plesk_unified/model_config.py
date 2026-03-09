@@ -87,7 +87,7 @@ def get_active_profile() -> ModelProfile:
     Priority (highest to lowest):
       1. PLESK_EMBED_MODEL / PLESK_RERANKER_MODEL  (per-component overrides)
       2. PLESK_MODEL_PROFILE                        (named profile)
-      3. Compiled-in default ("full")
+      3. Compiled-in default ("medium")
     """
     profile_name = os.environ.get("PLESK_MODEL_PROFILE", DEFAULT_PROFILE)
     profile_name = profile_name.lower().strip()

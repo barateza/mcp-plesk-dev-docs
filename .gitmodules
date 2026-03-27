@@ -1,0 +1,3 @@
+[submodule "tonbistudio-turboquant-pytorch"]
+	path = tonbistudio-turboquant-pytorch
+	url = https://github.com/tonbistudio/turboquant-pytorch.git

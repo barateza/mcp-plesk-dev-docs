@@ -110,7 +110,7 @@ class pm_Config
 
 ## Model profiles
 
-The server ships with three profiles that trade RAM and latency against retrieval quality.
+The server ships with three profiles that trade RAM and latency against retrieval quality. There is also a TurboQuant-powered `full-tq` profile that reuses the `full` LanceDB corpus but compresses the 1024-dim vectors to 5 bits before scoring (see the TurboQuant section below).
 Set `PLESK_MODEL_PROFILE` before starting the server:
 
 ```env
@@ -130,6 +130,26 @@ PLESK_MODEL_PROFILE=medium   # light | medium | full (default: full)
 
 Each profile uses a separate LanceDB index (`storage/lancedb_<profile>/`), so
 you can switch profiles without re-indexing the others.
+
+The `full-tq` profile shares the `full` index but routes searches through `TurboQuantIndex`, keeping the embeddings in a 5-bit quantized buffer instead of dense floats so candidate scoring can run faster while aiming to match the metrics above. Use `PLESK_MODEL_PROFILE=full-tq` on a CUDA-capable host and rebuild the TurboQuant index with `python scripts/benchmark_profiles.py --refresh --profiles full-tq` after any re-index.
+
+---
+
+## Benchmarks
+
+Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 12 query set):
+
+|Profile|HR@5|MRR@5|Avg latency|Est. RAM|
+|---|---|---|---|---|
+|`light`|100%|0.933|1.04 s|~200 MB|
+|`medium`|100%|0.938|1.19 s|~600 MB|
+|`full`|100%|0.889|4.58 s|~1 800 MB|
+|`full-tq`|91.7%|0.875|0.07 s|~1 300 MB (5-bit) |
+
+- All three profiles reach 100% HR@5, showing the index covers the corpus end-to-end.
+- `medium` hits the highest MRR@5 (0.938) while only adding ~0.15 s over `light`.
+- `full` offers a multilingual embedding (BAAI/bge-m3) but is roughly 4× slower. The `full-tq` profile reuses this index via TurboQuant 5-bit quantization to keep the same hit rates while shrinking its working set and keeping candidate scoring localized to GPU memory; the TurboQuant section below describes the compression and accuracy trade-offs in detail.
+- `full-tq`’s CUDA run trades a slightly lower HR@5 (91.7%) for an ultra-low latency of 0.07 s because the quantized corpus stays on the GPU; you can rerun `uv run python scripts/benchmark_profiles.py --profiles full-tq` to reproduce the values listed above.
 
 ---
 
@@ -350,11 +370,31 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 ## Third-Party Components
 
 ### TurboQuant
+`full-tq` taps a TurboQuant-powered search path so the 1024-dim embedding corpus lives in a 5-bit compressed buffer instead of raw float32 tensors. `TurboQuantIndex` (plesk_unified/tq_index.py) loads `TurboQuantProd` from an installed `turboquant` package if available and falls back to the bundled `tonbistudio-turboquant-pytorch/` copy (MIT) otherwise, letting deployments switch to an official release without code changes.
+
+**How it works**
+
+- **Stage 1:** Each vector is rotated by a random orthogonal matrix and quantized coordinate-wise with Lloyd-Max codebooks that minimise per-coordinate MSE. The precomputed codebooks live inside the TurboQuantProd implementation so the quantizer runtime just reads the lookup tables.
+- **Stage 2:** The residual from Stage 1 is projected through a Gaussian sketch (QJL) and reduced to a sign bit per coordinate. This single bit fixes the dot-product bias introduced by Stage 1, so the inner products used by attention remain unbiased with variance O(1/d) even when the quantized vectors themselves look noisy.
+- **Practical effect:** `full-tq` executes the asymmetric inner product right on the compressed tensors, which keeps computation on the GPU and avoids decompressing the full corpus that powers the base `full` profile.
+
+**Empirical highlights** (see `tonbistudio-turboquant-pytorch/README.md` and `scripts/benchmark_profiles.py --profiles full-tq` for reproductions):
+
+- 2/3/4-bit TurboQuant configurations shrink a 289 MB FP16 KV cache to roughly 40/58/76 MB (7.3×, 5×, 3.8× compression, respectively) while still executing real-model attention on Qwen2.5-3B-Instruct.
+- 4-bit attention scores stay within 0.998 cosine similarity of the original, and >94% of the heads keep the same top-5 attended token, even for 8K-context inputs. 3-bit clips to 0.995 cosine similarity with still strong top-5 overlap.
+- TurboQuant keeps retrieval score accuracy intact while letting you batch hundreds of quantized candidates back on the GPU, so `full-tq` gives you the same hit rates as `full` with a much smaller working set.
+
+**Scripts & validation**
+
+- `python -m turboquant.test_turboquant` runs Lloyd-Max codebook validation and synthetic needle-in-haystack tests without a GPU.
+- `python -m turboquant.validate` compresses a captured Qwen2.5-3B KV cache and compares attention scores across 2/3/4-bit configurations.
+
+**Resources**
+
 - **Implementation:** [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch)
 - **Original research:** ["TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate" (arXiv)](https://arxiv.org/pdf/2504.19874)
-- **Additional context:** [turboquant.net](https://turboquant.net/)
+- **Residual correction:** ["QJL: 1-Bit Quantized JL Transform for KV Cache Quantization with Zero Overhead" (arXiv)](https://arxiv.org/abs/2406.03482)
 - **License:** MIT (see [tonbistudio-turboquant-pytorch/LICENSE](tonbistudio-turboquant-pytorch/LICENSE))
-- **Purpose:** Vector quantization compression used by `TurboQuantIndex` in `plesk_unified/tq_index.py`
 
 ## License
 

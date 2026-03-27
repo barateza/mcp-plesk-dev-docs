@@ -1,5 +1,14 @@
 from __future__ import annotations
 
+"""TurboQuantIndex loading strategy.
+
+It first attempts to import ``turboquant`` from an installed package so
+``pip install turboquant`` is supported. When that package is unavailable it
+loads the vendored copy under ``tonbistudio-turboquant-pytorch/`` (MIT licensed).
+Maintaining this fallback lets us switch to a published package in the future
+without code changes.
+"""
+
 import importlib.util
 import sys
 from pathlib import Path

@@ -347,6 +347,15 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 
 ---
 
+## Third-Party Components
+
+### TurboQuant
+- **Implementation:** [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch)
+- **Original research:** ["TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate" (arXiv)](https://arxiv.org/pdf/2504.19874)
+- **Additional context:** [turboquant.net](https://turboquant.net/)
+- **License:** MIT (see [tonbistudio-turboquant-pytorch/LICENSE](tonbistudio-turboquant-pytorch/LICENSE))
+- **Purpose:** Vector quantization compression used by `TurboQuantIndex` in `plesk_unified/tq_index.py`
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

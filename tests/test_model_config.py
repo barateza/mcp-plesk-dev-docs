@@ -172,10 +172,10 @@ class TestComponentOverrides:
 
 
 class TestListProfiles:
-    def test_list_profiles_returns_all_three(self):
+    def test_list_profiles_returns_all_profiles(self):
         mc = reload_config({})
         profiles = mc.list_profiles()
-        assert set(profiles.keys()) == {"light", "medium", "full"}
+        assert set(profiles.keys()) == {"light", "medium", "full", "full-tq"}
 
     def test_list_profiles_has_required_keys(self):
         mc = reload_config({})

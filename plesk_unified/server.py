@@ -1,4 +1,5 @@
 import logging
+import pickle
 
 # ruff: noqa: E402
 import os
@@ -66,12 +67,14 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 from typing import Any, Dict, Optional, Tuple
 
 import lancedb  # type: ignore
+import numpy as np
 from fastmcp import FastMCP
 from pydantic import Field
 
 try:
     from plesk_unified import chunking, html_utils, io_utils
     from plesk_unified.model_config import get_active_profile, list_profiles
+    from plesk_unified.tq_index import TurboQuantIndex
 except ImportError:
     import chunking
     import html_utils
@@ -82,6 +85,7 @@ except ImportError:
     except Exception:
         get_active_profile = None  # type: ignore
         list_profiles = None  # type: ignore
+    from tq_index import TurboQuantIndex  # type: ignore
 
 # Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
@@ -136,6 +140,7 @@ _embedding_model: Any = None
 _schema_class: Any = None
 _reranker: Any = None
 _active_profile: Any = None
+_tq_index: Any = None
 
 
 def _get_profile():
@@ -147,7 +152,14 @@ def _get_profile():
     return _active_profile
 
 
-DB_PATH = BASE_DIR / "storage" / f"lancedb_{_get_profile().name}"
+def _db_profile_name() -> str:
+    profile = _get_profile()
+    # full-tq shares embeddings/dimension with full, so reuse full's LanceDB corpus.
+    return "full" if getattr(profile, "use_turboquant", False) else profile.name
+
+
+DB_PATH = BASE_DIR / "storage" / f"lancedb_{_db_profile_name()}"
+TQ_DIR = BASE_DIR / "storage" / "turboquant"
 
 
 def _detect_device() -> str:
@@ -269,6 +281,79 @@ def get_table(create_new: bool = False) -> Any:
             "Table not found or error opening. Creating new 'plesk_knowledge' table."
         )
         return db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
+
+
+def _get_tq_index_path() -> Path:
+    profile = _get_profile()
+    TQ_DIR.mkdir(parents=True, exist_ok=True)
+    return TQ_DIR / f"{profile.name}.pkl"
+
+
+def _save_tq_index(tq_index: TurboQuantIndex) -> None:
+    data = {
+        "compressed_db": tq_index.compressed_db,
+        "meta": tq_index._meta,
+        "category_to_indices": tq_index._category_to_indices,
+        "bits": tq_index.bits,
+        "dim": tq_index.dim,
+    }
+    with _get_tq_index_path().open("wb") as fh:
+        pickle.dump(data, fh)
+
+
+def _load_tq_index() -> TurboQuantIndex | None:
+    path = _get_tq_index_path()
+    if not path.exists():
+        return None
+
+    profile = _get_profile()
+    tq_index = TurboQuantIndex(
+        dim=profile.embed_dim,
+        bits=profile.tq_bits,
+        device=_detect_device(),
+    )
+    with path.open("rb") as fh:
+        data = pickle.load(fh)
+    tq_index.compressed_db = data.get("compressed_db")
+    tq_index._meta = data.get("meta", [])
+    tq_index._category_to_indices = data.get("category_to_indices", {})
+    return tq_index
+
+
+def _build_tq_index_from_table() -> TurboQuantIndex:
+    profile = _get_profile()
+    table = get_table(create_new=False)
+    all_docs = table.search().limit(100000).to_list()
+
+    tq_index = TurboQuantIndex(
+        dim=profile.embed_dim,
+        bits=profile.tq_bits,
+        device=_detect_device(),
+    )
+
+    if all_docs:
+        corpus_vecs = np.asarray([doc["vector"] for doc in all_docs], dtype=np.float32)
+        tq_index.add(corpus_vecs, all_docs)
+
+    _save_tq_index(tq_index)
+    logger.info("TurboQuant index built with %d documents.", len(all_docs))
+    return tq_index
+
+
+def get_tq_index() -> TurboQuantIndex:
+    global _tq_index
+    if _tq_index is not None:
+        return _tq_index
+
+    loaded = _load_tq_index()
+    if loaded is not None:
+        _tq_index = loaded
+        logger.info("Loaded TurboQuant index from %s", _get_tq_index_path())
+        return _tq_index
+
+    logger.info("TurboQuant index not found on disk. Building from LanceDB...")
+    _tq_index = _build_tq_index_from_table()
+    return _tq_index
 
 
 @mcp.tool
@@ -430,6 +515,8 @@ def refresh_knowledge(
     logger.info(
         "Starting refresh_knowledge: target=%s, reset_db=%s", target_category, reset_db
     )
+    global _tq_index
+    _tq_index = None
 
     if reset_db:
         table = get_table(create_new=True)
@@ -475,6 +562,15 @@ def refresh_knowledge(
         msg = f"Finished pass for {source['cat']}."
         report.append(msg)
 
+    profile = _get_profile()
+    if getattr(profile, "use_turboquant", False):
+        try:
+            _tq_index = _build_tq_index_from_table()
+            report.append("TurboQuant index rebuilt and persisted.")
+        except Exception:
+            logger.exception("Failed to rebuild TurboQuant index after refresh.")
+            report.append("ERROR rebuilding TurboQuant index.")
+
     return "\n".join(report)
 
 
@@ -492,14 +588,32 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     safe_query = (query[:100] + "...") if len(query) > 100 else query
     logger.info("Search request: q='%s' category='%s'", safe_query, category)
 
-    table = get_table()
+    profile = _get_profile()
 
-    # Perform the search (no hard-coded pre-limit to allow provider to optimize)
-    search_op = table.search(query)
-    if category:
-        search_op = search_op.where(f"category = '{category}'")
+    if getattr(profile, "use_turboquant", False):
+        query_vec = np.asarray(
+            get_embedding_model().compute_query_embeddings(query)[0],
+            dtype=np.float32,
+        )
+        tq_results = get_tq_index().search(
+            query_vec,
+            top_k=profile.tq_top_k,
+            category=category,
+        )
+        results = []
+        for meta, score in tq_results[:5]:
+            r = dict(meta)
+            r["_score_tq"] = score
+            results.append(r)
+    else:
+        table = get_table()
 
-    results = search_op.limit(5).to_list()
+        # Perform the search (no hard-coded pre-limit to allow provider to optimize)
+        search_op = table.search(query)
+        if category:
+            search_op = search_op.where(f"category = '{category}'")
+
+        results = search_op.limit(5).to_list()
 
     logger.info("Search returned %d results.", len(results))
 
@@ -507,11 +621,13 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     for r in results:
         # LanceDB returns `_distance` for vector search and `_score` for FTS.
         # Use .get() to avoid KeyError if the backend changes.
-        score = (
-            r.get("_distance")
-            if r.get("_distance") is not None
-            else r.get("_score", 0.0)
-        )
+        score = r.get("_score_tq")
+        if score is None:
+            score = (
+                r.get("_distance")
+                if r.get("_distance") is not None
+                else r.get("_score", 0.0)
+            )
 
         formatted_results.append(
             (

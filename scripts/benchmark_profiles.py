@@ -56,6 +56,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
+from plesk_unified.tq_index import TurboQuantIndex
 # ---------------------------------------------------------------------------
 # Built-in query set (covers all five Plesk doc sources)
 # ---------------------------------------------------------------------------
@@ -183,7 +186,8 @@ def run_benchmark(
     # Import lazily so env var is already set when server.py resolves the profile
     # We import the search function directly to bypass MCP serialisation overhead
     sys.path.insert(0, str(Path(__file__).parent.parent))
-    os.environ["PLESK_MODEL_PROFILE"] = profile_name
+    actual_profile_env = "full" if profile_name == "full-tq" else profile_name
+    os.environ["PLESK_MODEL_PROFILE"] = actual_profile_env
 
     # Reset module-level singletons if re-importing in the same process
     import importlib
@@ -206,6 +210,21 @@ def run_benchmark(
     rss_after = _rss_mb()
     model_rss = rss_after - rss_before
 
+    tq_index: TurboQuantIndex | None = None
+    if profile_name == "full-tq":
+        tq_bits = int(os.getenv("TQ_BITS", "3"))
+        tq_index = TurboQuantIndex(
+            dim=1024,
+            bits=tq_bits,
+            device=srv._detect_device(),
+        )
+        all_docs = srv.get_table().search().limit(100000).to_list()
+        if all_docs:
+            corpus_vecs = np.array(
+                [doc["vector"] for doc in all_docs], dtype=np.float32
+            )
+            tq_index.add(corpus_vecs, all_docs)
+
     hits = []
     reciprocal_ranks = []
     latencies = []
@@ -213,15 +232,27 @@ def run_benchmark(
     for q in queries:
         t0 = time.perf_counter()
 
-        table = srv.get_table()
         reranker = srv.get_reranker()
-
         candidate_limit = top_k if reranker else final_k
-        search_op = table.search(q["query"])
-        if q.get("category"):
-            search_op = search_op.where(f"category = '{q['category']}'")
 
-        results = search_op.limit(candidate_limit).to_list()
+        if profile_name == "full-tq" and tq_index is not None:
+            query_vec = np.asarray(
+                srv.get_embedding_model().compute_query_embeddings(q["query"])[0],
+                dtype=np.float32,
+            )
+            tq_results = tq_index.search(
+                query_vec,
+                top_k=candidate_limit,
+                category=q.get("category"),
+            )
+            results = [meta for meta, _ in tq_results]
+        else:
+            table = srv.get_table()
+            search_op = table.search(q["query"])
+            if q.get("category"):
+                search_op = search_op.where(f"category = '{q['category']}'")
+
+            results = search_op.limit(candidate_limit).to_list()
 
         if reranker and results:
             texts_raw = [r.get("text", "") for r in results]
@@ -274,8 +305,8 @@ def main() -> None:
     parser.add_argument(
         "--profiles",
         nargs="+",
-        default=["light", "medium", "full"],
-        help="Profiles to benchmark (default: light medium full)",
+        default=["light", "medium", "full", "full-tq"],
+        help="Profiles to benchmark (default: light medium full full-tq)",
     )
     parser.add_argument(
         "--profile",

@@ -36,6 +36,9 @@ class ModelProfile:
     reranker_enabled: bool
     description: str
     approx_ram_mb: int
+    use_turboquant: bool = False
+    tq_bits: int = 5
+    tq_top_k: int = 25
 
 
 _PROFILES: dict[str, ModelProfile] = {
@@ -69,6 +72,21 @@ _PROFILES: dict[str, ModelProfile] = {
             "~1.8 GB total. Maximum quality. Recommended for RTX 4070 Super / CUDA."
         ),
         approx_ram_mb=1800,
+    ),
+    "full-tq": ModelProfile(
+        name="full-tq",
+        embed_model="BAAI/bge-m3",
+        embed_dim=1024,
+        reranker_model="BAAI/bge-reranker-base",
+        reranker_enabled=True,
+        description=(
+            "TurboQuant 5-bit profile with category-aware retrieval. "
+            "Quality parity target with significantly lower latency."
+        ),
+        approx_ram_mb=1300,
+        use_turboquant=True,
+        tq_bits=5,
+        tq_top_k=25,
     ),
 }
 
@@ -142,6 +160,9 @@ def get_active_profile() -> ModelProfile:
         reranker_enabled=reranker_enabled and (reranker_model is not None),
         description=base.description,
         approx_ram_mb=base.approx_ram_mb,
+        use_turboquant=base.use_turboquant,
+        tq_bits=base.tq_bits,
+        tq_top_k=base.tq_top_k,
     )
 
     logger.info(
@@ -167,6 +188,9 @@ def list_profiles() -> dict[str, dict]:
             "reranker_model": p.reranker_model,
             "reranker_enabled": p.reranker_enabled,
             "approx_ram_mb": p.approx_ram_mb,
+            "use_turboquant": p.use_turboquant,
+            "tq_bits": p.tq_bits,
+            "tq_top_k": p.tq_top_k,
             "description": p.description,
         }
         for name, p in _PROFILES.items()

@@ -12,7 +12,10 @@ import torch.nn as nn
 import math
 from typing import Optional, Tuple
 
-from .lloyd_max import LloydMaxCodebook
+try:
+    from .lloyd_max import LloydMaxCodebook
+except Exception:  # allow running tests when imported as a top-level module
+    from lloyd_max import LloydMaxCodebook
 
 
 def generate_rotation_matrix(d: int, seed: Optional[int] = None, device: str = "cpu") -> torch.Tensor:

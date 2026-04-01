@@ -9,9 +9,9 @@ Select a profile via the PLESK_MODEL_PROFILE environment variable.
   PLESK_MODEL_PROFILE=medium   ~600 MB total  (balanced middle ground)
 
 You can also override individual components without changing the profile:
-  PLESK_EMBED_MODEL=BAAI/bge-base-en-v1.5
-  PLESK_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
-  PLESK_RERANKER_ENABLED=false
+    PLESK_EMBED_MODEL=BAAI/bge-base-en-v1.5
+    PLESK_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+    PLESK_RERANKER_ENABLED=false
 """
 
 from __future__ import annotations
@@ -90,7 +90,7 @@ _PROFILES: dict[str, ModelProfile] = {
     ),
 }
 
-DEFAULT_PROFILE = "medium"
+DEFAULT_PROFILE = "full-tq"
 
 
 # ---------------------------------------------------------------------------
@@ -102,10 +102,10 @@ def get_active_profile() -> ModelProfile:
     """
     Resolve the active model profile from environment variables.
 
-    Priority (highest to lowest):
-      1. PLESK_EMBED_MODEL / PLESK_RERANKER_MODEL  (per-component overrides)
-      2. PLESK_MODEL_PROFILE                        (named profile)
-      3. Compiled-in default ("medium")
+        Priority (highest to lowest):
+            1. PLESK_EMBED_MODEL / PLESK_RERANKER_MODEL  (per-component overrides)
+            2. PLESK_MODEL_PROFILE                        (named profile)
+            3. Compiled-in default ("full-tq")
     """
     profile_name = os.environ.get("PLESK_MODEL_PROFILE", DEFAULT_PROFILE)
     profile_name = profile_name.lower().strip()

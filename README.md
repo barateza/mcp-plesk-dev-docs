@@ -114,7 +114,7 @@ The server ships with three profiles that trade RAM and latency against retrieva
 Set `PLESK_MODEL_PROFILE` before starting the server:
 
 ```env
-PLESK_MODEL_PROFILE=medium   # light | medium | full (default: full)
+PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-tq)
 ```
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Avg latency*|Est. RAM|

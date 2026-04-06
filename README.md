@@ -370,7 +370,7 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 ## Third-Party Components
 
 ### TurboQuant
-`full-tq` taps a TurboQuant-powered search path so the 1024-dim embedding corpus lives in a 5-bit compressed buffer instead of raw float32 tensors. `TurboQuantIndex` (plesk_unified/tq_index.py) loads `TurboQuantProd` from an installed `turboquant` package if available and falls back to the bundled `tonbistudio-turboquant-pytorch/` copy (MIT) otherwise, letting deployments switch to an official release without code changes.
+`full-tq` taps a TurboQuant-powered search path so the 1024-dim embedding corpus lives in a 5-bit compressed buffer instead of raw float32 tensors. `TurboQuantIndex` (plesk_unified/tq_index.py) now uses the in-repo `plesk_unified.turboquant` package directly, so the retrieval path is owned by this codebase instead of a vendored fallback.
 
 **How it works**
 
@@ -378,7 +378,7 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 - **Stage 2:** The residual from Stage 1 is projected through a Gaussian sketch (QJL) and reduced to a sign bit per coordinate. This single bit fixes the dot-product bias introduced by Stage 1, so the inner products used by attention remain unbiased with variance O(1/d) even when the quantized vectors themselves look noisy.
 - **Practical effect:** `full-tq` executes the asymmetric inner product right on the compressed tensors, which keeps computation on the GPU and avoids decompressing the full corpus that powers the base `full` profile.
 
-**Empirical highlights** (see `tonbistudio-turboquant-pytorch/README.md` and `scripts/benchmark_profiles.py --profiles full-tq` for reproductions):
+**Empirical highlights** (see [plesk_unified/turboquant](plesk_unified/turboquant) and `scripts/benchmark_profiles.py --profiles full-tq` for reproductions):
 
 - 2/3/4-bit TurboQuant configurations shrink a 289 MB FP16 KV cache to roughly 40/58/76 MB (7.3×, 5×, 3.8× compression, respectively) while still executing real-model attention on Qwen2.5-3B-Instruct.
 - 4-bit attention scores stay within 0.998 cosine similarity of the original, and >94% of the heads keep the same top-5 attended token, even for 8K-context inputs. 3-bit clips to 0.995 cosine similarity with still strong top-5 overlap.
@@ -391,10 +391,10 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 
 **Resources**
 
-- **Implementation:** [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch)
+- **Base implementation:** [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch)
 - **Original research:** ["TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate" (arXiv)](https://arxiv.org/pdf/2504.19874)
 - **Residual correction:** ["QJL: 1-Bit Quantized JL Transform for KV Cache Quantization with Zero Overhead" (arXiv)](https://arxiv.org/abs/2406.03482)
-- **License:** MIT (see [tonbistudio-turboquant-pytorch/LICENSE](tonbistudio-turboquant-pytorch/LICENSE))
+- **License:** MIT (upstream base implementation: [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch))
 
 ## License
 

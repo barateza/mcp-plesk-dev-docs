@@ -1,9 +1,10 @@
 import logging
-import pickle
 
 # ruff: noqa: E402
 import os
+import pickle
 import sys
+import time
 from pathlib import Path
 
 from plesk_unified.log_handler import create_os_handlers
@@ -59,6 +60,8 @@ logger.info(
     LOG_FILE,
 )
 
+STARTUP_AT = time.perf_counter()
+
 
 # --- SILENCE THE NOISE ---
 os.environ["TQDM_DISABLE"] = "1"
@@ -72,13 +75,14 @@ from fastmcp import FastMCP
 from pydantic import Field
 
 try:
-    from plesk_unified import chunking, html_utils, io_utils
+    from plesk_unified import chunking, html_utils, io_utils, platform_utils
     from plesk_unified.model_config import get_active_profile, list_profiles
     from plesk_unified.tq_index import TurboQuantIndex
 except ImportError:
     import chunking
     import html_utils
     import io_utils
+    import platform_utils
 
     try:
         from model_config import get_active_profile, list_profiles  # type: ignore
@@ -141,6 +145,7 @@ _schema_class: Any = None
 _reranker: Any = None
 _active_profile: Any = None
 _tq_index: Any = None
+_detected_device: str | None = None
 
 
 def _get_profile():
@@ -164,23 +169,13 @@ TQ_DIR = BASE_DIR / "storage" / "turboquant"
 
 def _detect_device() -> str:
     """Detect the best available compute device (CUDA > MPS > CPU)."""
-    try:
-        import torch
+    global _detected_device
+    if _detected_device is not None:
+        return _detected_device
 
-        if torch.cuda.is_available():
-            logger.info("NVIDIA GPU (CUDA) detected. Using for acceleration.")
-            return "cuda"
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            logger.info("Apple Silicon GPU (MPS) detected. Using for acceleration.")
-            return "mps"
-        logger.info("No GPU acceleration available. Using CPU.")
-        return "cpu"
-    except ImportError:
-        logger.warning("Torch not available; using CPU.")
-        return "cpu"
-    except Exception:
-        logger.warning("Error detecting device; using CPU.", exc_info=True)
-        return "cpu"
+    _detected_device = platform_utils.get_optimal_device()
+    logger.info("Selected compute device: %s", _detected_device.upper())
+    return _detected_device
 
 
 def get_embedding_model() -> Any:
@@ -194,6 +189,7 @@ def get_embedding_model() -> Any:
     profile = _get_profile()
     device = _detect_device()
     logger.info("Initializing embedding model %s on %s...", profile.embed_model, device)
+    init_started = time.perf_counter()
     try:
         reg = get_registry().get("huggingface")
         try:
@@ -201,7 +197,10 @@ def get_embedding_model() -> Any:
         except TypeError:
             logger.debug("Device argument rejected, retrying without device kwarg.")
             _embedding_model = reg.create(name=profile.embed_model)
-        logger.info("Embedding model initialized successfully.")
+        logger.info(
+            "Embedding model initialized successfully in %.2fs.",
+            time.perf_counter() - init_started,
+        )
     except Exception:
         logger.critical("Embedding model could not be initialized.", exc_info=True)
         raise
@@ -249,12 +248,17 @@ def get_reranker() -> Any:
         return None
 
     logger.info("Initializing reranker %s...", profile.reranker_model)
+    init_started = time.perf_counter()
     try:
         from sentence_transformers import CrossEncoder  # type: ignore
 
         device = _detect_device()
         _reranker = CrossEncoder(profile.reranker_model, device=device)
-        logger.info("Reranker initialized on %s.", device)
+        logger.info(
+            "Reranker initialized on %s in %.2fs.",
+            device,
+            time.perf_counter() - init_started,
+        )
     except Exception:
         logger.warning(
             "Reranker initialization failed. Proceeding without reranking.",
@@ -354,6 +358,44 @@ def get_tq_index() -> TurboQuantIndex:
     logger.info("TurboQuant index not found on disk. Building from LanceDB...")
     _tq_index = _build_tq_index_from_table()
     return _tq_index
+
+
+def _log_server_ready(message: str) -> None:
+    logger.info(message)
+    logger.info("Server module initialized in %.2fs.", time.perf_counter() - STARTUP_AT)
+
+
+@mcp.tool
+def warmup_server() -> str:
+    """Preload the active profile models and table without running indexing."""
+    profile = _get_profile()
+    logger.info("Starting warmup for profile %s.", profile.name)
+
+    parts = [f"Warmup started for profile '{profile.name}'."]
+
+    get_embedding_model()
+    parts.append(f"Embedding model ready: {profile.embed_model}.")
+
+    reranker = get_reranker()
+    if reranker is None:
+        parts.append("Reranker not loaded.")
+    else:
+        parts.append(f"Reranker ready: {profile.reranker_model}.")
+
+    get_table(create_new=False)
+    parts.append("LanceDB table ready.")
+
+    if getattr(profile, "use_turboquant", False):
+        tq_path = _get_tq_index_path()
+        if tq_path.exists():
+            global _tq_index
+            _tq_index = _load_tq_index()
+            parts.append(f"TurboQuant index loaded from {tq_path.name}.")
+        else:
+            parts.append("TurboQuant index not present; skipped build during warmup.")
+
+    logger.info("Warmup complete for profile %s.", profile.name)
+    return "\n".join(parts)
 
 
 @mcp.tool
@@ -643,7 +685,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
 
 
 if __name__ == "__main__":
-    logger.info("Starting Plesk Unified MCP Server...")
+    _log_server_ready("Starting Plesk Unified MCP Server...")
     try:
         mcp.run()
     except Exception:
@@ -653,7 +695,7 @@ if __name__ == "__main__":
 
 def main() -> None:
     """Console entrypoint for the MCP server (used by package scripts/devtools)."""
-    logger.info("Starting Plesk Unified MCP Server (entrypoint)...")
+    _log_server_ready("Starting Plesk Unified MCP Server (entrypoint)...")
     try:
         mcp.run()
     except Exception:

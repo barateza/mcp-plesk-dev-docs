@@ -183,6 +183,8 @@ uv run plesk-unified-mcp --help
 
 You'll see progress output as models download and cache locally. Subsequent starts are near-instantaneous.
 
+For an already running MCP server, call the `warmup_server` tool once to preload the embedding model, reranker, and database table without re-indexing.
+
 ### Build the index
 
 ```bash

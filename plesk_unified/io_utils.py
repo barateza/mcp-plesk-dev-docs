@@ -6,6 +6,7 @@ import stat
 import tempfile
 import urllib.request
 import zipfile
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -169,6 +170,7 @@ def parse_toc_recursive(
     return file_map
 
 
+@lru_cache(maxsize=64)
 def load_toc_map(folder_path: Path) -> Dict[str, Dict[str, str]]:
     """Load and parse a TOC map from a folder's toc.json file.
 

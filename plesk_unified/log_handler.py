@@ -62,7 +62,10 @@ def _make_syslog_handler(address: str) -> logging.handlers.SysLogHandler:
         # deterministic we fall back to creating a SysLogHandler with a
         # network address and preserve the requested `address` attribute so
         # callers/tests can inspect it.
-        handler = logging.handlers.SysLogHandler(address=("localhost", 514), facility=_SYSLOG_FACILITY)
+        handler = logging.handlers.SysLogHandler(
+            address=("localhost", 514),
+            facility=_SYSLOG_FACILITY,
+        )
         # Ensure the handler reports the requested address when inspected.
         handler.address = address
 

@@ -131,7 +131,7 @@ Each query has a list of keyword substrings that must appear in at least one top
 |11|SSL certificate management|*(all)*|certificate, SSL, TLS|
 |12|backup and restore Plesk|*(all)*|backup, restore|
 
-The built-in query set lives in [`scripts/benchmark_profiles.py`](../scripts/benchmark_profiles.py#L29).
+The built-in query sets live in [`plesk_unified/benchmark_suites.py`](../plesk_unified/benchmark_suites.py).
 You can provide your own queries with `--queries my_queries.json` (see the script docstring for format).
 
 ---
@@ -173,3 +173,142 @@ cloned repository so each profile indexes from scratch. Omit `--refresh` for fas
 re-runs against existing indexes.
 
 > **Note:** RSS delta requires `psutil` (`pip install psutil`). Without it the column shows 0.
+
+### Experimental PageIndex-style pilot
+
+The benchmark runner now also supports a structure-aware pilot engine that reranks the
+baseline candidates using title and breadcrumb signals:
+
+```bash
+python scripts/benchmark_profiles.py --engine pageindex-pilot --profile medium
+python scripts/benchmark_profiles.py --autoresearch --repeat 3 --output pilot_runs.json
+```
+
+This is benchmark-only. It does not change the MCP runtime search path.
+
+### PageIndex benchmark suites
+
+Use these when you want to test whether PageIndex is worth adding for specific query shapes:
+
+```bash
+# 1. Structural navigation queries
+python scripts/benchmark_profiles.py --suite structural --profile medium --engine pageindex-pilot
+
+# 2. Long-document QA queries
+python scripts/benchmark_profiles.py --suite long-doc --profile medium --engine pageindex-pilot
+
+# 3. Multi-hop retrieval queries
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --engine pageindex-pilot
+```
+
+Current suite sizes:
+
+- `structural`: 4 queries
+- `long-doc`: 3 queries
+- `multi-hop`: 26 queries (expanded pack)
+
+Recommended interpretation:
+
+1. `structural` tells you whether PageIndex improves heading-aware retrieval.
+2. `long-doc` tells you whether it helps on broad questions over longer pages.
+3. `multi-hop` tells you whether tree navigation helps with compound questions.
+
+### Automatic query routing policies
+
+The benchmark runner now supports per-query routing between baseline and `pageindex-pilot`:
+
+```bash
+# Baseline behavior (manual engine only)
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy baseline-only --engine baseline
+
+# Adaptive routing: route multi-hop/structural intents to pageindex-pilot, keep lookup intents on baseline
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy adaptive --engine baseline
+
+# Aggressive routing: send every query to pageindex-pilot
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy aggressive --engine baseline
+```
+
+Policy guidance:
+
+1. Use `baseline-only` for control runs and regression tracking.
+2. Use `adaptive` for realistic mixed-query evaluation.
+3. Use `aggressive` as an upper-bound stress test for PageIndex-style reranking.
+
+Observed on the medium profile during the initial pilot:
+
+|Suite|Baseline MRR@5|PageIndex pilot MRR@5|Takeaway|
+|-----|--------------|---------------------|--------|
+|`structural`|1.000|1.000|No measurable gain; baseline already saturates this slice.|
+|`long-doc`|1.000|1.000|No change on this small set; needs a harder long-form corpus to differentiate.|
+|`multi-hop`|0.750|1.000|Best-looking slice for PageIndex-style navigation, but still small-N.|
+
+Validation objective (completed):
+
+Run the full control + multi-hop policy matrix over multiple repeats and make a
+default-routing decision from mean and variance, not from a single run.
+
+### Final routing matrix — 2026-04-06 (medium profile, 3 repeats each)
+
+Commands used:
+
+```bash
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy baseline-only --engine baseline --repeat 3 --output /tmp/pageindex_matrix/control_baseline-only.json
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy adaptive --engine baseline --repeat 3 --output /tmp/pageindex_matrix/control_adaptive.json
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy aggressive --engine baseline --repeat 3 --output /tmp/pageindex_matrix/control_aggressive.json
+
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy baseline-only --engine baseline --repeat 3 --output /tmp/pageindex_matrix/multi-hop_baseline-only.json
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy adaptive --engine baseline --repeat 3 --output /tmp/pageindex_matrix/multi-hop_adaptive.json
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy aggressive --engine baseline --repeat 3 --output /tmp/pageindex_matrix/multi-hop_aggressive.json
+```
+
+Aggregated results (`mean +- std`):
+
+|Suite|Policy|HR@5|MRR@5|Avg latency (s)|Pilot share|Delta MRR vs baseline|
+|-----|------|----|-----|---------------|----------|---------------------|
+|`control`|`baseline-only`|1.000 +- 0.000|0.938 +- 0.000|1.532 +- 0.046|0.000|+0.000|
+|`control`|`adaptive`|1.000 +- 0.000|0.938 +- 0.000|1.527 +- 0.119|0.333|+0.000|
+|`control`|`aggressive`|1.000 +- 0.000|0.917 +- 0.000|1.631 +- 0.124|1.000|-0.021|
+|`multi-hop`|`baseline-only`|1.000 +- 0.000|0.940 +- 0.000|1.419 +- 0.033|0.000|+0.000|
+|`multi-hop`|`adaptive`|1.000 +- 0.000|0.891 +- 0.000|1.434 +- 0.027|1.000|-0.049|
+|`multi-hop`|`aggressive`|1.000 +- 0.000|0.891 +- 0.000|1.392 +- 0.013|1.000|-0.049|
+
+Decision-gate outcomes:
+
+1. Multi-hop MRR does not improve with routing; it drops by `0.049` for both
+   routed policies.
+2. Control-suite MRR regresses under `aggressive` (`-0.021`).
+3. `adaptive` routes all expanded multi-hop queries to the pilot path, so its
+   behavior equals aggressive on this suite and keeps the same MRR regression.
+
+Final recommendation from this matrix:
+
+1. Keep `baseline-only` as the default policy.
+2. Keep `adaptive` behind an experiment flag only while routing heuristics are
+   redesigned and revalidated.
+3. Do not use `aggressive` in production.
+
+### Rollout checklist
+
+Use this checklist when rerunning the decision matrix after heuristic changes:
+
+1. Run control with all three routing policies:
+
+```bash
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy baseline-only --engine baseline --repeat 3 --output control_baseline.json
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy adaptive --engine baseline --repeat 3 --output control_adaptive.json
+python scripts/benchmark_profiles.py --suite control --profile medium --routing-policy aggressive --engine baseline --repeat 3 --output control_aggressive.json
+```
+
+2. Run expanded multi-hop with all three routing policies:
+
+```bash
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy baseline-only --engine baseline --repeat 3 --output multihop_baseline.json
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy adaptive --engine baseline --repeat 3 --output multihop_adaptive.json
+python scripts/benchmark_profiles.py --suite multi-hop --profile medium --routing-policy aggressive --engine baseline --repeat 3 --output multihop_aggressive.json
+```
+
+3. Promote routing only if all gates pass:
+
+- multi-hop MRR remains consistently higher across repeats,
+- control-suite MRR/HR do not regress materially,
+- latency stays within the acceptable budget for your deployment target.

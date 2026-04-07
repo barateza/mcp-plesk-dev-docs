@@ -86,6 +86,79 @@ def test_warmup_server_preloads_without_indexing(monkeypatch):
     assert calls["tq_load"] == 0
 
 
+def test_warmup_server_returns_running_when_already_active(monkeypatch):
+    import plesk_unified.server as server
+
+    monkeypatch.setattr(server, "_warmup_state", "running")
+    result = server.warmup_server()
+    assert result == "Warmup already running."
+
+
+def test_maybe_start_background_warmup_starts_daemon_thread(monkeypatch):
+    import plesk_unified.server as server
+
+    started = {"value": False}
+
+    class FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+
+        def start(self):
+            started["value"] = True
+            self._alive = True
+
+        def is_alive(self):
+            return self._alive
+
+    monkeypatch.setattr(server, "_env_flag", lambda _name: True)
+    monkeypatch.setattr(server.threading, "Thread", FakeThread)
+    monkeypatch.setattr(server, "_warmup_thread", None)
+
+    server._maybe_start_background_warmup()
+
+    assert started["value"] is True
+    assert server._warmup_thread is not None
+
+
+def test_daemon_health_reports_expected_fields(monkeypatch, tmp_path):
+    import plesk_unified.server as server
+
+    class DummyProfile:
+        name = "full-tq"
+        use_turboquant = True
+
+    class FakeDb:
+        def open_table(self, _name):
+            return None
+
+    artifact = tmp_path / "full-tq.pkl"
+    artifact.write_text("ok")
+
+    monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
+    monkeypatch.setattr(server, "_detect_device", lambda: "cpu")
+    monkeypatch.setattr(server, "_get_tq_index_path", lambda: artifact)
+    monkeypatch.setattr(server.lancedb, "connect", lambda _path: FakeDb())
+    monkeypatch.setattr(server, "_tq_index", None)
+    monkeypatch.setattr(server, "_warmup_state", "ready")
+    monkeypatch.setattr(server, "_warmup_error", None)
+    monkeypatch.setattr(server, "_warmup_thread", None)
+    monkeypatch.setattr(server, "_env_flag", lambda _name: True)
+
+    payload = json.loads(server.daemon_health())
+
+    assert payload["profile"] == "full-tq"
+    assert payload["device"] == "cpu"
+    assert payload["auto_warmup_enabled"] is True
+    assert payload["warmup_state"] == "ready"
+    assert payload["table_ready"] is True
+    assert payload["turboquant_expected"] is True
+    assert payload["turboquant_artifact_exists"] is True
+    assert payload["refresh_mode"] == "synchronous-only"
+
+
 def test_load_toc_map_is_cached(monkeypatch, tmp_path):
     import plesk_unified.io_utils as io_utils
 

@@ -1,9 +1,11 @@
+import json
 import logging
 
 # ruff: noqa: E402
 import os
 import pickle
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -146,6 +148,10 @@ _reranker: Any = None
 _active_profile: Any = None
 _tq_index: Any = None
 _detected_device: str | None = None
+_warmup_state = "idle"
+_warmup_error: str | None = None
+_warmup_lock = threading.Lock()
+_warmup_thread: threading.Thread | None = None
 
 
 def _get_profile():
@@ -365,9 +371,33 @@ def _log_server_ready(message: str) -> None:
     logger.info("Server module initialized in %.2fs.", time.perf_counter() - STARTUP_AT)
 
 
-@mcp.tool
-def warmup_server() -> str:
-    """Preload the active profile models and table without running indexing."""
+def _env_flag(name: str) -> bool:
+    value = os.environ.get(name, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _begin_warmup() -> bool:
+    global _warmup_state, _warmup_error
+    with _warmup_lock:
+        if _warmup_state == "running":
+            return False
+        _warmup_state = "running"
+        _warmup_error = None
+        return True
+
+
+def _finish_warmup(error: Exception | None = None) -> None:
+    global _warmup_state, _warmup_error
+    with _warmup_lock:
+        if error is None:
+            _warmup_state = "ready"
+            _warmup_error = None
+            return
+        _warmup_state = "failed"
+        _warmup_error = str(error)
+
+
+def _run_warmup_sequence() -> list[str]:
     profile = _get_profile()
     logger.info("Starting warmup for profile %s.", profile.name)
 
@@ -395,7 +425,94 @@ def warmup_server() -> str:
             parts.append("TurboQuant index not present; skipped build during warmup.")
 
     logger.info("Warmup complete for profile %s.", profile.name)
+    return parts
+
+
+def _background_warmup_worker() -> None:
+    if not _begin_warmup():
+        logger.info("Background warmup skipped because warmup is already running.")
+        return
+
+    try:
+        _run_warmup_sequence()
+        _finish_warmup()
+    except Exception as exc:
+        _finish_warmup(exc)
+        logger.exception("Background warmup failed.")
+
+
+def _maybe_start_background_warmup() -> None:
+    if not _env_flag("PLESK_DAEMON_AUTO_WARMUP"):
+        return
+
+    global _warmup_thread
+    with _warmup_lock:
+        if _warmup_thread is not None and _warmup_thread.is_alive():
+            return
+        _warmup_thread = threading.Thread(
+            target=_background_warmup_worker,
+            name="plesk-daemon-warmup",
+            daemon=True,
+        )
+        _warmup_thread.start()
+
+    logger.info("Background daemon warmup started.")
+
+
+def _table_health() -> tuple[bool, str | None]:
+    try:
+        db = lancedb.connect(str(DB_PATH))
+        db.open_table("plesk_knowledge")
+        return True, None
+    except Exception as exc:
+        return False, str(exc)
+
+
+@mcp.tool
+def warmup_server() -> str:
+    """Preload the active profile models and table without running indexing."""
+    if not _begin_warmup():
+        return "Warmup already running."
+
+    try:
+        parts = _run_warmup_sequence()
+        _finish_warmup()
+    except Exception as exc:
+        _finish_warmup(exc)
+        logger.exception("Manual warmup failed.")
+        return f"Warmup failed: {exc}"
+
     return "\n".join(parts)
+
+
+@mcp.tool
+def daemon_health() -> str:
+    """Return daemon-centric readiness status for warmup and indexed search paths."""
+    profile = _get_profile()
+    table_ready, table_error = _table_health()
+    tq_path = (
+        _get_tq_index_path() if getattr(profile, "use_turboquant", False) else None
+    )
+
+    with _warmup_lock:
+        status = {
+            "profile": profile.name,
+            "device": _detect_device(),
+            "auto_warmup_enabled": _env_flag("PLESK_DAEMON_AUTO_WARMUP"),
+            "warmup_state": _warmup_state,
+            "warmup_error": _warmup_error,
+            "warmup_thread_alive": (
+                _warmup_thread.is_alive() if _warmup_thread is not None else False
+            ),
+            "table_ready": table_ready,
+            "table_error": table_error,
+            "turboquant_expected": bool(getattr(profile, "use_turboquant", False)),
+            "turboquant_loaded": _tq_index is not None,
+            "turboquant_artifact_exists": (tq_path.exists() if tq_path else None),
+            "refresh_mode": "synchronous-only",
+        }
+
+    return json.dumps(status, indent=2)
 
 
 @mcp.tool
@@ -686,6 +803,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
 
 if __name__ == "__main__":
     _log_server_ready("Starting Plesk Unified MCP Server...")
+    _maybe_start_background_warmup()
     try:
         mcp.run()
     except Exception:
@@ -696,6 +814,7 @@ if __name__ == "__main__":
 def main() -> None:
     """Console entrypoint for the MCP server (used by package scripts/devtools)."""
     _log_server_ready("Starting Plesk Unified MCP Server (entrypoint)...")
+    _maybe_start_background_warmup()
     try:
         mcp.run()
     except Exception:

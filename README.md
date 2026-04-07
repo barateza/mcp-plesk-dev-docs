@@ -185,6 +185,32 @@ You'll see progress output as models download and cache locally. Subsequent star
 
 For an already running MCP server, call the `warmup_server` tool once to preload the embedding model, reranker, and database table without re-indexing.
 
+For long-running daemon deployments, set `PLESK_DAEMON_AUTO_WARMUP=true` to start warmup in a background thread as soon as the process starts.
+Use the `daemon_health` tool to check warmup state, table readiness, and TurboQuant artifact availability.
+
+### New daemon startup features
+
+The server now includes daemon-focused startup controls and health reporting:
+
+1. Set `PLESK_DAEMON_AUTO_WARMUP=true` to keep boot responsive while the
+  server warms models and DB state in a background thread.
+2. Call `daemon_health` to verify readiness state (`idle`, `running`, `ready`,
+  or `failed`) plus table and TurboQuant artifact status.
+3. Call `warmup_server` manually when you want deterministic preloading without
+  indexing.
+
+Recommended daemon flow:
+
+```bash
+# Start server with background warmup
+PLESK_DAEMON_AUTO_WARMUP=true uv run plesk-unified-mcp
+```
+
+Then verify from your MCP client:
+
+- `daemon_health` returns `"warmup_state": "ready"`
+- `daemon_health` returns `"table_ready": true`
+
 ### Build the index
 
 ```bash
@@ -300,6 +326,7 @@ Create a `.env` file in the project root:
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...   # for enrich_toc.py
 FORCE_DEVICE=cpu                   # optional: override GPU detection
+PLESK_DAEMON_AUTO_WARMUP=true      # optional: daemon-only background warmup
 KB_ROOT=/custom/path               # optional: override knowledge_base dir
 LOG_HANDLER=os                     # os | file | both (default: os)
 LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR

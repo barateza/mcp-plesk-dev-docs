@@ -204,9 +204,10 @@ def test_search_rejects_invalid_category(monkeypatch):
     import plesk_unified.server as server
 
     monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    bad_category = "'; DROP TABLE plesk_knowledge; --"
 
     with pytest.raises(ValueError, match="Invalid category"):
-        server.search_plesk_unified("some query", category="'; DROP TABLE plesk_knowledge; --")
+        server.search_plesk_unified("some query", category=bad_category)
 
 
 def test_search_accepts_valid_category(monkeypatch):
@@ -248,13 +249,19 @@ def test_refresh_rejects_invalid_category(monkeypatch):
     import plesk_unified.server as server
 
     fake_table = MagicMock()
-    fake_table.search.return_value.where.return_value.select.return_value.limit.return_value.to_list.return_value = []
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.select.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
 
     monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
     monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    bad_category = "'; DROP TABLE plesk_knowledge; --"
 
     with pytest.raises(ValueError, match="Invalid category"):
-        server.refresh_knowledge(target_category="'; DROP TABLE plesk_knowledge; --")
+        server.refresh_knowledge(target_category=bad_category)
 
 
 def test_refresh_accepts_valid_category(monkeypatch):

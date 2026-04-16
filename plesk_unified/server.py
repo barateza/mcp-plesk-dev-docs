@@ -102,6 +102,8 @@ KB_DIR = BASE_DIR / "knowledge_base"
 KB_DIR.mkdir(exist_ok=True)
 (BASE_DIR / "storage").mkdir(exist_ok=True)
 
+VALID_CATEGORIES: frozenset[str] = frozenset({"guide", "cli", "api", "php-stubs", "js-sdk"})
+
 SOURCES = [
     {
         "path": KB_DIR / "stubs",
@@ -671,6 +673,12 @@ def refresh_knowledge(
     Behavior: incremental by filename when `reset_db` is False; skips files
     already present in the DB. Returns a short per-source report.
     """
+    if target_category != "all" and target_category not in VALID_CATEGORIES:
+        raise ValueError(
+            f"Invalid category: {target_category!r}. "
+            f"Must be one of {sorted(VALID_CATEGORIES)} or 'all'."
+        )
+
     logger.info(
         "Starting refresh_knowledge: target=%s, reset_db=%s", target_category, reset_db
     )
@@ -743,6 +751,12 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     Results are returned as readable text blocks including title, path,
     filename and a numeric score/distance.
     """
+    if category and category not in VALID_CATEGORIES:
+        raise ValueError(
+            f"Invalid category: {category!r}. "
+            f"Must be one of {sorted(VALID_CATEGORIES)}."
+        )
+
     # Truncate query for logging to avoid leaking sensitive data
     safe_query = (query[:100] + "...") if len(query) > 100 else query
     logger.info("Search request: q='%s' category='%s'", safe_query, category)

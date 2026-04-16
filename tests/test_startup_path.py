@@ -2,6 +2,8 @@ import importlib
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_get_optimal_device_honors_force_device(monkeypatch):
     monkeypatch.setenv("FORCE_DEVICE", "mps")
@@ -181,3 +183,107 @@ def test_load_toc_map_is_cached(monkeypatch, tmp_path):
 
     assert first == second
     assert calls["count"] == 1
+
+
+# --- Category allowlist tests ---
+
+
+def _make_dummy_profile(use_turboquant=False):
+    class DummyProfile:
+        name = "full"
+        embed_model = "model"
+        reranker_model = "reranker"
+        reranker_enabled = False
+        tq_top_k = 25
+
+    DummyProfile.use_turboquant = use_turboquant
+    return DummyProfile()
+
+
+def test_search_rejects_invalid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+
+    with pytest.raises(ValueError, match="Invalid category"):
+        server.search_plesk_unified("some query", category="'; DROP TABLE plesk_knowledge; --")
+
+
+def test_search_accepts_valid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+
+    result = server.search_plesk_unified("some query", category="api")
+    assert isinstance(result, str)
+    fake_search.where.assert_called_once_with("category = 'api'")
+
+
+def test_search_with_no_category_is_allowed(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+
+    result = server.search_plesk_unified("some query", category=None)
+    assert isinstance(result, str)
+    fake_search.where.assert_not_called()
+
+
+def test_refresh_rejects_invalid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_table.search.return_value.where.return_value.select.return_value.limit.return_value.to_list.return_value = []
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+
+    with pytest.raises(ValueError, match="Invalid category"):
+        server.refresh_knowledge(target_category="'; DROP TABLE plesk_knowledge; --")
+
+
+def test_refresh_accepts_valid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.select.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
+
+    result = server.refresh_knowledge(target_category="cli")
+    assert "SKIPPED" in result or "Finished" in result
+
+
+def test_refresh_with_all_is_allowed(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
+
+    result = server.refresh_knowledge(target_category="all")
+    assert isinstance(result, str)

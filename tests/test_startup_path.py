@@ -294,3 +294,63 @@ def test_refresh_with_all_is_allowed(monkeypatch):
 
     result = server.refresh_knowledge(target_category="all")
     assert isinstance(result, str)
+
+
+def _make_fake_search(results):
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = results
+    return fake_search
+
+
+def test_search_result_includes_doc_url_for_html_category(monkeypatch):
+    """Search output contains a URL line for categories with a known base URL."""
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_table.search.return_value = _make_fake_search(
+        [
+            {
+                "text": "pm_Config::get('timeout');",
+                "title": "Custom Settings",
+                "filename": "77178.htm",
+                "category": "guide",
+                "breadcrumb": "Extensions > Settings",
+                "_distance": 0.1,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+
+    result = server.search_plesk_unified("settings")
+    assert "https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm" in result
+
+
+def test_search_result_no_url_for_github_only_categories(monkeypatch):
+    """Search output omits the URL line for php-stubs and js-sdk."""
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_table.search.return_value = _make_fake_search(
+        [
+            {
+                "text": "abstract class pm_Hook_ConfigDefaults {}",
+                "title": "ConfigDefaults.php",
+                "filename": "ConfigDefaults.php",
+                "category": "php-stubs",
+                "breadcrumb": "",
+                "_distance": 0.1,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+
+    result = server.search_plesk_unified("config defaults")
+    assert "URL:" not in result

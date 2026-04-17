@@ -162,6 +162,29 @@ SOURCES = [
     },
 ]
 
+# Map each category that has a known Plesk Docs zip URL to its documentation
+# base URL.  Derived automatically from SOURCES so changes to zip_url propagate.
+# Pattern: https://.../zip/<name>.zip  →  https://.../<name>/
+# GitHub-only sources (php-stubs, js-sdk) are absent from this mapping.
+CATEGORY_DOC_BASE_URLS: dict[str, str] = {
+    src["cat"]: src["zip_url"].replace("/zip/", "/").removesuffix(".zip") + "/"
+    for src in SOURCES
+    if src.get("zip_url")
+}
+
+
+def _build_doc_url(category: str, filename: str) -> str | None:
+    """Return a fully-qualified documentation URL for *filename* in *category*.
+
+    Returns ``None`` for categories without a known documentation base URL
+    (``php-stubs``, ``js-sdk``) or when *filename* is empty.
+    """
+    base = CATEGORY_DOC_BASE_URLS.get(category)
+    if base and filename:
+        return base + filename
+    return None
+
+
 # --- Lazy Initialization ---
 # The embedding model (~1.5 GB) is loaded on first tool call, NOT at import time.
 # This lets the MCP server respond to `initialize` in <2 seconds.
@@ -868,10 +891,13 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     formatted_results = []
     for r in results:
         relevance = r.get("_relevance", 0.0)
+        doc_url = _build_doc_url(r.get("category", ""), r.get("filename", ""))
+        url_line = f"URL: {doc_url}\n" if doc_url else ""
         formatted_results.append(
             f"=== {r['category'].upper()} | {r['title']} ===\n"
             f"Path: {r.get('breadcrumb', '')}\n"
             f"File: {r.get('filename', '')}\n"
+            f"{url_line}"
             f"Relevance: {relevance:.4f}\n\n"
             f"{r.get('text', '')}\n"
         )

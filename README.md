@@ -26,6 +26,7 @@ $ query: "How do I define default configuration settings for my extension?"
 === GUIDE | Custom Settings ===
 Path: Plesk Features Available for Extensions > Retrieve Data from Plesk > Custom Settings
 File: 77178.htm
+URL: https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm
 Relevance: 0.9341
 
 [GUIDE] Custom Settings

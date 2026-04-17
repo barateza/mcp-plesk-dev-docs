@@ -20,9 +20,15 @@ This server ingests all five sources, embeds them with a multilingual model, and
 
 ## Demo
 
-```bash
-$ query: "How do I define default configuration settings for my extension?"
+Query sent to the MCP tool:
 
+```
+search_plesk_unified("How do I define default configuration settings for my extension?")
+```
+
+Results returned:
+
+```text
 === GUIDE | Custom Settings ===
 Path: Plesk Features Available for Extensions > Retrieve Data from Plesk > Custom Settings
 File: 77178.htm
@@ -39,18 +45,16 @@ extensions editing the `panel.ini` configuration file.
 Storing the default settings is implemented via a hook class at
 `plib/hooks/ConfigDefaults.php` that extends `pm_Hook_ConfigDefaults`:
 
-```php
-class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
-{
-    public function getDefaults()
+    class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
     {
-        return [
-            'homepage' => 'https://www.plesk.com/',
-            'timeout'  => 60,
-        ];
+        public function getDefaults()
+        {
+            return [
+                'homepage' => 'https://www.plesk.com/',
+                'timeout'  => 60,
+            ];
+        }
     }
-}
-```
 
 === PHP-STUBS | ConfigDefaults.php ===
 Path:
@@ -77,43 +81,41 @@ abstract class pm_Hook_ConfigDefaults implements pm_Hook_Interface
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                   MCP Client                        │
-│         (Claude Desktop / Cursor / etc.)            │
-└───────────────────┬─────────────────────────────────┘
-                    │ MCP tool call: search_plesk_unified(query)
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                  FastMCP Server                     │
-│                  (server.py)                        │
-└───────────────────┬─────────────────────────────────┘
-                    │
-          ┌─────────▼──────────┐
-          │   Query Pipeline   │
-          │                    │
-          │  1. Embed query    │  BAAI/bge-m3 (~2GB)
-          │  2. ANN search     │  LanceDB (Apache Arrow)
-          │  3. Rerank top-N   │  BAAI/bge-reranker-base (~300MB)
-          │  4. Return chunks  │
-          └─────────┬──────────┘
-                    │
-┌───────────────────▼─────────────────────────────────┐
-│               LanceDB Vector Store                  │
-│                                                     │
-│ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌─────────┐ │
-│ │ Guide │ │  API  │ │  CLI  │ │  PHP  │ │   JS    │ │
-│ │(HTML) │ │(HTML) │ │(HTML) │ │(stubs)│ │  (src)  │ │
-│ └───────┘ └───────┘ └───────┘ └───────┘ └─────────┘ │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Client["MCP Client\n(Claude Desktop / Cursor / etc.)"]
+
+    Client -->|"search_plesk_unified(query)"| Server
+
+    subgraph Server["FastMCP Server · plesk_unified/server.py"]
+        direction TB
+        E["1 · Embed query\n(profile-selected model)"]
+        S["2 · ANN search\nLanceDB (Apache Arrow)"]
+        R["3 · Rerank top-N\n(profile-selected reranker)"]
+        O["4 · Return top-5 results"]
+        E --> S --> R --> O
+    end
+
+    subgraph Store["LanceDB Vector Store"]
+        direction LR
+        G["Guide\nHTML"]
+        A["API\nHTML"]
+        C["CLI\nHTML"]
+        P["PHP Stubs\nPHP"]
+        J["JS SDK\nJS"]
+    end
+
+    S <--> Store
 ```
+
+See [Model profiles](#model-profiles) for the available embed and reranker model options.
 
 |Component|Technology|Role|
 |---|---|---|
-|Embeddings|BAAI/bge-small/base/m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
-|Reranker|ms-marco-MiniLM / bge-reranker-base|Cross-encoder result reranking (always applied)|
+|Embeddings|BAAI/bge-small · bge-base · bge-m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
+|Reranker|ms-marco-MiniLM / bge-reranker-base (profile)|Cross-encoder result reranking (always applied)|
 |Vector DB|LanceDB|Apache Arrow-based ANN search|
-|MCP Server|FastMCP|Tool exposure to AI clients|
+|MCP Server|FastMCP|Tool exposure to AI clients (`plesk_unified/server.py`)|
 |HTML Parser|BeautifulSoup4 + markdownify|Documentation ingestion with code-block preservation|
 |Git integration|GitPython|Auto-fetches PHP stubs and JS SDK|
 
@@ -196,7 +198,10 @@ uv run plesk-unified-mcp --help
 
 You'll see progress output as models download and cache locally. Subsequent starts are near-instantaneous.
 
-For an already running MCP server, call the `warmup_server` tool once to preload the embedding model, reranker, and database table without re-indexing.
+For an already running MCP server, call the `warmup_server` tool once to
+preload the embedding model, reranker, and database table without
+re-indexing. Use `list_model_profiles` to inspect the available profiles
+and confirm which one is active.
 
 For long-running daemon deployments, set `PLESK_DAEMON_AUTO_WARMUP=true` to start warmup in a background thread as soon as the process starts.
 Use the `daemon_health` tool to check warmup state, table readiness, and TurboQuant artifact availability.
@@ -299,19 +304,28 @@ Edit `~/.cursor/mcp.json`:
 ``` text
 mcp-plesk-unified/
 ├── plesk_unified/
-│   ├── server.py            # FastMCP tool definitions and query pipeline
-│   ├── log_handler.py       # Cross-platform native OS logging handler factory
-│   ├── platform_utils.py    # GPU/device detection
-│   └── ai_client.py         # Embedding and reranker wrappers
+│   ├── server.py              # FastMCP tool definitions and query pipeline
+│   ├── ai_client.py           # Embedding and reranker model wrappers
+│   ├── model_config.py        # Model profile definitions (light/medium/full/full-tq)
+│   ├── chunking.py            # Document chunking and LanceDB persistence
+│   ├── html_utils.py          # HTML parsing with BeautifulSoup4 + markdownify
+│   ├── io_utils.py            # Source fetching (Git clone, ZIP download)
+│   ├── platform_utils.py      # GPU/device detection
+│   ├── log_handler.py         # Cross-platform native OS logging handler factory
+│   ├── tq_index.py            # TurboQuant search index
+│   ├── benchmark_engines.py   # Benchmarking engine implementations
+│   ├── benchmark_suites.py    # Benchmark test suites
+│   └── turboquant/            # In-repo TurboQuant quantization package
 ├── scripts/
 │   ├── benchmark_profiles.py  # Retrieval quality benchmark
 │   ├── enrich_toc.py          # LLM-assisted TOC description generation
 │   ├── generate_virtual_toc.py
 │   └── manage_plesk_docs.py
+├── tests/                     # Pytest test suite
 ├── docs/
-│   └── benchmarks.md        # Benchmark results and methodology
-├── knowledge_base/          # Fetched and parsed documentation sources
-├── storage/                 # LanceDB vector indexes (generated, per-profile)
+│   └── benchmarks.md          # Benchmark results and methodology
+├── knowledge_base/            # Fetched and parsed documentation sources
+├── storage/                   # LanceDB vector indexes (generated, per-profile)
 ├── pyproject.toml
 └── README.md
 ```
@@ -372,15 +386,19 @@ LOG_HANDLER=both  # native OS handler + rotating file
 ```bash
 pip install -e ".[dev]"
 
-# Lint and format
+# Lint and format (must pass in CI)
 ruff check . --fix
-black .
+ruff format .
 
-# Type check
-mypy plesk_unified/
+# Type check (project uses pyrightconfig.json)
+pyright plesk_unified/
 
-# Pre-commit hooks
+# Run tests
+pytest
+
+# Pre-commit hooks (runs all checks automatically on commit)
 pip install pre-commit
+pre-commit install
 pre-commit run --all-files
 ```
 
@@ -406,7 +424,7 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 
 **LanceDB errors after an interrupted index build:** Delete `storage/` and reinitialize.
 
-**Out of memory during indexing:** Reduce batch size in `server.py` or run on a machine with more RAM.
+**Out of memory during indexing:** Reduce batch size in `plesk_unified/server.py` or run on a machine with more RAM.
 
 ---
 

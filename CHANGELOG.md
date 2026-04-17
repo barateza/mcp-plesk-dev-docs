@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-04-17
+
+### Fixed
+
+- **Search quality — reranker now always applied.** The `CrossEncoder` model was
+  loaded at startup but never called during `search_plesk_unified`. The tool now
+  fetches a wider candidate pool first (default 25, configurable via
+  `PLESK_RERANK_CANDIDATES`) and runs the cross-encoder over all candidates before
+  returning the top-5 results. Applies to both the standard LanceDB path and the
+  `full-tq` TurboQuant path.
+- **Relevance scores are now normalised to [0, 1].** Cross-encoder logits are
+  mapped through a sigmoid function. Result output now shows `Relevance: 0.9341`
+  instead of the raw L2 distance (`Score/Distance: 250.74`).
+- **Duplicate source files no longer fill all result slots.** A
+  `_deduplicate_by_filename` pass keeps only the highest-ranked chunk per source
+  file, so five distinct documents are returned rather than five chunks of the
+  same page.
+
+### Changed
+
+- `html_utils.parse_html_file` now converts cleaned HTML to Markdown via
+  `markdownify` instead of stripping all formatting with `get_text()`. Code
+  blocks (`<pre><code>`) and headings are preserved in indexed content, improving
+  the readability of search results and matching Context7-quality output. Takes
+  effect on the next `refresh_knowledge` run.
+
 ## [0.4.0] - 2026-03-09
 
 ### Added
@@ -104,6 +130,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.4.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.1
 [0.4.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.0
 [0.3.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.1
 [0.3.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.0

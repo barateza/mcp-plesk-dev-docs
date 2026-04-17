@@ -23,10 +23,38 @@ This server ingests all five sources, embeds them with a multilingual model, and
 ```bash
 $ query: "How do I define default configuration settings for my extension?"
 
+=== GUIDE | Custom Settings ===
+Path: Plesk Features Available for Extensions > Retrieve Data from Plesk > Custom Settings
+File: 77178.htm
+Relevance: 0.9341
+
+[GUIDE] Custom Settings
+---
+## Custom Settings
+
+Plesk SDK API provides the ability to customize the behavior of
+extensions editing the `panel.ini` configuration file.
+
+Storing the default settings is implemented via a hook class at
+`plib/hooks/ConfigDefaults.php` that extends `pm_Hook_ConfigDefaults`:
+
+```php
+class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
+{
+    public function getDefaults()
+    {
+        return [
+            'homepage' => 'https://www.plesk.com/',
+            'timeout'  => 60,
+        ];
+    }
+}
+```
+
 === PHP-STUBS | ConfigDefaults.php ===
 Path:
 File: ConfigDefaults.php
-Score/Distance: 250.7434
+Relevance: 0.8712
 
 [PHP-STUBS] ConfigDefaults.php
 ---
@@ -41,22 +69,6 @@ abstract class pm_Hook_ConfigDefaults implements pm_Hook_Interface
      * @return array
      */
     abstract public function getDefaults();
-}
-
-=== PHP-STUBS | Config.php ===
-Path:
-File: Config.php
-Score/Distance: 344.7940
-
-[PHP-STUBS] Config.php
----
-class pm_Config
-{
-    /**
-     * Retrieve extension's default configuration settings
-     * @return array
-     * */
-    public static function getDefaults() { }
 }
 ```
 
@@ -98,10 +110,10 @@ class pm_Config
 |Component|Technology|Role|
 |---|---|---|
 |Embeddings|BAAI/bge-small/base/m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
-|Reranker|ms-marco-MiniLM / bge-reranker-base|Cross-encoder result reranking|
+|Reranker|ms-marco-MiniLM / bge-reranker-base|Cross-encoder result reranking (always applied)|
 |Vector DB|LanceDB|Apache Arrow-based ANN search|
 |MCP Server|FastMCP|Tool exposure to AI clients|
-|HTML Parser|BeautifulSoup4|Documentation ingestion|
+|HTML Parser|BeautifulSoup4 + markdownify|Documentation ingestion with code-block preservation|
 |Git integration|GitPython|Auto-fetches PHP stubs and JS SDK|
 
 **Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
@@ -327,6 +339,7 @@ Create a `.env` file in the project root:
 OPENROUTER_API_KEY=sk-or-v1-...   # for enrich_toc.py
 FORCE_DEVICE=cpu                   # optional: override GPU detection
 PLESK_DAEMON_AUTO_WARMUP=true      # optional: daemon-only background warmup
+PLESK_RERANK_CANDIDATES=25         # optional: candidate pool size before reranking (default: 25)
 KB_ROOT=/custom/path               # optional: override knowledge_base dir
 LOG_HANDLER=os                     # os | file | both (default: os)
 LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR

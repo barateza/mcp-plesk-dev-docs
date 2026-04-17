@@ -1,7 +1,9 @@
+import re
 from pathlib import Path
 from typing import Optional, Tuple
 
 from bs4 import BeautifulSoup
+from markdownify import markdownify as _md
 
 
 def parse_html_file(
@@ -11,6 +13,7 @@ def parse_html_file(
 
     - Removes nav/footer/script/style/aside elements before extracting text.
     - Prefers <main> or <article> when available.
+    - Converts HTML to Markdown so that code blocks and headings are preserved.
     """
     path = Path(path)
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
@@ -32,11 +35,15 @@ def parse_html_file(
         sel.decompose()
 
     main = soup.find("main") or soup.find("article") or soup.body
-    text = (
-        main.get_text(separator="\n", strip=True)
-        if main
-        else soup.get_text(separator="\n", strip=True)
-    )
+    raw_html = str(main) if main else str(soup)
+
+    # Convert to Markdown to preserve code blocks and headings.
+    # strip=["a"] removes anchor tags but keeps their visible text,
+    # which avoids noisy "[text](url)" patterns in the indexed corpus.
+    text = _md(raw_html, heading_style="ATX", strip=["a"])
+
+    # Collapse runs of 3+ blank lines introduced by some HTML layouts.
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
 
     breadcrumb = (toc_meta or {}).get("breadcrumb")
 

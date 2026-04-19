@@ -447,7 +447,7 @@ rm -rf ~/.cache/huggingface/hub/models--BAAI*
 ### TurboQuant
 
 The `full-tq` profile uses in-repo TurboQuant (`plesk_unified/turboquant/`) to compress
-1 024-dim embeddings to 5-bit vectors via Lloyd-Max codebooks and a QJL residual-correction
+1024-dim embeddings to 5-bit vectors via Lloyd-Max codebooks and a QJL residual-correction
 sketch. This keeps the indexed corpus resident in GPU memory for fast asymmetric inner-product
 scoring while matching the retrieval quality of the uncompressed `full` profile.
 See **[docs/turboquant.md](docs/turboquant.md)** for the full technical breakdown, empirical

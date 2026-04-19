@@ -1,7 +1,7 @@
 # TurboQuant: 5-bit Vector Quantization for Fast Retrieval
 
-The `full-tq` model profile routes searches through `TurboQuantIndex`
-(`plesk_unified/tq_index.py`), keeping the 1 024-dim embedding corpus in a
+The `full-tq` profile routes searches through `TurboQuantIndex`
+(`plesk_unified/tq_index.py`), keeping the 1024-dim embedding corpus in a
 5-bit compressed buffer instead of raw float32 tensors.  This lets candidate
 scoring run entirely in GPU memory and avoids decompressing the full corpus
 that powers the base `full` profile.  The implementation lives in the

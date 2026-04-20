@@ -22,7 +22,7 @@ try:
 
     load_dotenv()
 except ImportError:
-    pass
+    pass  # python-dotenv is optional; env vars can be set directly
 
 LOG_FILE = os.environ.get("LOG_FILE", str(LOG_DIR / "plesk_unified.log"))
 # Convert string level (e.g. "INFO") to integer

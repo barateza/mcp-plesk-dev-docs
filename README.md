@@ -102,7 +102,7 @@ class pm_Config
 |Vector DB|LanceDB|Apache Arrow-based ANN search|
 |MCP Server|FastMCP|Tool exposure to AI clients|
 |HTML Parser|BeautifulSoup4|Documentation ingestion|
-|Git integration|GitPython|Auto-fetches PHP stubs and JS SDK|
+|Git integration|Git (stdlib subprocess)|Auto-fetches PHP stubs and JS SDK|
 
 **Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
 

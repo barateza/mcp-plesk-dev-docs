@@ -7,6 +7,27 @@ import math
 import torch
 
 
+# ---------------------------------------------------------------------------
+# Closed-form Gaussian integration helpers (replaces scipy.integrate.quad)
+# ---------------------------------------------------------------------------
+
+
+def _gauss_pdf(x: float, sigma: float) -> float:
+    return math.exp(-0.5 * (x / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+
+
+def _gauss_cdf(x: float, sigma: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / (sigma * math.sqrt(2.0))))
+
+
+def _int_pdf(a: float, b: float, sigma: float) -> float:
+    return _gauss_cdf(b, sigma) - _gauss_cdf(a, sigma)
+
+
+def _int_x_pdf(a: float, b: float, sigma: float) -> float:
+    return sigma * sigma * (_gauss_pdf(a, sigma) - _gauss_pdf(b, sigma))
+
+
 class TurboQuantCompressorV2:
     """Compressed key store with direct inner-product scoring."""
 
@@ -33,15 +54,8 @@ class TurboQuantCompressorV2:
         self.PiT = self.Pi.T.contiguous()
 
     def _solve_codebook(self, d: int, bits: int) -> torch.Tensor:
-        from scipy import integrate
-
         n_levels = 2**bits
         sigma = 1.0 / math.sqrt(d)
-
-        def pdf(x):
-            return (1.0 / math.sqrt(2 * math.pi * sigma**2)) * math.exp(
-                -x * x / (2 * sigma**2)
-            )
 
         lo, hi = -3.5 * sigma, 3.5 * sigma
         centroids = [lo + (hi - lo) * (i + 0.5) / n_levels for i in range(n_levels)]
@@ -54,8 +68,8 @@ class TurboQuantCompressorV2:
             new_centroids = []
             for i in range(n_levels):
                 a, b = edges[i], edges[i + 1]
-                num, _ = integrate.quad(lambda x: x * pdf(x), a, b)
-                den, _ = integrate.quad(pdf, a, b)
+                num = _int_x_pdf(a, b, sigma)
+                den = _int_pdf(a, b, sigma)
                 new_centroids.append(num / den if den > 1e-15 else centroids[i])
             if (
                 max(abs(new_centroids[i] - centroids[i]) for i in range(n_levels))
@@ -131,15 +145,8 @@ class TurboQuantCompressorMSE:
         self.centroids = self._solve_codebook(head_dim, bits).to(device)
 
     def _solve_codebook(self, d, bits):
-        from scipy import integrate
-
         n_levels = 2**bits
         sigma = 1.0 / math.sqrt(d)
-
-        def pdf(x):
-            return (1.0 / math.sqrt(2 * math.pi * sigma**2)) * math.exp(
-                -x * x / (2 * sigma**2)
-            )
 
         lo, hi = -3.5 * sigma, 3.5 * sigma
         centroids = [lo + (hi - lo) * (i + 0.5) / n_levels for i in range(n_levels)]
@@ -151,8 +158,8 @@ class TurboQuantCompressorMSE:
             new_c = []
             for i in range(n_levels):
                 a, b = edges[i], edges[i + 1]
-                num, _ = integrate.quad(lambda x: x * pdf(x), a, b)
-                den, _ = integrate.quad(pdf, a, b)
+                num = _int_x_pdf(a, b, sigma)
+                den = _int_pdf(a, b, sigma)
                 new_c.append(num / den if den > 1e-15 else centroids[i])
             if max(abs(new_c[i] - centroids[i]) for i in range(n_levels)) < 1e-10:
                 break

@@ -360,7 +360,7 @@ pip install -e ".[dev]"
 
 # Lint and format
 ruff check . --fix
-black .
+ruff format .
 
 # Type check
 mypy plesk_unified/

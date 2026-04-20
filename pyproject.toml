@@ -28,16 +28,11 @@ requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "fastmcp>=3.2.0",
-    "gitpython>=3.1.46",
     "lancedb>=0.29.1",
-    "markdownify>=0.14.1",
+    "numpy>=1.26.0",
     "pydantic>=2.10.0",
-    "requests>=2.32.0",
-  "scipy>=1.10.0",
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
-    "transformers>=4.48.0",
-    "python-dotenv>=1.0.0",
 ]
 
 [project.urls]
@@ -53,36 +48,21 @@ packages = ["plesk_unified", "plesk_unified.turboquant"]
 # Console script to run the MCP server
 plesk-unified-mcp = "plesk_unified.server:main"
 
-[tool.black]
-line-length = 88
-target-version = ["py312", "py313"]
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-  | __pycache__
-)/
-'''
-
 [project.optional-dependencies]
 # Note: torch is already a dependency of sentence-transformers
 # For GPU support, install PyTorch with CUDA from https://pytorch.org/
 # The server will automatically detect and use GPU acceleration if available.
 dev = [
     "pytest>=8.0.0",
+    "requests>=2.32.0",
     "ruff>=0.3.0",
-    "black>=24.0.0",
 ]
 test = [
     "pytest>=8.0.0",
+]
+tools = [
+    "markdownify>=0.14.1",
+    "requests>=2.32.0",
 ]
 
 # --- NEW CONFIGURATION BELOW ---
@@ -103,11 +83,6 @@ torchaudio = [
   { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
 ]
 
-[tool.isort]
-profile = "black"
-line_length = 88
-known_first_party = ["knowledge_base", "plesk_unified"]
-
 [tool.ruff]
 line-length = 88
 # Core runtime settings remain at top-level. Linter-specific selection
@@ -120,8 +95,6 @@ extend-select = []
 
 [dependency-groups]
 dev = [
-    "black>=26.1.0",
-    "isort>=8.0.0",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
     "ruff>=0.15.2",

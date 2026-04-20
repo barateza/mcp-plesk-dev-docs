@@ -17,9 +17,12 @@ from plesk_unified.log_handler import create_os_handlers
 BASE_DIR = Path(__file__).parent.parent
 LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
 
-load_dotenv()
+    load_dotenv()
+except ImportError:
+    pass
 
 LOG_FILE = os.environ.get("LOG_FILE", str(LOG_DIR / "plesk_unified.log"))
 # Convert string level (e.g. "INFO") to integer

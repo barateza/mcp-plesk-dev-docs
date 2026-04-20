@@ -3,14 +3,13 @@ import logging
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 import urllib.request
 import zipfile
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-
-from git import Repo
 
 logger = logging.getLogger(__name__)
 
@@ -114,11 +113,18 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
     repo_url = source.get("repo_url")
     zip_url = source.get("zip_url")
 
-    # If repo_url is present, clone from Git.
+    # If repo_url is present, clone from Git via subprocess.
     if repo_url and source_path:
         logger.info("Downloading %s from %s...", source.get("cat"), repo_url)
         try:
-            Repo.clone_from(repo_url, source_path)
+            result = subprocess.run(
+                ["git", "clone", "--", repo_url, str(source_path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr)
             # Cleanup unnecessary artifacts
             for folder in [".git", ".github", "tests"]:
                 target = source_path / folder

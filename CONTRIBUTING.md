@@ -172,6 +172,5 @@ pre-commit install
 pre-commit run --all-files  # optional: verify everything passes
 ```
 
-The hooks include `ruff` (lint + auto-fix), `isort` (import sorting), and
-`black` (code formatting). If a hook modifies files, re-run `git add` and
+The hooks include `ruff` (lint + auto-fix and code formatting). If a hook modifies files, re-run `git add` and
 commit again.

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-04-20
+
+### Added
+
+- **Document-aware retrieval pipeline.** Sentence-window and hierarchical chunkers, HTML table-to-prose normalization, and doctype-aware chunk routing improve chunk boundaries and semantic relevance across `guide`, `api`, `cli`, `php-stubs`, and `js-sdk` sources.
+- **Source fingerprinting & selective reindex.** Startup now computes stable source fingerprints to support incremental reindexing and faster startup refreshes.
+- **Low-confidence retrieval fallback.** Retrieval now includes a configurable low-confidence threshold (`PLESK_MIN_RELEVANCE_THRESHOLD`) and a fallback pathway when top results fall below the threshold.
+- **Benchmark baseline capture & quality gates.** Added an automated baseline capture and gate evaluation engine to the benchmark runner to detect regressions in `hit_rate`, `mrr`, and `avg_latency_s`.
+
+### Changed
+
+- **Benchmark runner enhancements.** `scripts/benchmark_profiles.py` gained CLI flags for baseline capture (`--capture-baseline`), baseline file selection, and gate evaluation (`--gate-config`, `--fail-on-gate`). A default gate config shipped at `benchmarks/gates/default.json`.
+- **Runtime behavior.** `server.py` gained doctype inference, DocType stamping on chunks, and selective refresh hooks to avoid full reindexes on unchanged sources.
+
+### Tests
+
+- New and updated tests covering chunking, HTML table normalisation, source fingerprinting, benchmark gates, and end-to-end benchmark capture. Full test-suite passing locally (114 tests).
+
+### Notes
+
+- Release authored and pushed as commit `52c07b0` on `main`.
+
 ## [0.4.2] - 2026-04-17
 
 ### Added

@@ -105,6 +105,30 @@ KB_DIR = BASE_DIR / "knowledge_base"
 KB_DIR.mkdir(exist_ok=True)
 (BASE_DIR / "storage").mkdir(exist_ok=True)
 
+VALID_CATEGORIES: frozenset[str] = frozenset(
+    {"guide", "cli", "api", "php-stubs", "js-sdk"}
+)
+
+
+def _validate_category(
+    category: str | None, *, allow_all: bool = False, parameter_name: str = "category"
+) -> None:
+    if category is None:
+        return
+    if allow_all and category == "all":
+        return
+    if category not in VALID_CATEGORIES:
+        allowed = sorted(VALID_CATEGORIES)
+        if allow_all:
+            raise ValueError(
+                f"Invalid {parameter_name}: {category!r}. "
+                f"Must be one of {allowed} or 'all'."
+            )
+        raise ValueError(
+            f"Invalid {parameter_name}: {category!r}. Must be one of {allowed}."
+        )
+
+
 SOURCES = [
     {
         "path": KB_DIR / "stubs",
@@ -140,6 +164,29 @@ SOURCES = [
         "zip_url": "https://docs.plesk.com/en-US/obsidian/zip/extensions-guide.zip",
     },
 ]
+
+# Map each category that has a known Plesk Docs zip URL to its documentation
+# base URL.  Derived automatically from SOURCES so changes to zip_url propagate.
+# Pattern: https://.../zip/<name>.zip  →  https://.../<name>/
+# GitHub-only sources (php-stubs, js-sdk) are absent from this mapping.
+CATEGORY_DOC_BASE_URLS: dict[str, str] = {
+    src["cat"]: src["zip_url"].replace("/zip/", "/").removesuffix(".zip") + "/"
+    for src in SOURCES
+    if src.get("zip_url")
+}
+
+
+def _build_doc_url(category: str, filename: str) -> str | None:
+    """Return a fully-qualified documentation URL for *filename* in *category*.
+
+    Returns ``None`` for categories without a known documentation base URL
+    (``php-stubs``, ``js-sdk``) or when *filename* is empty.
+    """
+    base = CATEGORY_DOC_BASE_URLS.get(category)
+    if base and filename:
+        return base + filename
+    return None
+
 
 # --- Lazy Initialization ---
 # The embedding model (~1.5 GB) is loaded on first tool call, NOT at import time.
@@ -578,6 +625,43 @@ def get_toc_map_for_source(source: Dict[str, Any]) -> Dict[str, Any]:
     return {}
 
 
+def _sigmoid(x: float) -> float:
+    """Map a raw logit to a [0, 1] probability using the sigmoid function."""
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+def _rerank_and_score(query: str, candidates: list[dict], reranker: Any) -> list[dict]:
+    """Apply a cross-encoder reranker to *candidates* and store _relevance scores.
+
+    The cross-encoder produces raw logits; sigmoid maps them to [0, 1].
+    The returned list is sorted descending by relevance.
+    """
+    if not candidates or reranker is None:
+        return candidates
+    texts = [r.get("text", "") for r in candidates]
+    raw_scores = reranker.predict([(query, t) for t in texts])
+    # strict=True: reranker.predict must return exactly one score per input pair.
+    scored = []
+    for r, raw in zip(candidates, raw_scores, strict=True):
+        result = dict(r)
+        result["_relevance"] = float(_sigmoid(float(raw)))
+        scored.append(result)
+    scored.sort(key=lambda x: x["_relevance"], reverse=True)
+    return scored
+
+
+def _deduplicate_by_filename(results: list[dict]) -> list[dict]:
+    """Return one entry per source file, keeping the highest-ranked chunk."""
+    seen: set[str] = set()
+    deduped: list[dict] = []
+    for r in results:
+        fname = r.get("filename", "")
+        if fname not in seen:
+            seen.add(fname)
+            deduped.append(r)
+    return deduped
+
+
 def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     """Chunks text and builds document records."""
     if not text or len(text) <= 10:
@@ -674,6 +758,8 @@ def refresh_knowledge(
     Behavior: incremental by filename when `reset_db` is False; skips files
     already present in the DB. Returns a short per-source report.
     """
+    _validate_category(target_category, allow_all=True, parameter_name="category")
+
     logger.info(
         "Starting refresh_knowledge: target=%s, reset_db=%s", target_category, reset_db
     )
@@ -744,13 +830,17 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     `category` may be used to filter results to one of the indexed
     source categories (e.g. 'api', 'cli', 'guide', 'php-stubs', 'js-sdk').
     Results are returned as readable text blocks including title, path,
-    filename and a numeric score/distance.
+    filename and a relevance score between 0 and 1.
     """
+    _validate_category(category)
+
     # Truncate query for logging to avoid leaking sensitive data
     safe_query = (query[:100] + "...") if len(query) > 100 else query
     logger.info("Search request: q='%s' category='%s'", safe_query, category)
 
     profile = _get_profile()
+    reranker = get_reranker()
+    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "25"))
 
     if getattr(profile, "use_turboquant", False):
         query_vec = np.asarray(
@@ -759,46 +849,60 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
         )
         tq_results = get_tq_index().search(
             query_vec,
-            top_k=profile.tq_top_k,
+            top_k=max(profile.tq_top_k, n_candidates),
             category=category,
         )
-        results = []
-        for meta, score in tq_results[:5]:
+        candidates = []
+        for meta, score in tq_results:
             r = dict(meta)
-            r["_score_tq"] = score
-            results.append(r)
+            # TQ returns an inner-product of L2-normalised vectors (cosine
+            # similarity, range ≈ -1..1).  A scale of 5 spreads the sigmoid
+            # across this narrow range, producing meaningful 0..1 values as a
+            # preliminary sort key before the cross-encoder reranker runs.
+            r["_relevance"] = float(_sigmoid(float(score) * 5.0))
+            candidates.append(r)
     else:
         table = get_table()
-
-        # Perform the search (no hard-coded pre-limit to allow provider to optimize)
         search_op = table.search(query)
         if category:
             search_op = search_op.where(f"category = '{category}'")
+        raw = search_op.limit(n_candidates).to_list()
+        candidates = []
+        for r in raw:
+            rc = dict(r)
+            # Derive a preliminary relevance from vector distance so the
+            # fallback sort produces reasonable ordering.
+            dist = float(rc.get("_distance") or 0.0)
+            rc["_relevance"] = float(1.0 / (1.0 + dist))
+            candidates.append(rc)
 
-        results = search_op.limit(5).to_list()
+    # Apply cross-encoder reranker for precise relevance scoring.
+    if reranker is not None and candidates:
+        candidates = _rerank_and_score(query, candidates, reranker)
+    else:
+        candidates.sort(key=lambda x: x["_relevance"], reverse=True)
 
-    logger.info("Search returned %d results.", len(results))
+    # Deduplicate: keep only the top-ranked chunk per source file.
+    results = _deduplicate_by_filename(candidates)[:5]
+
+    logger.info(
+        "Search returning %d results (from %d candidates).",
+        len(results),
+        len(candidates),
+    )
 
     formatted_results = []
     for r in results:
-        # LanceDB returns `_distance` for vector search and `_score` for FTS.
-        # Use .get() to avoid KeyError if the backend changes.
-        score = r.get("_score_tq")
-        if score is None:
-            score = (
-                r.get("_distance")
-                if r.get("_distance") is not None
-                else r.get("_score", 0.0)
-            )
-
+        relevance = r.get("_relevance", 0.0)
+        doc_url = _build_doc_url(r.get("category", ""), r.get("filename", ""))
+        url_line = f"URL: {doc_url}\n" if doc_url else ""
         formatted_results.append(
-            (
-                f"=== {r['category'].upper()} | {r['title']} ===\n"
-                f"Path: {r.get('breadcrumb', '')}\n"
-                f"File: {r.get('filename', '')}\n"
-                f"Score/Distance: {score:.4f}\n\n"
-                f"{r.get('text', '')}\n"
-            )
+            f"=== {r['category'].upper()} | {r['title']} ===\n"
+            f"Path: {r.get('breadcrumb', '')}\n"
+            f"File: {r.get('filename', '')}\n"
+            f"{url_line}"
+            f"Relevance: {relevance:.4f}\n\n"
+            f"{r.get('text', '')}\n"
         )
 
     return "\n".join(formatted_results)

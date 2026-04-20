@@ -20,13 +20,46 @@ This server ingests all five sources, embeds them with a multilingual model, and
 
 ## Demo
 
-```bash
-$ query: "How do I define default configuration settings for my extension?"
+Query sent to the MCP tool:
+
+```
+search_plesk_unified("How do I define default configuration settings for my extension?")
+```
+
+Results returned:
+
+```text
+=== GUIDE | Custom Settings ===
+Path: Plesk Features Available for Extensions > Retrieve Data from Plesk > Custom Settings
+File: 77178.htm
+URL: https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm
+Relevance: 0.9341
+
+[GUIDE] Custom Settings
+---
+## Custom Settings
+
+Plesk SDK API provides the ability to customize the behavior of
+extensions editing the `panel.ini` configuration file.
+
+Storing the default settings is implemented via a hook class at
+`plib/hooks/ConfigDefaults.php` that extends `pm_Hook_ConfigDefaults`:
+
+    class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
+    {
+        public function getDefaults()
+        {
+            return [
+                'homepage' => 'https://www.plesk.com/',
+                'timeout'  => 60,
+            ];
+        }
+    }
 
 === PHP-STUBS | ConfigDefaults.php ===
 Path:
 File: ConfigDefaults.php
-Score/Distance: 250.7434
+Relevance: 0.8712
 
 [PHP-STUBS] ConfigDefaults.php
 ---
@@ -42,65 +75,47 @@ abstract class pm_Hook_ConfigDefaults implements pm_Hook_Interface
      */
     abstract public function getDefaults();
 }
-
-=== PHP-STUBS | Config.php ===
-Path:
-File: Config.php
-Score/Distance: 344.7940
-
-[PHP-STUBS] Config.php
----
-class pm_Config
-{
-    /**
-     * Retrieve extension's default configuration settings
-     * @return array
-     * */
-    public static function getDefaults() { }
-}
 ```
 
 ---
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────┐
-│                   MCP Client                        │
-│         (Claude Desktop / Cursor / etc.)            │
-└───────────────────┬─────────────────────────────────┘
-                    │ MCP tool call: search_plesk_unified(query)
-                    ▼
-┌─────────────────────────────────────────────────────┐
-│                  FastMCP Server                     │
-│                  (server.py)                        │
-└───────────────────┬─────────────────────────────────┘
-                    │
-          ┌─────────▼──────────┐
-          │   Query Pipeline   │
-          │                    │
-          │  1. Embed query    │  BAAI/bge-m3 (~2GB)
-          │  2. ANN search     │  LanceDB (Apache Arrow)
-          │  3. Rerank top-N   │  BAAI/bge-reranker-base (~300MB)
-          │  4. Return chunks  │
-          └─────────┬──────────┘
-                    │
-┌───────────────────▼─────────────────────────────────┐
-│               LanceDB Vector Store                  │
-│                                                     │
-│ ┌───────┐ ┌───────┐ ┌───────┐ ┌───────┐ ┌─────────┐ │
-│ │ Guide │ │  API  │ │  CLI  │ │  PHP  │ │   JS    │ │
-│ │(HTML) │ │(HTML) │ │(HTML) │ │(stubs)│ │  (src)  │ │
-│ └───────┘ └───────┘ └───────┘ └───────┘ └─────────┘ │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    Client["MCP Client\n(Claude Desktop / Cursor / etc.)"]
+
+    Client -->|"search_plesk_unified(query)"| Server
+
+    subgraph Server["FastMCP Server · plesk_unified/server.py"]
+        direction TB
+        E["1 · Embed query\n(profile-selected model)"]
+        S["2 · ANN search\nLanceDB (Apache Arrow)"]
+        R["3 · Rerank top-N\n(profile-selected reranker)"]
+        O["4 · Return top-5 results"]
+        E --> S --> R --> O
+    end
+
+    subgraph Store["LanceDB Vector Store"]
+        direction LR
+        G["Guide\nHTML"]
+        A["API\nHTML"]
+        C["CLI\nHTML"]
+        P["PHP Stubs\nPHP"]
+        J["JS SDK\nJS"]
+    end
+
+    S <--> Store
 ```
+
+See [Model profiles](#model-profiles) for the available embed and reranker model options.
 
 |Component|Technology|Role|
 |---|---|---|
-|Embeddings|BAAI/bge-small/base/m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
-|Reranker|ms-marco-MiniLM / bge-reranker-base|Cross-encoder result reranking|
+|Embeddings|BAAI/bge-small · bge-base · bge-m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
+|Reranker|ms-marco-MiniLM / bge-reranker-base (profile)|Cross-encoder result reranking (always applied)|
 |Vector DB|LanceDB|Apache Arrow-based ANN search|
-|MCP Server|FastMCP|Tool exposure to AI clients|
+|MCP Server|FastMCP|Tool exposure to AI clients (`plesk_unified/server.py`)|
 |HTML Parser|BeautifulSoup4|Documentation ingestion|
 |Git integration|Git (stdlib subprocess)|Auto-fetches PHP stubs and JS SDK|
 
@@ -131,13 +146,16 @@ PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-t
 Each profile uses a separate LanceDB index (`storage/lancedb_<profile>/`), so
 you can switch profiles without re-indexing the others.
 
-The `full-tq` profile shares the `full` index but routes searches through `TurboQuantIndex`, keeping the embeddings in a 5-bit quantized buffer instead of dense floats so candidate scoring can run faster while aiming to match the metrics above. Use `PLESK_MODEL_PROFILE=full-tq` on a CUDA-capable host and rebuild the TurboQuant index with `python scripts/benchmark_profiles.py --refresh --profiles full-tq` after any re-index.
+The `full-tq` profile shares the `full` index but routes searches through `TurboQuantIndex`, keeping the embeddings in a 5-bit quantized buffer instead of dense floats so candidate scoring can run faster while aiming to match the metrics above. Use `PLESK_MODEL_PROFILE=full-tq` on a CUDA-capable host and rebuild the TurboQuant index with `python scripts/benchmark_profiles.py --refresh --profiles full-tq` after any re-index. See [docs/turboquant.md](docs/turboquant.md) for full technical details.
 
 ---
 
 ## Benchmarks
 
 Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 12 query set):
+
+<details>
+<summary>Show full benchmark table</summary>
 
 |Profile|HR@5|MRR@5|Avg latency|Est. RAM|
 |---|---|---|---|---|
@@ -148,8 +166,10 @@ Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 12 query
 
 - All three profiles reach 100% HR@5, showing the index covers the corpus end-to-end.
 - `medium` hits the highest MRR@5 (0.938) while only adding ~0.15 s over `light`.
-- `full` offers a multilingual embedding (BAAI/bge-m3) but is roughly 4× slower. The `full-tq` profile reuses this index via TurboQuant 5-bit quantization to keep the same hit rates while shrinking its working set and keeping candidate scoring localized to GPU memory; the TurboQuant section below describes the compression and accuracy trade-offs in detail.
-- `full-tq`’s CUDA run trades a slightly lower HR@5 (91.7%) for an ultra-low latency of 0.07 s because the quantized corpus stays on the GPU; you can rerun `uv run python scripts/benchmark_profiles.py --profiles full-tq` to reproduce the values listed above.
+- `full` offers a multilingual embedding (BAAI/bge-m3) but is roughly 4× slower. The `full-tq` profile reuses this index via TurboQuant 5-bit quantization to keep the same hit rates while shrinking its working set and keeping candidate scoring localized to GPU memory; see [docs/turboquant.md](docs/turboquant.md) for compression and accuracy trade-offs.
+- `full-tq`’s CUDA run trades a slightly lower HR@5 (91.7%) for an ultra-low latency of 0.07 s because the quantized corpus stays on the GPU; reproduce with `uv run python scripts/benchmark_profiles.py --profiles full-tq`.
+
+</details>
 
 ---
 
@@ -158,6 +178,7 @@ Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 12 query
 ### Prerequisites
 
 - Python 3.12+
+- [`uv`](https://astral.sh/uv) (recommended package manager — `pip` works too)
 - ~2GB free disk space (models + vector index)
 - Internet access for initial model download and doc scraping
 
@@ -183,43 +204,40 @@ uv run plesk-unified-mcp --help
 
 You'll see progress output as models download and cache locally. Subsequent starts are near-instantaneous.
 
-For an already running MCP server, call the `warmup_server` tool once to preload the embedding model, reranker, and database table without re-indexing.
+For an already running MCP server, call the `warmup_server` tool once to
+preload the embedding model, reranker, and database table without
+re-indexing. Use `list_model_profiles` to inspect the available profiles
+and confirm which one is active.
 
-For long-running daemon deployments, set `PLESK_DAEMON_AUTO_WARMUP=true` to start warmup in a background thread as soon as the process starts.
-Use the `daemon_health` tool to check warmup state, table readiness, and TurboQuant artifact availability.
+### Running the server
 
-### New daemon startup features
-
-The server now includes daemon-focused startup controls and health reporting:
-
-1. Set `PLESK_DAEMON_AUTO_WARMUP=true` to keep boot responsive while the
-  server warms models and DB state in a background thread.
-2. Call `daemon_health` to verify readiness state (`idle`, `running`, `ready`,
-  or `failed`) plus table and TurboQuant artifact status.
-3. Call `warmup_server` manually when you want deterministic preloading without
-  indexing.
-
-Recommended daemon flow:
-
-```bash
-# Start server with background warmup
-PLESK_DAEMON_AUTO_WARMUP=true uv run plesk-unified-mcp
-```
-
-Then verify from your MCP client:
-
-- `daemon_health` returns `"warmup_state": "ready"`
-- `daemon_health` returns `"table_ready": true`
-
-### Build the index
+#### Standard mode
 
 ```bash
 uv run plesk-unified-mcp
 ```
 
-The server will fetch documentation, generate embeddings, and start listening for MCP connections.
+The server fetches documentation, generates embeddings on first run, and starts listening for MCP connections.
 
-### GPU acceleration (optional)
+#### Daemon / background mode
+
+Set `PLESK_DAEMON_AUTO_WARMUP=true` to keep startup responsive while models
+and DB state load in a background thread:
+
+```bash
+PLESK_DAEMON_AUTO_WARMUP=true uv run plesk-unified-mcp
+```
+
+Then verify readiness from your MCP client:
+
+- `daemon_health` → `"warmup_state": "ready"`
+- `daemon_health` → `"table_ready": true`
+
+Use `daemon_health` at any time to check warmup state (`idle`, `running`,
+`ready`, or `failed`) plus table and TurboQuant artifact status. Call
+`warmup_server` manually for deterministic preloading without indexing.
+
+#### GPU acceleration (optional)
 
 The server auto-detects available hardware:
 
@@ -286,19 +304,29 @@ Edit `~/.cursor/mcp.json`:
 ``` text
 mcp-plesk-unified/
 ├── plesk_unified/
-│   ├── server.py            # FastMCP tool definitions and query pipeline
-│   ├── log_handler.py       # Cross-platform native OS logging handler factory
-│   ├── platform_utils.py    # GPU/device detection
-│   └── ai_client.py         # Embedding and reranker wrappers
+│   ├── server.py              # FastMCP tool definitions and query pipeline
+│   ├── ai_client.py           # Embedding and reranker model wrappers
+│   ├── model_config.py        # Model profile definitions (light/medium/full/full-tq)
+│   ├── chunking.py            # Document chunking and LanceDB persistence
+│   ├── html_utils.py          # HTML parsing with BeautifulSoup4 + markdownify
+│   ├── io_utils.py            # Source fetching (Git clone, ZIP download)
+│   ├── platform_utils.py      # GPU/device detection
+│   ├── log_handler.py         # Cross-platform native OS logging handler factory
+│   ├── tq_index.py            # TurboQuant search index
+│   ├── benchmark_engines.py   # Benchmarking engine implementations
+│   ├── benchmark_suites.py    # Benchmark test suites
+│   └── turboquant/            # In-repo TurboQuant quantization package
 ├── scripts/
 │   ├── benchmark_profiles.py  # Retrieval quality benchmark
 │   ├── enrich_toc.py          # LLM-assisted TOC description generation
 │   ├── generate_virtual_toc.py
 │   └── manage_plesk_docs.py
+├── tests/                     # Pytest test suite
 ├── docs/
-│   └── benchmarks.md        # Benchmark results and methodology
-├── knowledge_base/          # Fetched and parsed documentation sources
-├── storage/                 # LanceDB vector indexes (generated, per-profile)
+│   ├── benchmarks.md          # Benchmark results and methodology
+│   └── turboquant.md          # TurboQuant technical breakdown and validation
+├── knowledge_base/            # Fetched and parsed documentation sources
+├── storage/                   # LanceDB vector indexes (generated, per-profile)
 ├── pyproject.toml
 └── README.md
 ```
@@ -321,16 +349,25 @@ SOURCES = [
 
 ### Environment variables
 
-Create a `.env` file in the project root:
+Copy the bundled template and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+Key variables:
 
 ```env
 OPENROUTER_API_KEY=sk-or-v1-...   # for enrich_toc.py
 FORCE_DEVICE=cpu                   # optional: override GPU detection
 PLESK_DAEMON_AUTO_WARMUP=true      # optional: daemon-only background warmup
+PLESK_RERANK_CANDIDATES=25         # optional: candidate pool size before reranking (default: 25)
 KB_ROOT=/custom/path               # optional: override knowledge_base dir
 LOG_HANDLER=os                     # os | file | both (default: os)
 LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR
 ```
+
+See `.env.example` for the full list of options with inline documentation.
 
 ### Logging
 
@@ -355,20 +392,7 @@ LOG_HANDLER=both  # native OS handler + rotating file
 
 ## Development
 
-```bash
-pip install -e ".[dev]"
-
-# Lint and format
-ruff check . --fix
-ruff format .
-
-# Type check
-mypy plesk_unified/
-
-# Pre-commit hooks
-pip install pre-commit
-pre-commit run --all-files
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full development workflow — linting, type-checking, tests, and pre-commit hooks.
 
 To rebuild the vector index from scratch:
 
@@ -392,38 +416,42 @@ npx @modelcontextprotocol/inspector uv run plesk-unified-mcp
 
 **LanceDB errors after an interrupted index build:** Delete `storage/` and reinitialize.
 
-**Out of memory during indexing:** Reduce batch size in `server.py` or run on a machine with more RAM.
+**Out of memory during indexing:** Reduce batch size in `plesk_unified/server.py` or run on a machine with more RAM.
+
+### Cache management
+
+To free disk space, you can delete the following generated directories:
+
+| What | Path | Notes |
+|------|------|-------|
+| Vector indexes | `storage/lancedb*/` | Rebuilt automatically on next start |
+| TurboQuant index | `storage/turboquant/` | Rebuilt with `--refresh --profiles full-tq` |
+| HuggingFace models | `~/.cache/huggingface/` | Re-downloaded (~1.8 GB) on next start |
+| All generated data | `storage/` | Nuclear option — full rebuild on next start |
+
+```bash
+# Remove all vector indexes (triggers full re-index on next start)
+rm -rf storage/lancedb*/
+
+# Remove only the TurboQuant quantized index
+rm -rf storage/turboquant/
+
+# Remove cached HuggingFace model weights (~1.8 GB)
+rm -rf ~/.cache/huggingface/hub/models--BAAI*
+```
 
 ---
 
 ## Third-Party Components
 
 ### TurboQuant
-`full-tq` taps a TurboQuant-powered search path so the 1024-dim embedding corpus lives in a 5-bit compressed buffer instead of raw float32 tensors. `TurboQuantIndex` (plesk_unified/tq_index.py) now uses the in-repo `plesk_unified.turboquant` package directly, so the retrieval path is owned by this codebase instead of a vendored fallback.
 
-**How it works**
-
-- **Stage 1:** Each vector is rotated by a random orthogonal matrix and quantized coordinate-wise with Lloyd-Max codebooks that minimise per-coordinate MSE. The precomputed codebooks live inside the TurboQuantProd implementation so the quantizer runtime just reads the lookup tables.
-- **Stage 2:** The residual from Stage 1 is projected through a Gaussian sketch (QJL) and reduced to a sign bit per coordinate. This single bit fixes the dot-product bias introduced by Stage 1, so the inner products used by attention remain unbiased with variance O(1/d) even when the quantized vectors themselves look noisy.
-- **Practical effect:** `full-tq` executes the asymmetric inner product right on the compressed tensors, which keeps computation on the GPU and avoids decompressing the full corpus that powers the base `full` profile.
-
-**Empirical highlights** (see [plesk_unified/turboquant](plesk_unified/turboquant) and `scripts/benchmark_profiles.py --profiles full-tq` for reproductions):
-
-- 2/3/4-bit TurboQuant configurations shrink a 289 MB FP16 KV cache to roughly 40/58/76 MB (7.3×, 5×, 3.8× compression, respectively) while still executing real-model attention on Qwen2.5-3B-Instruct.
-- 4-bit attention scores stay within 0.998 cosine similarity of the original, and >94% of the heads keep the same top-5 attended token, even for 8K-context inputs. 3-bit clips to 0.995 cosine similarity with still strong top-5 overlap.
-- TurboQuant keeps retrieval score accuracy intact while letting you batch hundreds of quantized candidates back on the GPU, so `full-tq` gives you the same hit rates as `full` with a much smaller working set.
-
-**Scripts & validation**
-
-- `python -m turboquant.test_turboquant` runs Lloyd-Max codebook validation and synthetic needle-in-haystack tests without a GPU.
-- `python -m turboquant.validate` compresses a captured Qwen2.5-3B KV cache and compares attention scores across 2/3/4-bit configurations.
-
-**Resources**
-
-- **Base implementation:** [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch)
-- **Original research:** ["TurboQuant: Online Vector Quantization with Near-optimal Distortion Rate" (arXiv)](https://arxiv.org/pdf/2504.19874)
-- **Residual correction:** ["QJL: 1-Bit Quantized JL Transform for KV Cache Quantization with Zero Overhead" (arXiv)](https://arxiv.org/abs/2406.03482)
-- **License:** MIT (upstream base implementation: [tonbistudio/turboquant-pytorch](https://github.com/tonbistudio/turboquant-pytorch))
+The `full-tq` profile uses in-repo TurboQuant (`plesk_unified/turboquant/`) to compress
+1024-dim embeddings to 5-bit vectors via Lloyd-Max codebooks and a QJL residual-correction
+sketch. This keeps the indexed corpus resident in GPU memory for fast asymmetric inner-product
+scoring while matching the retrieval quality of the uncompressed `full` profile.
+See **[docs/turboquant.md](docs/turboquant.md)** for the full technical breakdown, empirical
+validation numbers, and reproduction steps.
 
 ## License
 

@@ -2,6 +2,8 @@ import importlib
 import json
 from unittest.mock import MagicMock
 
+import pytest
+
 
 def test_get_optimal_device_honors_force_device(monkeypatch):
     monkeypatch.setenv("FORCE_DEVICE", "mps")
@@ -181,3 +183,174 @@ def test_load_toc_map_is_cached(monkeypatch, tmp_path):
 
     assert first == second
     assert calls["count"] == 1
+
+
+# --- Category allowlist tests ---
+
+
+def _make_dummy_profile(use_turboquant=False):
+    class DummyProfile:
+        name = "full"
+        embed_model = "model"
+        reranker_model = "reranker"
+        reranker_enabled = False
+        tq_top_k = 25
+
+    DummyProfile.use_turboquant = use_turboquant
+    return DummyProfile()
+
+
+def test_search_rejects_invalid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    bad_category = "'; DROP TABLE plesk_knowledge; --"
+
+    with pytest.raises(ValueError, match="Invalid category"):
+        server.search_plesk_unified("some query", category=bad_category)
+
+
+def test_search_accepts_valid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+
+    result = server.search_plesk_unified("some query", category="api")
+    assert isinstance(result, str)
+    fake_search.where.assert_called_once_with("category = 'api'")
+
+
+def test_search_with_no_category_is_allowed(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+
+    result = server.search_plesk_unified("some query", category=None)
+    assert isinstance(result, str)
+    fake_search.where.assert_not_called()
+
+
+def test_refresh_rejects_invalid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.select.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    bad_category = "'; DROP TABLE plesk_knowledge; --"
+
+    with pytest.raises(ValueError, match="Invalid category"):
+        server.refresh_knowledge(target_category=bad_category)
+
+
+def test_refresh_accepts_valid_category(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.select.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = []
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
+
+    result = server.refresh_knowledge(target_category="cli")
+    assert "SKIPPED" in result or "Finished" in result
+
+
+def test_refresh_with_all_is_allowed(monkeypatch):
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
+
+    result = server.refresh_knowledge(target_category="all")
+    assert isinstance(result, str)
+
+
+def _make_fake_search(results):
+    fake_search = MagicMock()
+    fake_search.where.return_value = fake_search
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = results
+    return fake_search
+
+
+def test_search_result_includes_doc_url_for_html_category(monkeypatch):
+    """Search output contains a URL line for categories with a known base URL."""
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_table.search.return_value = _make_fake_search(
+        [
+            {
+                "text": "pm_Config::get('timeout');",
+                "title": "Custom Settings",
+                "filename": "77178.htm",
+                "category": "guide",
+                "breadcrumb": "Extensions > Settings",
+                "_distance": 0.1,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+
+    result = server.search_plesk_unified("settings")
+    assert "https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm" in result
+
+
+def test_search_result_no_url_for_github_only_categories(monkeypatch):
+    """Search output omits the URL line for php-stubs and js-sdk."""
+    import plesk_unified.server as server
+
+    fake_table = MagicMock()
+    fake_table.search.return_value = _make_fake_search(
+        [
+            {
+                "text": "abstract class pm_Hook_ConfigDefaults {}",
+                "title": "ConfigDefaults.php",
+                "filename": "ConfigDefaults.php",
+                "category": "php-stubs",
+                "breadcrumb": "",
+                "_distance": 0.1,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
+    monkeypatch.setattr(server, "get_table", lambda: fake_table)
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+
+    result = server.search_plesk_unified("config defaults")
+    assert "URL:" not in result

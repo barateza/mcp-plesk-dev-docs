@@ -160,9 +160,33 @@ We recognize contributors in:
 
 Thank you for helping make Plesk Unified better! 🙏
 
-## Pre-commit hooks (Formatting & Linting)
+## Linting, type-checking, and tests
+
+Install development dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
+Run the full quality suite before opening a PR:
+
+```bash
+# Lint and auto-fix (must pass in CI)
+ruff check . --fix
+ruff format .
+
+# Type check
+pyright plesk_unified/
+
+# Run tests
+pytest
+```
+
+## Pre-commit hooks
 
 We use `pre-commit` to run formatters and linters automatically on each commit.
+The hooks include `ruff` (lint + auto-fix and code formatting). If a hook modifies files, re-run `git add` and
+commit again.
 
 Install and enable hooks locally:
 
@@ -171,6 +195,3 @@ python -m pip install --upgrade pre-commit
 pre-commit install
 pre-commit run --all-files  # optional: verify everything passes
 ```
-
-The hooks include `ruff` (lint + auto-fix and code formatting). If a hook modifies files, re-run `git add` and
-commit again.

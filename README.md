@@ -116,8 +116,8 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 |Reranker|ms-marco-MiniLM / bge-reranker-base (profile)|Cross-encoder result reranking (always applied)|
 |Vector DB|LanceDB|Apache Arrow-based ANN search|
 |MCP Server|FastMCP|Tool exposure to AI clients (`plesk_unified/server.py`)|
-|HTML Parser|BeautifulSoup4 + markdownify|Documentation ingestion with code-block preservation|
-|Git integration|GitPython|Auto-fetches PHP stubs and JS SDK|
+|HTML Parser|BeautifulSoup4|Documentation ingestion|
+|Git integration|Git (stdlib subprocess)|Auto-fetches PHP stubs and JS SDK|
 
 **Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
 

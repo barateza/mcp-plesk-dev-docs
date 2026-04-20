@@ -9,7 +9,58 @@ from __future__ import annotations
 import math
 
 import torch
-from scipy import integrate
+
+
+# ---------------------------------------------------------------------------
+# Pure-Python Gaussian integration helpers (replaces scipy.integrate.quad)
+# ---------------------------------------------------------------------------
+
+
+def _gauss_pdf(x: float, sigma: float) -> float:
+    """N(0, σ²) probability density at x."""
+    return math.exp(-0.5 * (x / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+
+
+def _gauss_cdf(x: float, sigma: float) -> float:
+    """N(0, σ²) cumulative distribution at x."""
+    return 0.5 * (1.0 + math.erf(x / (sigma * math.sqrt(2.0))))
+
+
+def _int_pdf(a: float, b: float, sigma: float) -> float:
+    """∫[a,b] N(0,σ²)(x) dx — closed form via erf."""
+    return _gauss_cdf(b, sigma) - _gauss_cdf(a, sigma)
+
+
+def _int_x_pdf(a: float, b: float, sigma: float) -> float:
+    """∫[a,b] x·N(0,σ²)(x) dx = σ²·[f(a) − f(b)]."""
+    return sigma * sigma * (_gauss_pdf(a, sigma) - _gauss_pdf(b, sigma))
+
+
+def _int_sq_pdf(a: float, b: float, sigma: float, c: float) -> float:
+    """∫[a,b] (x−c)²·N(0,σ²)(x) dx — closed form."""
+    fa, fb = _gauss_pdf(a, sigma), _gauss_pdf(b, sigma)
+    cdf_diff = _gauss_cdf(b, sigma) - _gauss_cdf(a, sigma)
+    sig2 = sigma * sigma
+    return (
+        sig2 * (a * fa - b * fb)
+        - 2.0 * c * sig2 * (fa - fb)
+        + (sig2 + c * c) * cdf_diff
+    )
+
+
+def _quad(f, a: float, b: float, n: int = 200) -> float:
+    """Composite Simpson's rule numerical integration over [a, b].
+
+    Used only for the ``use_exact=True`` (Beta-PDF) path; the Gaussian path
+    uses closed-form helpers above.
+    """
+    if n % 2 != 0:
+        n += 1
+    h = (b - a) / n
+    s = f(a) + f(b)
+    for i in range(1, n):
+        s += (4 if i % 2 else 2) * f(a + i * h)
+    return h / 3.0 * s
 
 
 def beta_pdf(x: float, d: int) -> float:
@@ -44,11 +95,6 @@ def solve_lloyd_max(
         boundaries: sorted tensor of 2^bits - 1 boundaries between centroids
     """
     n_levels = 2**bits
-    pdf = (
-        (lambda x: beta_pdf(x, d))
-        if use_exact
-        else (lambda x: gaussian_approx_pdf(x, d))
-    )
     sigma = 1.0 / math.sqrt(d)
 
     lo, hi = -3.5 * sigma, 3.5 * sigma
@@ -63,8 +109,12 @@ def solve_lloyd_max(
         for i in range(n_levels):
             a, b = edges[i], edges[i + 1]
 
-            numerator, _ = integrate.quad(lambda x: x * pdf(x), a, b)
-            denominator, _ = integrate.quad(pdf, a, b)
+            if use_exact:
+                numerator = _quad(lambda x: x * beta_pdf(x, d), a, b)
+                denominator = _quad(lambda x: beta_pdf(x, d), a, b)
+            else:
+                numerator = _int_x_pdf(a, b, sigma)
+                denominator = _int_pdf(a, b, sigma)
 
             if denominator > 1e-15:
                 new_centroids.append(numerator / denominator)
@@ -93,11 +143,6 @@ def compute_expected_distortion(
     use_exact: bool = False,
 ) -> float:
     """Compute the expected MSE distortion per coordinate for the given quantizer."""
-    pdf = (
-        (lambda x: beta_pdf(x, d))
-        if use_exact
-        else (lambda x: gaussian_approx_pdf(x, d))
-    )
     sigma = 1.0 / math.sqrt(d)
     n_levels = len(centroids)
 
@@ -107,9 +152,10 @@ def compute_expected_distortion(
     for i in range(n_levels):
         a, b = edges[i], edges[i + 1]
         c = centroids[i].item()
-        dist, _ = integrate.quad(
-            lambda x, centroid=c: (x - centroid) ** 2 * pdf(x), a, b
-        )
+        if use_exact:
+            dist = _quad(lambda x, _c=c: (x - _c) ** 2 * beta_pdf(x, d), a, b)
+        else:
+            dist = _int_sq_pdf(a, b, sigma, c)
         total_distortion += dist
 
     return total_distortion

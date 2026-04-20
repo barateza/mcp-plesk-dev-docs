@@ -16,22 +16,33 @@ def test_ensure_source_exists_already_there(tmp_path):
     assert ensure_source_exists(source)
 
 
-@patch("plesk_unified.io_utils.Repo.clone_from")
-def test_ensure_source_exists_clones(mock_clone, tmp_path):
+@patch("plesk_unified.io_utils.subprocess.run")
+def test_ensure_source_exists_clones(mock_run, tmp_path):
+    mock_run.return_value.returncode = 0
     source = {
         "path": tmp_path / "new_repo",
         "repo_url": "http://example.com/repo.git",
         "cat": "test",
     }
     assert ensure_source_exists(source)
-    mock_clone.assert_called_once_with(
-        "http://example.com/repo.git", tmp_path / "new_repo"
+    mock_run.assert_called_once_with(
+        [
+            "git",
+            "clone",
+            "--",
+            "http://example.com/repo.git",
+            str(tmp_path / "new_repo"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
-@patch("plesk_unified.io_utils.Repo.clone_from")
-def test_ensure_source_exists_clone_fails(mock_clone, tmp_path):
-    mock_clone.side_effect = Exception("Failed")
+@patch("plesk_unified.io_utils.subprocess.run")
+def test_ensure_source_exists_clone_fails(mock_run, tmp_path):
+    mock_run.return_value.returncode = 1
+    mock_run.return_value.stderr = "Failed"
     source = {
         "path": tmp_path / "new_repo",
         "repo_url": "http://example.com/repo.git",

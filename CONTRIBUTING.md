@@ -185,8 +185,7 @@ pytest
 ## Pre-commit hooks
 
 We use `pre-commit` to run formatters and linters automatically on each commit.
-The hooks include `ruff` (lint + auto-fix), `isort` (import sorting), and
-`black` (code formatting). If a hook modifies files, re-run `git add` and
+The hooks include `ruff` (lint + auto-fix and code formatting). If a hook modifies files, re-run `git add` and
 commit again.
 
 Install and enable hooks locally:

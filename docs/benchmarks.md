@@ -168,6 +168,53 @@ python scripts/benchmark_profiles.py --queries my_queries.json
 python scripts/benchmark_profiles.py --refresh --output results.json
 ```
 
+### Automated baseline capture and quality gates
+
+The benchmark runner can now capture a baseline artifact and compare future runs
+against it using configurable quality gates.
+
+Capture/update baseline for a suite:
+
+```bash
+python scripts/benchmark_profiles.py \
+   --suite control \
+   --profile medium \
+   --engine baseline \
+   --capture-baseline \
+   --baseline-file benchmarks/baselines/control-medium.json
+```
+
+Evaluate current run against baseline (report only):
+
+```bash
+python scripts/benchmark_profiles.py \
+   --suite control \
+   --profile medium \
+   --engine baseline \
+   --baseline-file benchmarks/baselines/control-medium.json \
+   --gate-config benchmarks/gates/default.json
+```
+
+Fail the process if any gate fails:
+
+```bash
+python scripts/benchmark_profiles.py \
+   --suite control \
+   --profile medium \
+   --engine baseline \
+   --baseline-file benchmarks/baselines/control-medium.json \
+   --gate-config benchmarks/gates/default.json \
+   --fail-on-gate
+```
+
+The default gate config validates:
+
+1. Maximum regression for `hit_rate`.
+2. Maximum regression for `mrr`.
+3. Maximum latency increase ratio for `avg_latency_s`.
+4. Optional absolute minima for `context_recall` and `faithfulness`
+    when these metrics are present in the run output.
+
 To reproduce the exact conditions of the table above, run with `--refresh` on a freshly
 cloned repository so each profile indexes from scratch. Omit `--refresh` for fast
 re-runs against existing indexes.

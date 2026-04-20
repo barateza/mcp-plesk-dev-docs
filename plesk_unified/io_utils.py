@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import hashlib
 import shutil
 import stat
 import subprocess
@@ -249,3 +250,38 @@ def collect_files_for_source(source: Dict[str, Any]) -> List[Path]:
         ]
 
     return filtered_files
+
+
+def compute_source_fingerprint(source: Dict[str, Any]) -> tuple[str, int]:
+    """Build a stable digest for source content currently present on disk."""
+    files = sorted(collect_files_for_source(source), key=lambda p: str(p))
+    hasher = hashlib.sha256()
+
+    source_path = source.get("path")
+    for f in files:
+        try:
+            rel = str(f.relative_to(source_path)) if source_path else f.name
+            stat_info = f.stat()
+            hasher.update(rel.encode("utf-8", errors="ignore"))
+            hasher.update(str(stat_info.st_size).encode("ascii", errors="ignore"))
+            hasher.update(str(stat_info.st_mtime_ns).encode("ascii", errors="ignore"))
+        except Exception:
+            # Keep hashing resilient to transient file issues.
+            continue
+
+    toc = None
+    if source_path and isinstance(source_path, Path):
+        candidate = source_path / "toc.json"
+        if candidate.exists():
+            toc = candidate
+
+    if toc is not None:
+        try:
+            toc_stat = toc.stat()
+            hasher.update(b"toc.json")
+            hasher.update(str(toc_stat.st_size).encode("ascii", errors="ignore"))
+            hasher.update(str(toc_stat.st_mtime_ns).encode("ascii", errors="ignore"))
+        except Exception:
+            pass
+
+    return hasher.hexdigest(), len(files)

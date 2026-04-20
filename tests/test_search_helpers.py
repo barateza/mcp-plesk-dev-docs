@@ -185,3 +185,69 @@ def test_category_doc_base_urls_do_not_contain_zip():
     for cat, url in CATEGORY_DOC_BASE_URLS.items():
         assert "/zip/" not in url, f"Base URL for '{cat}' still contains '/zip/': {url}"
         assert ".zip" not in url, f"Base URL for '{cat}' still contains '.zip': {url}"
+
+
+def test_search_returns_fallback_when_top_relevance_is_low(monkeypatch):
+    import plesk_unified.server as server
+
+    class DummyProfile:
+        name = "medium"
+        use_turboquant = False
+        reranker_enabled = False
+        tq_top_k = 25
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = [
+        {
+            "title": "Weak Result",
+            "filename": "a.htm",
+            "category": "guide",
+            "breadcrumb": "",
+            "text": "content",
+            "_distance": 5.0,
+        }
+    ]
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setenv("PLESK_MIN_RELEVANCE_THRESHOLD", "0.55")
+    monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+
+    result = server.search_plesk_unified("query")
+    assert result == "I could not find a reliable answer."
+
+
+def test_search_returns_results_when_relevance_is_high(monkeypatch):
+    import plesk_unified.server as server
+
+    class DummyProfile:
+        name = "medium"
+        use_turboquant = False
+        reranker_enabled = False
+        tq_top_k = 25
+
+    fake_table = MagicMock()
+    fake_search = MagicMock()
+    fake_search.limit.return_value = fake_search
+    fake_search.to_list.return_value = [
+        {
+            "title": "Strong Result",
+            "filename": "a.htm",
+            "category": "guide",
+            "breadcrumb": "Path",
+            "text": "content",
+            "_distance": 0.1,
+        }
+    ]
+    fake_table.search.return_value = fake_search
+
+    monkeypatch.setenv("PLESK_MIN_RELEVANCE_THRESHOLD", "0.55")
+    monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
+    monkeypatch.setattr(server, "get_reranker", lambda: None)
+    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+
+    result = server.search_plesk_unified("query")
+    assert "Strong Result" in result

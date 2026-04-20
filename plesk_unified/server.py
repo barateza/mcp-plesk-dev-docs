@@ -7,6 +7,7 @@ import pickle
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from plesk_unified.log_handler import create_os_handlers
@@ -221,6 +222,7 @@ def _db_profile_name() -> str:
 
 DB_PATH = BASE_DIR / "storage" / f"lancedb_{_db_profile_name()}"
 TQ_DIR = BASE_DIR / "storage" / "turboquant"
+SOURCE_STATE_PATH = BASE_DIR / "storage" / "source_state.json"
 
 
 def _detect_device() -> str:
@@ -426,6 +428,109 @@ def _env_flag(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
+def _env_flag_with_default(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _load_source_state() -> dict[str, Any]:
+    if not SOURCE_STATE_PATH.exists():
+        return {"version": 1, "sources": {}}
+    try:
+        data = json.loads(SOURCE_STATE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"version": 1, "sources": {}}
+        if "sources" not in data or not isinstance(data["sources"], dict):
+            data["sources"] = {}
+        return data
+    except Exception:
+        logger.warning("Failed to load source state file.", exc_info=True)
+        return {"version": 1, "sources": {}}
+
+
+def _save_source_state(state: dict[str, Any]) -> None:
+    payload = dict(state)
+    payload["version"] = 1
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    SOURCE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SOURCE_STATE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _existing_filenames_for_category(table: Any, category: str) -> set[str]:
+    try:
+        rows = (
+            table.search()
+            .where(f"category = '{category}'")
+            .select(["filename"])
+            .limit(100000)
+            .to_list()
+        )
+        return {r["filename"] for r in rows if r.get("filename")}
+    except Exception:
+        logger.warning(
+            "Could not fetch existing filenames for category '%s'.",
+            category,
+            exc_info=True,
+        )
+        return set()
+
+
+def _infer_doctype(
+    source: Dict[str, Any], filename: str, title: str | None, breadcrumb: str | None
+) -> str:
+    stype = source.get("type", "")
+    cat = source.get("cat", "")
+
+    if stype == "html":
+        trail = (breadcrumb or "").lower()
+        if cat == "cli" or "command line" in trail:
+            return "cli-command"
+        if cat == "api" or "reference" in trail:
+            return "api-reference"
+        if cat == "guide" or "guide" in trail:
+            return "guide-topic"
+        return f"{cat}-html"
+
+    if stype == "php":
+        name = (title or filename or "").lower()
+        if "interface" in name:
+            return "php-stub-interface"
+        if "trait" in name:
+            return "php-stub-trait"
+        return "php-stub-class"
+
+    if stype == "js":
+        lower = filename.lower()
+        if lower.endswith(".md"):
+            return "js-sdk-guide"
+        if lower.endswith(".test.js"):
+            return "js-sdk-test"
+        return "js-sdk-source"
+
+    return "unknown"
+
+
+def _chunk_by_doctype(source: Dict[str, Any], doctype: str, text: str) -> list[str]:
+    if source["type"] == "html":
+        chunks = chunking.chunk_by_sentence_window(text, window_size=3)
+        return chunks or chunking.chunk_by_chars(text, 1500, 200)
+
+    if source["type"] == "php":
+        chunks = chunking.chunk_php_hierarchical(
+            text, section_max_lines=150, overlap=20
+        )
+        return chunks or chunking.chunk_by_lines(text, 150, 20)
+
+    if doctype == "js-sdk-guide":
+        chunks = chunking.chunk_by_sentence_window(text, window_size=3)
+        return chunks or chunking.chunk_by_lines(text, 60, 10)
+
+    chunks = chunking.chunk_js_hierarchical(text, section_max_lines=60, overlap=10)
+    return chunks or chunking.chunk_by_lines(text, 60, 10)
+
+
 def _begin_warmup() -> bool:
     global _warmup_state, _warmup_error
     with _warmup_lock:
@@ -507,6 +612,20 @@ def _maybe_start_background_warmup() -> None:
         _warmup_thread.start()
 
     logger.info("Background daemon warmup started.")
+
+
+def _maybe_refresh_changed_sources() -> None:
+    """At startup, refresh only categories whose source fingerprint changed."""
+    if not _env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", True):
+        logger.info("Startup source refresh disabled by env var.")
+        return
+
+    try:
+        logger.info("Running startup source change detection.")
+        report = refresh_knowledge(target_category="all", reset_db=False)
+        logger.info("Startup source refresh report:\n%s", report)
+    except Exception:
+        logger.exception("Startup source refresh failed.")
 
 
 def _table_health() -> tuple[bool, str | None]:
@@ -667,12 +786,8 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     if not text or len(text) <= 10:
         return []
 
-    if source["type"] == "html":
-        chunks = chunking.chunk_by_chars(text, 1500, 200)
-    elif source["type"] == "php":
-        chunks = chunking.chunk_by_lines(text, 150, 20)
-    else:
-        chunks = chunking.chunk_by_lines(text, 60, 10)
+    doctype = _infer_doctype(source, file_path.name, title, breadcrumb)
+    chunks = _chunk_by_doctype(source, doctype, text)
 
     if not chunks:
         return []
@@ -684,7 +799,9 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     )
 
     for r in records:
-        r["text"] = f"[{source['cat'].upper()}] {title}\n---\n{r['text']}"
+        r["text"] = (
+            f"[{source['cat'].upper()}] {title}\nDocType: {doctype}\n---\n{r['text']}"
+        )
 
     return records
 
@@ -765,29 +882,14 @@ def refresh_knowledge(
     )
     global _tq_index
     _tq_index = None
+    source_state = _load_source_state()
+    source_entries = source_state.setdefault("sources", {})
 
     if reset_db:
         table = get_table(create_new=True)
         logger.warning("Database wiped by request.")
-        existing_files = set()
     else:
         table = get_table(create_new=False)
-        existing_files = set()
-        if target_category != "all":
-            try:
-                results = (
-                    table.search()
-                    .where(f"category='{target_category}'")
-                    .select(["filename"])
-                    .limit(10000)
-                    .to_list()
-                )
-                existing_files.update(r["filename"] for r in results)
-                logger.info(
-                    "Found %d existing files/chunks in DB.", len(existing_files)
-                )
-            except Exception as e:
-                logger.warning("Could not fetch existing files: %s", e)
 
     report = []
 
@@ -802,13 +904,50 @@ def refresh_knowledge(
             report.append(msg)
             continue
 
+        fingerprint, file_count = io_utils.compute_source_fingerprint(source)
+        prev_meta = source_entries.get(source["cat"], {})
+        source_changed = reset_db or prev_meta.get("fingerprint") != fingerprint
+
+        if not source_changed:
+            msg = f"SKIPPED {source['cat']} (No source changes detected)"
+            logger.info(msg)
+            report.append(msg)
+            continue
+
         try:
+            if not reset_db:
+                # A changed source should be re-indexed from scratch to avoid stale chunks.
+                try:
+                    table.delete(f"category = '{source['cat']}'")
+                except Exception:
+                    logger.warning(
+                        "Could not delete existing rows for category '%s' before reindex.",
+                        source["cat"],
+                        exc_info=True,
+                    )
+
+            existing_files = set()
+            if not reset_db:
+                existing_files = _existing_filenames_for_category(table, source["cat"])
             process_source_files(source, table, existing_files)
+            source_entries[source["cat"]] = {
+                "fingerprint": fingerprint,
+                "file_count": file_count,
+                "indexed_at": datetime.now(timezone.utc).isoformat(),
+            }
         except Exception:
             logger.exception("Error processing source %s", source["cat"])
+            source_entries[source["cat"]] = {
+                "fingerprint": fingerprint,
+                "file_count": file_count,
+                "indexed_at": datetime.now(timezone.utc).isoformat(),
+                "error": "indexing-failed",
+            }
 
         msg = f"Finished pass for {source['cat']}."
         report.append(msg)
+
+    _save_source_state(source_state)
 
     profile = _get_profile()
     if getattr(profile, "use_turboquant", False):
@@ -885,6 +1024,17 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     # Deduplicate: keep only the top-ranked chunk per source file.
     results = _deduplicate_by_filename(candidates)[:5]
 
+    min_relevance = float(os.environ.get("PLESK_MIN_RELEVANCE_THRESHOLD", "0.55"))
+    if not results:
+        return "I could not find a reliable answer."
+    if results[0].get("_relevance", 0.0) < min_relevance:
+        logger.info(
+            "Search confidence below threshold (%.4f < %.4f). Returning fallback.",
+            results[0].get("_relevance", 0.0),
+            min_relevance,
+        )
+        return "I could not find a reliable answer."
+
     logger.info(
         "Search returning %d results (from %d candidates).",
         len(results),
@@ -910,6 +1060,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
 
 if __name__ == "__main__":
     _log_server_ready("Starting Plesk Unified MCP Server...")
+    _maybe_refresh_changed_sources()
     _maybe_start_background_warmup()
     try:
         mcp.run()
@@ -921,6 +1072,7 @@ if __name__ == "__main__":
 def main() -> None:
     """Console entrypoint for the MCP server (used by package scripts/devtools)."""
     _log_server_ready("Starting Plesk Unified MCP Server (entrypoint)...")
+    _maybe_refresh_changed_sources()
     _maybe_start_background_warmup()
     try:
         mcp.run()

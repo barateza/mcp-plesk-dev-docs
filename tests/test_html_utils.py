@@ -32,3 +32,21 @@ def test_parse_html_file_preserves_code_blocks(tmp_path):
     _, _, text = parse_html_file(src)
     assert "```" in text
     assert "pm_Config::get" in text
+
+
+def test_parse_html_file_converts_table_rows_to_prose(tmp_path):
+    html = (
+        "<!doctype html><html><head><title>T</title></head><body><main>"
+        "<table>"
+        "<tr><th>Parameter</th><th>Type</th><th>Default</th></tr>"
+        "<tr><td>timeout</td><td>integer</td><td>60</td></tr>"
+        "</table>"
+        "</main></body></html>"
+    )
+    src = tmp_path / "table.html"
+    src.write_text(html, encoding="utf-8")
+
+    _, _, text = parse_html_file(src)
+    assert "Parameter: timeout" in text
+    assert "Type: integer" in text
+    assert "Default: 60" in text

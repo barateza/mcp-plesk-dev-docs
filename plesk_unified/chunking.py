@@ -1,3 +1,4 @@
+import re
 from typing import Dict, List
 
 
@@ -35,6 +36,108 @@ def chunk_by_lines(text: str, chunk_size: int, overlap: int = 0) -> List[str]:
         chunk = "\n".join(lines[i : i + chunk_size])
         if chunk.strip():
             chunks.append(chunk)
+    return chunks
+
+
+def _split_sentences(text: str) -> List[str]:
+    """Split prose into sentences using a lightweight regex heuristic."""
+    if not text:
+        return []
+    normalized = re.sub(r"\s+", " ", text).strip()
+    if not normalized:
+        return []
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'`])", normalized)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def chunk_by_sentence_window(text: str, window_size: int = 3) -> List[str]:
+    """Build overlapping sentence windows (stride=1) for narrative documents."""
+    if not text:
+        return []
+    sentences = _split_sentences(text)
+    if not sentences:
+        return []
+    if len(sentences) <= window_size:
+        return [" ".join(sentences)]
+
+    chunks: List[str] = []
+    for idx in range(0, len(sentences) - window_size + 1):
+        chunk = " ".join(sentences[idx : idx + window_size]).strip()
+        if chunk:
+            chunks.append(chunk)
+    return chunks
+
+
+def _split_by_regex_boundaries(text: str, boundary_regex: str) -> List[str]:
+    """Split code by declaration boundaries while preserving section content."""
+    if not text:
+        return []
+
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    boundary = re.compile(boundary_regex)
+    starts = [idx for idx, line in enumerate(lines) if boundary.search(line)]
+
+    if not starts:
+        return [text]
+
+    if starts[0] != 0:
+        starts = [0] + starts
+
+    starts.append(len(lines))
+    sections: List[str] = []
+    for i in range(len(starts) - 1):
+        start = starts[i]
+        end = starts[i + 1]
+        section = "\n".join(lines[start:end]).strip()
+        if section:
+            sections.append(section)
+    return sections
+
+
+def chunk_php_hierarchical(
+    text: str, section_max_lines: int = 150, overlap: int = 20
+) -> List[str]:
+    """Chunk PHP by class/method declarations with line-window fallback."""
+    boundary_regex = (
+        r"^\s*(abstract\s+class|final\s+class|class|interface|trait|"
+        r"public\s+function|protected\s+function|private\s+function|"
+        r"function)\b"
+    )
+    sections = _split_by_regex_boundaries(text, boundary_regex)
+    chunks: List[str] = []
+
+    for section in sections:
+        line_count = len(section.splitlines())
+        if line_count > section_max_lines:
+            chunks.extend(chunk_by_lines(section, section_max_lines, overlap))
+        else:
+            chunks.append(section)
+
+    return chunks
+
+
+def chunk_js_hierarchical(
+    text: str, section_max_lines: int = 60, overlap: int = 10
+) -> List[str]:
+    """Chunk JS/TS-like code by export/class/function boundaries."""
+    boundary_regex = (
+        r"^\s*(export\s+(default\s+)?(class|function|const|let|var)|"
+        r"class\s+|function\s+|const\s+[A-Za-z0-9_$]+\s*=\s*\(|"
+        r"describe\(|test\(|it\()"
+    )
+    sections = _split_by_regex_boundaries(text, boundary_regex)
+    chunks: List[str] = []
+
+    for section in sections:
+        line_count = len(section.splitlines())
+        if line_count > section_max_lines:
+            chunks.extend(chunk_by_lines(section, section_max_lines, overlap))
+        else:
+            chunks.append(section)
+
     return chunks
 
 

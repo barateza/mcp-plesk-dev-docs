@@ -67,6 +67,13 @@ from plesk_unified.benchmark_engines import (
     rerank_with_structure,
     route_query,
 )
+from plesk_unified.benchmark_gates import (
+    evaluate_quality_gates,
+    format_gate_report,
+    load_baseline,
+    load_gate_config,
+    write_baseline,
+)
 from plesk_unified.benchmark_suites import BENCHMARK_SUITES
 from plesk_unified.tq_index import TurboQuantIndex
 
@@ -411,6 +418,33 @@ def _build_parser() -> argparse.ArgumentParser:
         default="baseline-only",
         help="Per-query routing policy (default: baseline-only).",
     )
+    parser.add_argument(
+        "--capture-baseline",
+        action="store_true",
+        default=False,
+        help="Capture aggregated benchmark output as baseline artifact.",
+    )
+    parser.add_argument(
+        "--baseline-file",
+        help=(
+            "Path to baseline artifact for capture or comparison. "
+            "If omitted with --capture-baseline, defaults to "
+            "benchmarks/baselines/<suite>.json"
+        ),
+    )
+    parser.add_argument(
+        "--gate-config",
+        help=(
+            "Path to quality-gate JSON config. "
+            "Defaults to built-in thresholds when omitted."
+        ),
+    )
+    parser.add_argument(
+        "--fail-on-gate",
+        action="store_true",
+        default=False,
+        help="Exit with non-zero status when any quality gate fails.",
+    )
     return parser
 
 
@@ -536,6 +570,7 @@ def _run_benchmark_cli(args: argparse.Namespace) -> None:
                         pilot_config=selected_pilot_config,
                         routing_policy=args.routing_policy,
                     )
+                    result["suite"] = args.suite
                     result["repeat"] = repeat_idx + 1
                     all_results.append(result)
 
@@ -549,6 +584,26 @@ def _run_benchmark_cli(args: argparse.Namespace) -> None:
 
     _print_summary_table(all_results)
     _print_autoresearch_summary(all_results)
+
+    baseline_path = args.baseline_file
+    if args.capture_baseline:
+        if not baseline_path:
+            baseline_path = f"benchmarks/baselines/{args.suite}.json"
+        write_baseline(baseline_path, all_results)
+        print(f"\nBaseline captured to {baseline_path}")
+
+    if args.fail_on_gate and not baseline_path:
+        raise SystemExit(
+            "--fail-on-gate requires --baseline-file or --capture-baseline"
+        )
+
+    if baseline_path and not args.capture_baseline:
+        baseline_runs = load_baseline(baseline_path)
+        gate_config = load_gate_config(args.gate_config)
+        gate_report = evaluate_quality_gates(all_results, baseline_runs, gate_config)
+        print(format_gate_report(gate_report))
+        if args.fail_on_gate and not gate_report["passed"]:
+            raise SystemExit(2)
 
     if args.output:
         Path(args.output).write_text(

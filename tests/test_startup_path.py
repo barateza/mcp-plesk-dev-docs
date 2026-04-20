@@ -185,6 +185,33 @@ def test_load_toc_map_is_cached(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
+def test_env_flag_with_default_honors_default_when_unset(monkeypatch):
+    import plesk_unified.server as server
+
+    monkeypatch.delenv("PLESK_AUTO_REFRESH_ON_STARTUP", raising=False)
+    assert server._env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", True)
+    assert not server._env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", False)
+
+
+def test_maybe_refresh_changed_sources_calls_refresh(monkeypatch):
+    import plesk_unified.server as server
+
+    called = {"count": 0}
+
+    def fake_refresh(target_category, reset_db):
+        called["count"] += 1
+        assert target_category == "all"
+        assert reset_db is False
+        return "ok"
+
+    monkeypatch.setenv("PLESK_AUTO_REFRESH_ON_STARTUP", "true")
+    monkeypatch.setattr(server, "refresh_knowledge", fake_refresh)
+
+    server._maybe_refresh_changed_sources()
+
+    assert called["count"] == 1
+
+
 # --- Category allowlist tests ---
 
 

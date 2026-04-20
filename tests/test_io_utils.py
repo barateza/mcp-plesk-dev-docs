@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from plesk_unified.io_utils import (
     collect_files_for_source,
+    compute_source_fingerprint,
     ensure_source_exists,
     load_toc_map,
     parse_toc_recursive,
@@ -97,3 +98,25 @@ def test_collect_files_for_source(tmp_path):
     files = collect_files_for_source(source)
     assert len(files) == 1
     assert files[0].name == "test.php"
+
+
+def test_compute_source_fingerprint_changes_when_file_changes(tmp_path):
+    src = tmp_path / "a.php"
+    src.write_text("<?php\nclass A {}", encoding="utf-8")
+    source = {"path": tmp_path, "type": "php", "cat": "php-stubs"}
+
+    fp1, count1 = compute_source_fingerprint(source)
+    src.write_text("<?php\nclass A { public function x() {} }", encoding="utf-8")
+    fp2, count2 = compute_source_fingerprint(source)
+
+    assert count1 == 1
+    assert count2 == 1
+    assert fp1 != fp2
+
+
+def test_compute_source_fingerprint_empty_source(tmp_path):
+    source = {"path": tmp_path, "type": "php", "cat": "php-stubs"}
+    fp, count = compute_source_fingerprint(source)
+    assert count == 0
+    assert isinstance(fp, str)
+    assert len(fp) == 64

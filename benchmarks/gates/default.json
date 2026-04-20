@@ -1,0 +1,12 @@
+{
+  "regression": {
+    "hit_rate": { "max_drop": 0.01 },
+    "mrr": { "max_drop": 0.02 },
+    "avg_latency_s": { "max_increase_ratio": 0.2 }
+  },
+  "absolute_minimums": {
+    "context_recall": 0.85,
+    "faithfulness": 0.9
+  },
+  "required_metrics": []
+}

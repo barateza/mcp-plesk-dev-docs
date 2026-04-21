@@ -1021,11 +1021,13 @@ def _rrf_merge(
     for rank, doc in enumerate(vector_results):
         # We need a stable key, use text + filename
         key = f"{doc.get('filename')}:{doc.get('text')}"
+        # Standard RRF formula
         scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
         docs[key] = doc
 
     for rank, doc in enumerate(fts_results):
         key = f"{doc.get('filename')}:{doc.get('text')}"
+        # Standard RRF formula
         scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
         if key not in docs:
             docs[key] = doc
@@ -1039,6 +1041,13 @@ def _rrf_merge(
         doc["_relevance"] = scores[key]
         results.append(doc)
 
+    logger.debug(
+        "RRF Merge: %d vector, %d FTS -> %d unique results. Top score: %.4f",
+        len(vector_results),
+        len(fts_results),
+        len(results),
+        results[0]["_relevance"] if results else 0,
+    )
     return results
 
 

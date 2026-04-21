@@ -495,10 +495,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--refresh",
         action="store_true",
         default=False,
-        help=(
-            "Re-index all documentation (reset_db=True) for each profile "
-            "before benchmarking."
-        ),
+        help="Incremental refresh before benchmarking.",
+    )
+    parser.add_argument(
+        "--reset-db",
+        action="store_true",
+        default=False,
+        help="Wipe and rebuild the index from scratch (use with --refresh).",
     )
     parser.add_argument(
         "--engine",

@@ -50,8 +50,11 @@ def _split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def chunk_by_sentence_window(text: str, window_size: int = 3) -> List[str]:
-    """Build overlapping sentence windows (stride=1) for narrative documents."""
+def chunk_by_sentence_window(text: str, window_size: int = 5) -> List[str]:
+    """Build overlapping sentence windows (stride=1) for narrative documents.
+
+    Task C: Increased default window size to 5 for better context.
+    """
     if not text:
         return []
     sentences = _split_sentences(text)
@@ -153,7 +156,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
     title = meta.get("title") or ""
     breadcrumb = meta.get("breadcrumb") or ""
 
-    for c in chunks:
+    for i, c in enumerate(chunks):
         # Task B: Prepend context to the text before embedding.
         enriched_text = f"[Title: {title} | Path: {breadcrumb}] \n\n {c}"
 
@@ -165,6 +168,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
                 "category": meta.get("category"),
                 "breadcrumb": breadcrumb,
                 "endpoint": meta.get("endpoint"),  # Prepare for Task E
+                "chunk_id": i,  # Task D
             }
         )
     return records

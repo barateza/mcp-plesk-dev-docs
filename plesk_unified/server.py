@@ -287,6 +287,7 @@ def get_schema() -> Any:
         category: str
         breadcrumb: str
         endpoint: Optional[str] = None
+        chunk_id: int  # Task D: Sequential ID within filename
 
     _schema_class = UnifiedSchema
     return _schema_class
@@ -1124,6 +1125,67 @@ def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:
     return None
 
 
+def _expand_context_with_neighbors(results: list[dict], table: Any) -> list[dict]:
+    """Fetch adjacent chunks for the top-3 results to provide richer context."""
+    if not results:
+        return results
+
+    # Only expand the top-3 results to balance context vs noise
+    to_expand = results[:3]
+    expanded_results = []
+
+    for r in results:
+        if r not in to_expand:
+            expanded_results.append(r)
+            continue
+
+        fname = r.get("filename")
+        cat = r.get("category")
+        cid = r.get("chunk_id")
+
+        if fname is None or cid is None:
+            expanded_results.append(r)
+            continue
+
+        # Fetch neighbors (id-1, id+1) from same file and category
+        try:
+            # Note: We sort by chunk_id to ensure order is preserved during merge
+            neighbors = (
+                table.search()
+                .where(
+                    f"filename = '{fname}' AND category = '{cat}' "
+                    f"AND chunk_id >= {cid - 1} AND chunk_id <= {cid + 1}"
+                )
+                .limit(3)
+                .to_list()
+            )
+            # Sort locally to be sure
+            neighbors.sort(key=lambda x: x.get("chunk_id", 0))
+
+            # Merge the texts
+            texts = [n.get("text", "") for n in neighbors]
+            # Strip the Task B metadata from neighbors to avoid repetition
+            # Metadata pattern: [Title: ... | Path: ...]
+            clean_texts = []
+            for t in texts:
+                if "\n\n" in t:
+                    # Keep metadata only for the first occurrence in the window
+                    clean_texts.append(t.split("\n\n", 1)[1].strip())
+                else:
+                    clean_texts.append(t)
+
+            # Prepend the original metadata back once
+            meta_header = r.get("text", "").split("\n\n", 1)[0]
+            r["text"] = f"{meta_header}\n\n" + "\n[...]\n".join(clean_texts)
+
+        except Exception as e:
+            logger.warning("Neighbor retrieval failed for %s:%d: %s", fname, cid, e)
+
+        expanded_results.append(r)
+
+    return expanded_results
+
+
 def _format_search_results(results: list[dict[str, Any]]) -> str:
     """Convert result dicts into formatted string for MCP."""
     formatted_results = []
@@ -1176,13 +1238,16 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     if error_msg:
         return error_msg
 
+    # Task D: Expand context by fetching neighbors for top results
+    expanded_results = _expand_context_with_neighbors(results, get_table())
+
     logger.info(
         "Search returning %d results (from %d candidates).",
-        len(results),
+        len(expanded_results),
         len(candidates),
     )
 
-    return _format_search_results(results)
+    return _format_search_results(expanded_results)
 
 
 if __name__ == "__main__":

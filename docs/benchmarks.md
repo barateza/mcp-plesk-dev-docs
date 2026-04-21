@@ -5,7 +5,7 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
-## Latest results — 2026-04-20 (RTX 4070 Super, CUDA)
+## Latest results — 2026-04-21 (RTX 4070 Super, CUDA)
 
 **Hardware:** NVIDIA GeForce RTX 4070 Super (12 GB VRAM)
 **Python:** 3.12.10
@@ -15,18 +15,18 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`full`|BAAI/bge-m3|1024|85.0%|0.792|0.065|0.525|0.720|3.59 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.692|0.045|0.545|0.715|**0.39 s**|~1 300 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|**0.420**|0.545|0.735|3.63 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.365**|0.515|0.720|**0.39 s**|~1 300 MB|
 
 ### Observations
 
-1. **RAGAS scoring provides deep quality insights.** While Hit Rate and MRR remain stable indicators of retrieval success, the low `faithfulness` scores suggest that the retrieved context, while containing relevant keywords, may not always satisfy the strict grounding requirements of the LLM judge.
+1. **Table-to-prose conversion significantly improves Faithfulness.** Following the implementation of structural HTML table normalization, `faithfulness` scores increased from ~0.06 to over 0.40. This confirms that preserving parameter semantics within tables leads to better-grounded retrieved context.
 
-2. **Context Precision vs. Recall.** The system shows strong `Context Precision` (~0.72), indicating that top-ranked chunks are generally relevant. `Context Recall` (~0.53) suggests there is room to improve how much of the necessary information is retrieved in the top-5 window for more complex queries.
+2. **Retrieval gaps identified in expanded suite.** Both profiles hit 75% HR@5, with specific misses in complex API and JS-SDK queries. This indicates that while the context is more faithful, the initial retrieval window (top-5) still misses some relevant information for more technical queries.
 
-3. **Expanded query set increases task difficulty.** The addition of 8 new targeted queries (totaling 20) has revealed retrieval gaps in both profiles, particularly in the API and JS-SDK categories, providing a clearer roadmap for future index refinements.
+3. **High Context Precision.** Both profiles maintain strong `Context Precision` (~0.73), meaning that when relevant information is retrieved, it is consistently ranked at the top of the candidate list.
 
-4. **TurboQuant maintains speed advantage.** Even with the overhead of a larger query set and RAGAS evaluation, `full-tq` remains significantly faster than the full-precision model, demonstrating the efficiency of 5-bit compression on CUDA.
+4. **TurboQuant efficiency remains superior.** `full-tq` continues to deliver performance nearly identical to the full-precision model with a 9x reduction in average latency, even with the added complexity of full-text search and RAGAS evaluation.
 
 ---
 

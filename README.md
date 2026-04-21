@@ -314,13 +314,17 @@ mcp-plesk-unified/
 │   ├── log_handler.py         # Cross-platform native OS logging handler factory
 │   ├── tq_index.py            # TurboQuant search index
 │   ├── benchmark_engines.py   # Benchmarking engine implementations
-│   ├── benchmark_suites.py    # Benchmark test suites
+│   ├── benchmark_suites.py    # Benchmark suite loader
 │   └── turboquant/            # In-repo TurboQuant quantization package
 ├── scripts/
 │   ├── benchmark_profiles.py  # Retrieval quality benchmark
 │   ├── enrich_toc.py          # LLM-assisted TOC description generation
 │   ├── generate_virtual_toc.py
 │   └── manage_plesk_docs.py
+├── benchmarks/
+│   ├── suites/                # JSON query definitions (control, multi-hop, etc.)
+│   ├── baselines/             # Golden artifacts for regression testing
+│   └── gates/                 # Quality gate threshold configurations
 ├── tests/                     # Pytest test suite
 ├── docs/
 │   ├── benchmarks.md          # Benchmark results and methodology
@@ -358,10 +362,12 @@ cp .env.example .env
 Key variables:
 
 ```env
-OPENROUTER_API_KEY=sk-or-v1-...   # for enrich_toc.py
+OPENROUTER_API_KEY=sk-or-v1-...   # for RAGAS and table normalization
+PLESK_HTML_LLM_TABLE_NORMALIZE=1   # optional: enable LLM-assisted complex table parsing
 FORCE_DEVICE=cpu                   # optional: override GPU detection
 PLESK_DAEMON_AUTO_WARMUP=true      # optional: daemon-only background warmup
-PLESK_RERANK_CANDIDATES=25         # optional: candidate pool size before reranking (default: 25)
+PLESK_MIN_RELEVANCE_THRESHOLD=0.55 # optional: profile-aware fallback gate
+PLESK_RERANK_CANDIDATES=25         # optional: candidate pool size before reranking
 KB_ROOT=/custom/path               # optional: override knowledge_base dir
 LOG_HANDLER=os                     # os | file | both (default: os)
 LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR
@@ -399,6 +405,19 @@ To rebuild the vector index from scratch:
 ```bash
 rm -rf storage/lancedb
 uv run plesk-unified-mcp
+```
+
+To run retrieval quality benchmarks:
+
+```bash
+# Standard run
+uv run python scripts/benchmark_profiles.py --profile medium
+
+# With RAGAS evaluation
+uv run python scripts/benchmark_profiles.py --profile medium --ragas
+
+# With LLM-assisted table normalization (during index refresh)
+PLESK_HTML_LLM_TABLE_NORMALIZE=1 uv run python scripts/benchmark_profiles.py --refresh --profiles medium
 ```
 
 ---

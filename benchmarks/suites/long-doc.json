@@ -1,0 +1,31 @@
+[
+  {
+    "query": "what does the guide say about custom buttons in the extensions UI",
+    "relevant": [
+      "button",
+      "custom_buttons",
+      "addButton"
+    ],
+    "category": "guide",
+    "bucket": "long-doc"
+  },
+  {
+    "query": "how do the API docs describe authentication with a secret key",
+    "relevant": [
+      "X-API-Key",
+      "secret_key",
+      "Authorization"
+    ],
+    "category": "api",
+    "bucket": "long-doc"
+  },
+  {
+    "query": "where does the CLI reference describe restarting services",
+    "relevant": [
+      "plesk repair",
+      "restart"
+    ],
+    "category": "cli",
+    "bucket": "long-doc"
+  }
+]

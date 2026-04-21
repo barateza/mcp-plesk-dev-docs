@@ -1,0 +1,341 @@
+[
+  {
+    "query": "how do I add a custom button and where is that button API defined",
+    "relevant": [
+      "button",
+      "custom_buttons",
+      "addButton"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do I package an extension and where is the SDK page registration reference",
+    "relevant": [
+      "plesk ext",
+      "package",
+      "registerPage",
+      "router"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "what is the authentication path and where do the domain list endpoints live",
+    "relevant": [
+      "X-API-Key",
+      "secret_key",
+      "Authorization",
+      "domain-list"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which hook interface is used for extension defaults and where are defaults retrieved",
+    "relevant": [
+      "pm_Hook_Interface",
+      "ConfigDefaults",
+      "getDefaults",
+      "pm_Config"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where can I restart services from CLI and where is backup restore documented",
+    "relevant": [
+      "plesk repair",
+      "restart",
+      "backup",
+      "restore"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "easy",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do extension defaults connect to config retrieval APIs",
+    "relevant": [
+      "ConfigDefaults",
+      "getDefaults",
+      "pm_Config"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "easy",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where are domain listing endpoints and secret key headers documented together",
+    "relevant": [
+      "domain-list",
+      "List of Domains",
+      "X-API-Key",
+      "Authorization"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do I create a subscription and then configure SSL certificate management",
+    "relevant": [
+      "subscription",
+      "add",
+      "certificate",
+      "SSL",
+      "TLS"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where is custom button guidance and where is SDK router registration",
+    "relevant": [
+      "button",
+      "custom_buttons",
+      "registerPage",
+      "router"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do extension packaging steps map to extension CLI packaging commands",
+    "relevant": [
+      "plesk ext",
+      "package",
+      ".zip"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where do backup restore operations and API authentication intersect",
+    "relevant": [
+      "backup",
+      "restore",
+      "X-API-Key",
+      "secret_key",
+      "Authorization"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which documents connect extension setting defaults with hook lifecycle",
+    "relevant": [
+      "ConfigDefaults",
+      "pm_Hook_Interface",
+      "Hook"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how does SDK page registration relate to custom panel button creation",
+    "relevant": [
+      "registerPage",
+      "router",
+      "button",
+      "addButton"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where can I find subscription creation in CLI and domain list in API",
+    "relevant": [
+      "subscription",
+      "add",
+      "domain-list",
+      "List of Domains"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do tls certificate operations relate to backup and restore guidance",
+    "relevant": [
+      "certificate",
+      "SSL",
+      "TLS",
+      "backup",
+      "restore"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which references combine API secret key auth and extension hook interfaces",
+    "relevant": [
+      "X-API-Key",
+      "Authorization",
+      "pm_Hook_Interface",
+      "Hook"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do I package extension artifacts and then expose a new SDK page",
+    "relevant": [
+      "package",
+      ".zip",
+      "registerPage",
+      "router"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where is service restart in cli and where is domain management in api",
+    "relevant": [
+      "plesk repair",
+      "restart",
+      "domain-list",
+      "List of Domains"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "easy",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which section explains defaults hooks and where are custom buttons documented",
+    "relevant": [
+      "ConfigDefaults",
+      "getDefaults",
+      "button",
+      "custom_buttons"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where can I find api secret key authentication and ssl lifecycle references",
+    "relevant": [
+      "X-API-Key",
+      "secret_key",
+      "Authorization",
+      "certificate",
+      "SSL"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how does backup restore guidance align with subscription lifecycle commands",
+    "relevant": [
+      "backup",
+      "restore",
+      "subscription",
+      "add"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which docs connect sdk router registration and extension package distribution",
+    "relevant": [
+      "registerPage",
+      "router",
+      "package",
+      ".zip"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where is extension config retrieval and where are hook contracts defined",
+    "relevant": [
+      "pm_Config",
+      "getDefaults",
+      "pm_Hook_Interface",
+      "Hook"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "how do custom panel button docs and api domain docs complement each other",
+    "relevant": [
+      "button",
+      "custom_buttons",
+      "domain-list",
+      "List of Domains"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "where should I look for api auth details and cli restart recovery steps",
+    "relevant": [
+      "X-API-Key",
+      "Authorization",
+      "plesk repair",
+      "restart"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "medium",
+    "source": "expanded-manual"
+  },
+  {
+    "query": "which combined references cover extension packaging, page registration, and buttons",
+    "relevant": [
+      "package",
+      ".zip",
+      "registerPage",
+      "router",
+      "button"
+    ],
+    "category": null,
+    "bucket": "multi-hop",
+    "difficulty": "hard",
+    "source": "expanded-manual"
+  }
+]

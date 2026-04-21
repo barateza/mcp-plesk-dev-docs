@@ -1,0 +1,41 @@
+[
+  {
+    "query": "where is the custom button documentation for Plesk extensions",
+    "relevant": [
+      "button",
+      "custom_buttons",
+      "addButton"
+    ],
+    "category": "guide",
+    "bucket": "structural"
+  },
+  {
+    "query": "which section explains packaging a Plesk extension for distribution",
+    "relevant": [
+      "plesk ext",
+      "package",
+      ".zip"
+    ],
+    "category": "guide",
+    "bucket": "structural"
+  },
+  {
+    "query": "where is the API reference for listing domains",
+    "relevant": [
+      "List of Domains",
+      "admin-domain-list",
+      "domain-list"
+    ],
+    "category": "api",
+    "bucket": "structural"
+  },
+  {
+    "query": "which page covers the extension config defaults hook",
+    "relevant": [
+      "ConfigDefaults",
+      "getDefaults"
+    ],
+    "category": "php-stubs",
+    "bucket": "structural"
+  }
+]

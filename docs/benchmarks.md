@@ -141,25 +141,16 @@ All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v
 
 ## Query set
 
-The benchmark uses 12 hand-labelled queries spread across all five sources.
-Each query has a list of keyword substrings that must appear in at least one top-5 result to count as a hit.
+The benchmark uses 20 hand-labelled queries spread across all five sources (expanded from the original 12).
+Each query has a list of keyword substrings for hit detection, as well as `ground_truth` and `reference_context` fields for RAGAS scoring.
 
 |#|Query|Category|Relevant keywords|
 |-|-----|--------|-----------------|
 |1|how to define default config settings for a Plesk extension|php-stubs|ConfigDefaults, getDefaults|
-|2|retrieve extension configuration values|php-stubs|pm_Config, getDefaults|
-|3|hook interface for Plesk modules|php-stubs|pm_Hook_Interface, Hook|
-|4|restart Plesk service from command line|cli|plesk repair, restart|
-|5|create a new subscription via CLI|cli|subscription, add|
-|6|list all domains via Plesk REST API|api|GET /domains, /api/v2/domains|
-|7|authenticate with Plesk API using secret key|api|X-API-Key, secret_key, Authorization|
-|8|add a custom button to Plesk panel|guide|button, custom_buttons, addButton|
-|9|package a Plesk extension for distribution|guide|plesk ext, package, .zip|
-|10|register a new page in Plesk JS SDK|js-sdk|registerPage, router|
-|11|SSL certificate management|*(all)*|certificate, SSL, TLS|
-|12|backup and restore Plesk|*(all)*|backup, restore|
+|...|...|...|...|
+|20|what happens if you call plesk bin subscription on a non-existent domain|cli|subscription, error, not found|
 
-The built-in query sets live in [`plesk_unified/benchmark_suites.py`](../plesk_unified/benchmark_suites.py).
+The built-in query sets live as JSON files in `benchmarks/suites/` and are loaded by [`plesk_unified/benchmark_suites.py`](../plesk_unified/benchmark_suites.py).
 You can provide your own queries with `--queries my_queries.json` (see the script docstring for format).
 
 ---

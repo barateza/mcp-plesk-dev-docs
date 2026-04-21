@@ -477,38 +477,43 @@ def _existing_filenames_for_category(table: Any, category: str) -> set[str]:
         return set()
 
 
-def _infer_doctype(  # noqa: C901
+def _infer_html_doctype(cat: str, trail: str) -> str:
+    if cat == "cli" or "command line" in trail:
+        return "cli-command"
+    if cat == "api" or "reference" in trail:
+        return "api-reference"
+    if cat == "guide" or "guide" in trail:
+        return "guide-topic"
+    return f"{cat}-html"
+
+
+def _infer_php_doctype(name: str) -> str:
+    if "interface" in name:
+        return "php-stub-interface"
+    if "trait" in name:
+        return "php-stub-trait"
+    return "php-stub-class"
+
+
+def _infer_js_doctype(filename: str) -> str:
+    if filename.lower().endswith(".md"):
+        return "js-sdk-guide"
+    if filename.lower().endswith(".test.js"):
+        return "js-sdk-test"
+    return "js-sdk-source"
+
+
+def _infer_doctype(
     source: Dict[str, Any], filename: str, title: str | None, breadcrumb: str | None
 ) -> str:
+    """Infer the document type based on source category, title, and file pattern."""
     stype = source.get("type", "")
-    cat = source.get("cat", "")
-
     if stype == "html":
-        trail = (breadcrumb or "").lower()
-        if cat == "cli" or "command line" in trail:
-            return "cli-command"
-        if cat == "api" or "reference" in trail:
-            return "api-reference"
-        if cat == "guide" or "guide" in trail:
-            return "guide-topic"
-        return f"{cat}-html"
-
+        return _infer_html_doctype(source.get("cat", ""), (breadcrumb or "").lower())
     if stype == "php":
-        name = (title or filename or "").lower()
-        if "interface" in name:
-            return "php-stub-interface"
-        if "trait" in name:
-            return "php-stub-trait"
-        return "php-stub-class"
-
+        return _infer_php_doctype((title or filename or "").lower())
     if stype == "js":
-        lower = filename.lower()
-        if lower.endswith(".md"):
-            return "js-sdk-guide"
-        if lower.endswith(".test.js"):
-            return "js-sdk-test"
-        return "js-sdk-source"
-
+        return _infer_js_doctype(filename)
     return "unknown"
 
 
@@ -847,8 +852,64 @@ def process_source_files(source, table, existing_files):
         chunking.persist_batch(table, cat_docs)
 
 
+def _sync_single_source(
+    source: Dict[str, Any],
+    table: Any,
+    reset_db: bool,
+    source_entries: Dict[str, Any],
+) -> str:
+    """Sync a single category source with the database."""
+    logger.info("Processing source: %s", source["cat"])
+    if not io_utils.ensure_source_exists(source):
+        msg = f"SKIPPED {source['cat']} (Source check failed)"
+        logger.error(msg)
+        return msg
+
+    fingerprint, file_count = io_utils.compute_source_fingerprint(source)
+    prev_meta = source_entries.get(source["cat"], {})
+    source_changed = reset_db or prev_meta.get("fingerprint") != fingerprint
+
+    if not source_changed:
+        msg = f"SKIPPED {source['cat']} (No source changes detected)"
+        logger.info(msg)
+        return msg
+
+    try:
+        if not reset_db:
+            # Re-index changed source from scratch to avoid stale chunks.
+            try:
+                table.delete(f"category = '{source['cat']}'")
+            except Exception:
+                logger.warning(
+                    "Could not delete existing rows for category '%s' before reindex.",
+                    source["cat"],
+                    exc_info=True,
+                )
+
+        existing_files = set()
+        if not reset_db:
+            existing_files = _existing_filenames_for_category(table, source["cat"])
+
+        process_source_files(source, table, existing_files)
+        source_entries[source["cat"]] = {
+            "fingerprint": fingerprint,
+            "file_count": file_count,
+            "indexed_at": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception:
+        logger.exception("Error processing source %s", source["cat"])
+        source_entries[source["cat"]] = {
+            "fingerprint": fingerprint,
+            "file_count": file_count,
+            "indexed_at": datetime.now(timezone.utc).isoformat(),
+            "error": "indexing-failed",
+        }
+
+    return f"Finished pass for {source['cat']}."
+
+
 @mcp.tool
-def refresh_knowledge(  # noqa: C901
+def refresh_knowledge(
     target_category: str = Field(
         "all",
         description=(
@@ -897,55 +958,7 @@ def refresh_knowledge(  # noqa: C901
         if target_category != "all" and source["cat"] != target_category:
             continue
 
-        logger.info("Processing source: %s", source["cat"])
-        if not io_utils.ensure_source_exists(source):
-            msg = f"SKIPPED {source['cat']} (Source check failed)"
-            logger.error(msg)
-            report.append(msg)
-            continue
-
-        fingerprint, file_count = io_utils.compute_source_fingerprint(source)
-        prev_meta = source_entries.get(source["cat"], {})
-        source_changed = reset_db or prev_meta.get("fingerprint") != fingerprint
-
-        if not source_changed:
-            msg = f"SKIPPED {source['cat']} (No source changes detected)"
-            logger.info(msg)
-            report.append(msg)
-            continue
-
-        try:
-            if not reset_db:
-                # Re-index changed source from scratch to avoid stale chunks.
-                try:
-                    table.delete(f"category = '{source['cat']}'")
-                except Exception:
-                    logger.warning(
-                        "Could not delete existing rows for category '%s' "
-                        "before reindex.",
-                        source["cat"],
-                        exc_info=True,
-                    )
-
-            existing_files = set()
-            if not reset_db:
-                existing_files = _existing_filenames_for_category(table, source["cat"])
-            process_source_files(source, table, existing_files)
-            source_entries[source["cat"]] = {
-                "fingerprint": fingerprint,
-                "file_count": file_count,
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
-            }
-        except Exception:
-            logger.exception("Error processing source %s", source["cat"])
-            source_entries[source["cat"]] = {
-                "fingerprint": fingerprint,
-                "file_count": file_count,
-                "indexed_at": datetime.now(timezone.utc).isoformat(),
-                "error": "indexing-failed",
-            }
-
-        msg = f"Finished pass for {source['cat']}."
+        msg = _sync_single_source(source, table, reset_db, source_entries)
         report.append(msg)
 
     _save_source_state(source_state)
@@ -962,26 +975,11 @@ def refresh_knowledge(  # noqa: C901
     return "\n".join(report)
 
 
-@mcp.tool
-def search_plesk_unified(query: str, category: str | None = None) -> str:  # noqa: C901
-    """
-    Search the unified knowledge base and return up to 5 formatted results.
-
-    `category` may be used to filter results to one of the indexed
-    source categories (e.g. 'api', 'cli', 'guide', 'php-stubs', 'js-sdk').
-    Results are returned as readable text blocks including title, path,
-    filename and a relevance score between 0 and 1.
-    """
-    _validate_category(category)
-
-    # Truncate query for logging to avoid leaking sensitive data
-    safe_query = (query[:100] + "...") if len(query) > 100 else query
-    logger.info("Search request: q='%s' category='%s'", safe_query, category)
-
+def _get_search_candidates(
+    query: str, category: str | None, n_candidates: int
+) -> list[dict[str, Any]]:
+    """Retrieve initial candidate pool from LanceDB or TurboQuant."""
     profile = _get_profile()
-    reranker = get_reranker()
-    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "25"))
-
     if getattr(profile, "use_turboquant", False):
         query_vec = np.asarray(
             get_embedding_model().compute_query_embeddings(query)[0],
@@ -1015,15 +1013,13 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:  # noq
             dist = float(rc.get("_distance") or 0.0)
             rc["_relevance"] = float(1.0 / (1.0 + dist))
             candidates.append(rc)
+    return candidates
 
-    # Apply cross-encoder reranker for precise relevance scoring.
-    if reranker is not None and candidates:
-        candidates = _rerank_and_score(query, candidates, reranker)
-    else:
-        candidates.sort(key=lambda x: x["_relevance"], reverse=True)
 
-    # Deduplicate: keep only the top-ranked chunk per source file.
-    results = _deduplicate_by_filename(candidates)[:5]
+def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:
+    """Check top result against profile-aware threshold. Returns error msg if failed."""
+    if not results:
+        return "I could not find a reliable answer."
 
     profile_name = os.environ.get("PLESK_MODEL_PROFILE", "full-tq")
     default_threshold = 0.55
@@ -1035,8 +1031,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:  # noq
     min_relevance = float(
         os.environ.get("PLESK_MIN_RELEVANCE_THRESHOLD", str(default_threshold))
     )
-    if not results:
-        return "I could not find a reliable answer."
+
     if results[0].get("_relevance", 0.0) < min_relevance:
         logger.info(
             "Search confidence below threshold (%.4f < %.4f) for profile '%s'. "
@@ -1046,13 +1041,11 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:  # noq
             profile_name,
         )
         return "I could not find a reliable answer."
+    return None
 
-    logger.info(
-        "Search returning %d results (from %d candidates).",
-        len(results),
-        len(candidates),
-    )
 
+def _format_search_results(results: list[dict[str, Any]]) -> str:
+    """Convert result dicts into formatted string for MCP."""
     formatted_results = []
     for r in results:
         relevance = r.get("_relevance", 0.0)
@@ -1066,8 +1059,50 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:  # noq
             f"Relevance: {relevance:.4f}\n\n"
             f"{r.get('text', '')}\n"
         )
-
     return "\n".join(formatted_results)
+
+
+@mcp.tool
+def search_plesk_unified(query: str, category: str | None = None) -> str:
+    """
+    Search the unified knowledge base and return up to 5 formatted results.
+
+    `category` may be used to filter results to one of the indexed
+    source categories (e.g. 'api', 'cli', 'guide', 'php-stubs', 'js-sdk').
+    Results are returned as readable text blocks including title, path,
+    filename and a relevance score between 0 and 1.
+    """
+    _validate_category(category)
+
+    # Truncate query for logging to avoid leaking sensitive data
+    safe_query = (query[:100] + "...") if len(query) > 100 else query
+    logger.info("Search request: q='%s' category='%s'", safe_query, category)
+
+    reranker = get_reranker()
+    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "25"))
+
+    candidates = _get_search_candidates(query, category, n_candidates)
+
+    # Apply cross-encoder reranker for precise relevance scoring.
+    if reranker is not None and candidates:
+        candidates = _rerank_and_score(query, candidates, reranker)
+    else:
+        candidates.sort(key=lambda x: x["_relevance"], reverse=True)
+
+    # Deduplicate: keep only the top-ranked chunk per source file.
+    results = _deduplicate_by_filename(candidates)[:5]
+
+    error_msg = _apply_relevance_gate(results)
+    if error_msg:
+        return error_msg
+
+    logger.info(
+        "Search returning %d results (from %d candidates).",
+        len(results),
+        len(candidates),
+    )
+
+    return _format_search_results(results)
 
 
 if __name__ == "__main__":

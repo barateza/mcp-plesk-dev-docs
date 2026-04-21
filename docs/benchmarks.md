@@ -9,24 +9,24 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 **Hardware:** NVIDIA GeForce RTX 4070 Super (12 GB VRAM)
 **Python:** 3.12.10
-**Query set:** 20 queries (Expanded control suite with RAGAS support)
+**Query set:** 20 queries (Expanded control suite with RAGAS evaluation)
 
 ### Summary
 
-|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency|Est. RAM|
-|--------|------------|---|----|-----|----------|--------|
-|`full`|BAAI/bge-m3|1024|85.0%|0.792|3.55 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.692|**0.18 s**|~1 300 MB|
-
-*Note: Faithfulness and Context Recall metrics require an LLM judge via OPENROUTER_API_KEY and were not captured in this run.*
+|Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
+|--------|------------|---|----|-----|-----|------|----|----------|--------|
+|`full`|BAAI/bge-m3|1024|85.0%|0.792|0.065|0.525|0.720|3.59 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.692|0.045|0.545|0.715|**0.39 s**|~1 300 MB|
 
 ### Observations
 
-1. **Expanded query set increases task difficulty.** The addition of 8 new targeted queries (totaling 20) has revealed retrieval gaps in both the `full` and `full-tq` profiles, particularly in the API and JS-SDK categories.
+1. **RAGAS scoring provides deep quality insights.** While Hit Rate and MRR remain stable indicators of retrieval success, the low `faithfulness` scores suggest that the retrieved context, while containing relevant keywords, may not always satisfy the strict grounding requirements of the LLM judge.
 
-2. **TurboQuant latency remains class-leading.** Even with a larger query set and 5-bit compression, `full-tq` maintains sub-200ms average latency, being ~20x faster than the full precision model on the same hardware.
+2. **Context Precision vs. Recall.** The system shows strong `Context Precision` (~0.72), indicating that top-ranked chunks are generally relevant. `Context Recall` (~0.53) suggests there is room to improve how much of the necessary information is retrieved in the top-5 window for more complex queries.
 
-3. **RAGAS scoring integration complete.** The benchmarking pipeline is now ready to use LLM-based evaluation for `faithfulness` and `context_recall` as soon as API credentials are provided.
+3. **Expanded query set increases task difficulty.** The addition of 8 new targeted queries (totaling 20) has revealed retrieval gaps in both profiles, particularly in the API and JS-SDK categories, providing a clearer roadmap for future index refinements.
+
+4. **TurboQuant maintains speed advantage.** Even with the overhead of a larger query set and RAGAS evaluation, `full-tq` remains significantly faster than the full-precision model, demonstrating the efficiency of 5-bit compression on CUDA.
 
 ---
 

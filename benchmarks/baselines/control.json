@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": "2026-04-21T02:00:00.000000+00:00",
+  "created_at": "2026-04-21T02:32:27.287265+00:00",
   "runs": [
     {
       "suite": "control",
@@ -9,10 +9,11 @@
       "routing_policy": "baseline-only",
       "n_runs": 1,
       "hit_rate": 0.85,
-      "mrr": 0.7916666666666666,
-      "faithfulness": 0.0,
-      "context_recall": 0.0,
-      "avg_latency_s": 3.5494485083332934
+      "mrr": 0.7916666666666667,
+      "avg_latency_s": 3.5934928250002485,
+      "faithfulness": 0.065,
+      "context_recall": 0.525,
+      "context_precision": 0.72
     },
     {
       "suite": "control",
@@ -22,9 +23,10 @@
       "n_runs": 1,
       "hit_rate": 0.75,
       "mrr": 0.6916666666666667,
-      "faithfulness": 0.0,
-      "context_recall": 0.0,
-      "avg_latency_s": 0.18387202499930088
+      "avg_latency_s": 0.39439928000047075,
+      "faithfulness": 0.045,
+      "context_recall": 0.545,
+      "context_precision": 0.7150000000000001
     }
   ]
 }

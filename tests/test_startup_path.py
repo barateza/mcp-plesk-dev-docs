@@ -252,7 +252,9 @@ def test_search_accepts_valid_category(monkeypatch):
 
     result = server.search_plesk_unified("some query", category="api")
     assert isinstance(result, str)
-    fake_search.where.assert_called_once_with("category = 'api'")
+    # where() is called for both vector and FTS search
+    assert fake_search.where.call_count >= 1
+    fake_search.where.assert_any_call("category = 'api'")
 
 
 def test_search_with_no_category_is_allowed(monkeypatch):
@@ -336,18 +338,25 @@ def test_search_result_includes_doc_url_for_html_category(monkeypatch):
     import plesk_unified.server as server
 
     fake_table = MagicMock()
-    fake_table.search.return_value = _make_fake_search(
-        [
-            {
-                "text": "pm_Config::get('timeout');",
-                "title": "Custom Settings",
-                "filename": "77178.htm",
-                "category": "guide",
-                "breadcrumb": "Extensions > Settings",
-                "_distance": 0.1,
-            }
-        ]
-    )
+
+    def search_side_effect(query, query_type=None):
+        if query_type == "fts":
+            # Return empty search result to avoid RRF merging (which has low scores)
+            return _make_fake_search([])
+        return _make_fake_search(
+            [
+                {
+                    "text": "pm_Config::get('timeout');",
+                    "title": "Custom Settings",
+                    "filename": "77178.htm",
+                    "category": "guide",
+                    "breadcrumb": "Extensions > Settings",
+                    "_distance": 0.1,
+                }
+            ]
+        )
+
+    fake_table.search.side_effect = search_side_effect
 
     monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
     monkeypatch.setattr(server, "get_table", lambda: fake_table)

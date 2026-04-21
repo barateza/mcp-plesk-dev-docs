@@ -34,6 +34,7 @@ dependencies = [
     "pydantic>=2.10.0",
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
+    "markdownify>=0.14.1",
 ]
 
 [project.urls]
@@ -62,7 +63,6 @@ test = [
     "pytest>=8.0.0",
 ]
 tools = [
-    "markdownify>=0.14.1",
     "requests>=2.32.0",
 ]
 

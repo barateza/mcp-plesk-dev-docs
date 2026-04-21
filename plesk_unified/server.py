@@ -86,7 +86,12 @@ try:
     from plesk_unified import chunking, html_utils, io_utils, platform_utils
     from plesk_unified.model_config import get_active_profile, list_profiles
     from plesk_unified.tq_index import TurboQuantIndex
-except ImportError:
+except (ImportError, ModuleNotFoundError) as e:
+    # Only fallback if 'plesk_unified' itself is the missing module.
+    # This prevents swallowing errors when a dependency of plesk_unified is missing.
+    if hasattr(e, "name") and e.name is not None and "plesk_unified" not in e.name:
+        raise
+
     import chunking
     import html_utils
     import io_utils

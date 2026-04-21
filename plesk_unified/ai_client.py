@@ -15,9 +15,9 @@ DEFAULT_MODELS = [
 ]
 
 # RAGAS judge model — chosen for instruction-following + low verbosity on strict
-# "Score 0.0–1.0" tasks. Haiku is the fallback when primary fails.
+# "Score 0.0–1.0" tasks.
 RAGAS_DEFAULT_MODELS = [
-    "google/gemini-2.5-flash-lite",
+    "google/gemini-2.0-flash",
     "anthropic/claude-3-haiku",
 ]
 
@@ -29,6 +29,46 @@ class AIClient:
         self.api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
         if not self.api_key:
             logger.warning("OPENROUTER_API_KEY is not set. AI calls will fail.")
+
+    def generate_answer(
+        self, query: str, context: str, model_list: Optional[List[str]] = None
+    ) -> str:
+        """
+        Generate an answer to the query based strictly on the provided context.
+        """
+        models = model_list if model_list is not None else DEFAULT_MODELS
+
+        for model in models:
+            try:
+                content = (
+                    f"CONTEXT:\n{context}\n\n"
+                    f"QUERY: {query}\n\n"
+                    "Answer the query based ONLY on the provided context. "
+                    "If the information is not present, say 'Information not found'."
+                )
+
+                payload = {
+                    "model": model,
+                    "messages": [{"role": "user", "content": content}],
+                    "max_tokens": 500,
+                }
+
+                response = requests.post(
+                    url="https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    data=json.dumps(payload),
+                    timeout=20,
+                )
+                if response.status_code == 200:
+                    return response.json()["choices"][0]["message"]["content"].strip()
+            except Exception as e:
+                logger.debug(f"Answer Model {model} failed with exception: {e}")
+                continue
+
+        return "Error generating answer."
 
     def generate_description(
         self, text: str, model_list: Optional[List[str]] = None

@@ -171,7 +171,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
     """Build a list of document dicts suitable for DB insertion.
 
     Each record includes `text`, `title`, `filename`, `category`, `breadcrumb`,
-    and `endpoint`.
+    `doctype`, and `endpoint`.
 
     The `text` field is enriched with title and breadcrumb for better retrieval.
     """
@@ -190,6 +190,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
                 "filename": filename,
                 "category": meta.get("category"),
                 "breadcrumb": breadcrumb,
+                "doctype": meta.get("doctype", "unknown"),
                 "endpoint": meta.get("endpoint"),  # Prepare for Task E
                 "chunk_id": i,  # Task D
             }

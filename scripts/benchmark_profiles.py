@@ -348,10 +348,12 @@ def run_benchmark(
         current_ragas = {}
         if ragas and ai_client:
             retrieved_context = "\n---\n".join(result_texts)
-            answer = q.get("ground_truth", "No ground truth provided.")
+            # Fix faithfulness: generate a real LLM answer based on retrieved context
+            # rather than using the ground truth as the "answer" field.
+            gen_answer = ai_client.generate_answer(q["query"], retrieved_context)
             current_ragas = evaluate_ragas_metrics(
                 q["query"],
-                answer,
+                gen_answer,
                 retrieved_context,
                 q.get("ground_truth"),
                 q.get("reference_context"),

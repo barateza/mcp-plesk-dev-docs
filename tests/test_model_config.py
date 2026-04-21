@@ -36,7 +36,7 @@ def reload_config(env: dict):
 
 
 class TestProfileSelection:
-    def test_default_profile_is_medium(self):
+    def test_default_profile_is_full_tq(self):
         mc = reload_config({})
         p = mc.get_active_profile()
         assert p.name == "full-tq"

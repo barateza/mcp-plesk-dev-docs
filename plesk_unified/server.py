@@ -286,6 +286,7 @@ def get_schema() -> Any:
         filename: str
         category: str
         breadcrumb: str
+        doctype: str  # Task: Persist doctype to enable doctype-aware reranking
         endpoint: Optional[str] = None
         chunk_id: int  # Task D: Sequential ID within filename
 
@@ -833,6 +834,7 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
             "title": title,
             "category": source["cat"],
             "breadcrumb": breadcrumb,
+            "doctype": doctype,
             "endpoint": endpoint,
         },
     )

@@ -42,20 +42,20 @@ Following Phase 6, several architectural improvements were implemented to recove
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|0.440|0.680|**0.850**|1.16 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|**0.495**|**0.710**|0.830|1.28 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.370|0.535|0.745|3.72 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.360|0.515|0.755|**0.40 s**|~1 300 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|0.410|**0.725**|0.840|1.17 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|**0.635**|0.680|**0.840**|1.28 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.285|0.510|0.775|3.67 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.410|0.535|0.700|**0.38 s**|~1 300 MB|
 
 ### Observations
 
-1. **`light` profile maintains surprising retrieval dominance.** On the expanded 20-query suite, the smallest profile (`light`) leads in `MRR@5` (0.800) and `Context Precision` (0.850), reaffirming its efficiency for the Plesk English corpus.
+1. **4-bit TurboQuant achieves quality parity.** Moving from 5-bit to 4-bit quantization while relaxing deduplication (allowing 2 chunks per file) resulted in identical HR/MRR between `full` and `full-tq`, with a 10x latency advantage (0.38s vs 3.67s).
 
-2. **`medium` profile excels in Fact Retrieval.** With the highest `faithfulness` (0.495) and `context_recall` (0.710), the `medium` profile is the most effective at capturing complete and grounded context for complex technical queries.
+2. **Faithfulness improves for Full-TQ.** The combination of answer-grounding constraints and neighbor expansion for the top-5 results (previously top-3) has stabilized `faithfulness` for the `full-tq` profile at 0.410.
 
-3. **TurboQuant latency remains class-leading.** `full-tq` delivers retrieval metrics identical to the full-precision `full` model while being ~9x faster (0.40s vs 3.72s), demonstrating massive efficiency gains from 5-bit quantization.
+3. **`medium` profile leading in Groundedness.** The `medium` profile remains the most faithful (0.635), suggesting its English-specific embeddings combined with structural normalization provide the best context for factual grounding.
 
-4. **Consistency across CUDA runs.** Re-running the entire baseline from scratch shows stable retrieval patterns, with a consistent 75-80% Hit Rate across all profiles, identifying clear targets for future documentation indexing improvements.
+4. **Consistency across CUDA runs.** Re-running the baseline with the latest codebase improvements confirms a stable 75-80% Hit Rate across all profiles, with clear paths forward for further recall improvements in the API and JS-SDK categories.
 
 ---
 

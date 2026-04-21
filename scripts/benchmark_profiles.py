@@ -415,7 +415,7 @@ def run_benchmark(
 
 def _init_tq_index(srv: Any) -> TurboQuantIndex:
     """Initialise TQ index for the full-tq profile."""
-    tq_bits = int(os.getenv("TQ_BITS", "3"))
+    tq_bits = int(os.getenv("TQ_BITS", "4"))
     tq_index = TurboQuantIndex(
         dim=1024,
         bits=tq_bits,

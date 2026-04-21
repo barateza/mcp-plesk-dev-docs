@@ -80,12 +80,12 @@ _PROFILES: dict[str, ModelProfile] = {
         reranker_model="BAAI/bge-reranker-base",
         reranker_enabled=True,
         description=(
-            "TurboQuant 5-bit profile with category-aware retrieval. "
+            "TurboQuant 4-bit profile with category-aware retrieval. "
             "Quality parity target with significantly lower latency."
         ),
         approx_ram_mb=1300,
         use_turboquant=True,
-        tq_bits=5,
+        tq_bits=4,
         tq_top_k=25,
     ),
 }

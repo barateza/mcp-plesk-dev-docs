@@ -790,14 +790,15 @@ def _rerank_and_score(query: str, candidates: list[dict], reranker: Any) -> list
     return scored
 
 
-def _deduplicate_by_filename(results: list[dict]) -> list[dict]:
-    """Return one entry per source file, keeping the highest-ranked chunk."""
-    seen: set[str] = set()
+def _deduplicate_by_filename(results: list[dict], max_per_file: int = 1) -> list[dict]:
+    """Return up to *max_per_file* entries per source file."""
+    counts: dict[str, int] = {}
     deduped: list[dict] = []
     for r in results:
         fname = r.get("filename", "")
-        if fname not in seen:
-            seen.add(fname)
+        count = counts.get(fname, 0)
+        if count < max_per_file:
+            counts[fname] = count + 1
             deduped.append(r)
     return deduped
 
@@ -1128,12 +1129,12 @@ def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:
 
 
 def _expand_context_with_neighbors(results: list[dict], table: Any) -> list[dict]:
-    """Fetch adjacent chunks for the top-3 results to provide richer context."""
+    """Fetch adjacent chunks for the top-5 results to provide richer context."""
     if not results:
         return results
 
-    # Only expand the top-3 results to balance context vs noise
-    to_expand = results[:3]
+    # Expand top-5 results to improve context recall
+    to_expand = results[:5]
     expanded_results = []
 
     for r in results:
@@ -1211,6 +1212,12 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     """
     Search the unified knowledge base and return up to 5 formatted results.
 
+    IMPORTANT: When using these results to answer a user's question, you MUST
+    rely ONLY on the facts provided in the text. Cite the source using the filename.
+    If the provided context does not contain enough information to answer the
+    query, clearly state that you do not have enough information rather than
+    guessing or hallucinating facts.
+
     `category` may be used to filter results to one of the indexed
     source categories (e.g. 'api', 'cli', 'guide', 'php-stubs', 'js-sdk').
     Results are returned as readable text blocks including title, path,
@@ -1233,8 +1240,8 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     else:
         candidates.sort(key=lambda x: x["_relevance"], reverse=True)
 
-    # Deduplicate: keep only the top-ranked chunk per source file.
-    results = _deduplicate_by_filename(candidates)[:5]
+    # Deduplicate: allow up to 2 chunks per source file for higher recall.
+    results = _deduplicate_by_filename(candidates, max_per_file=2)[:5]
 
     error_msg = _apply_relevance_gate(results)
     if error_msg:

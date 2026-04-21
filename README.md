@@ -478,4 +478,4 @@ MIT. See [LICENSE](LICENSE).
 
 ---
 
-*Built to make Plesk support faster. If you work with Plesk daily, this probably saves you time.*
+*Built to make Plesk extension development faster. If you work with Plesk daily, this probably saves you time.*

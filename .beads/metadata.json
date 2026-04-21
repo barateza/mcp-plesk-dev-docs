@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "mcp_plesk_unified",
+  "project_id": "401f14bf-0a58-4f51-b0a5-a76b2c6d2696"
+}

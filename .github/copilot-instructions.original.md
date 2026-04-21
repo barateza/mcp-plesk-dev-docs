@@ -1,7 +1,7 @@
 # Plesk Unified MCP Server - AI Agent Instructions
 
 ## Project Overview
-Plesk Unified is Model Context Protocol (MCP) server that indexes and retrieves Plesk docs via semantic search w/ vector embeddings and intelligent reranking. It aggregates docs from multiple sources (API, CLI, Admin Guide, PHP stubs, JS SDK) into unified knowledge base powered by LanceDB.
+Plesk Unified is a Model Context Protocol (MCP) server that indexes and retrieves Plesk documentation via semantic search with vector embeddings and intelligent reranking. It aggregates documentation from multiple sources (API, CLI, Admin Guide, PHP stubs, JS SDK) into a unified knowledge base powered by LanceDB.
 
 ## Architecture & Components
 
@@ -9,16 +9,16 @@ Plesk Unified is Model Context Protocol (MCP) server that indexes and retrieves 
 - **Server Framework**: FastMCP (Model Context Protocol)
 - **Embeddings**: BAAI/bge-m3 (multilingual, bidirectional)
 - **Reranking**: BAAI/bge-reranker-base (cross-encoder for result ranking)
-- **Vector DB**: LanceDB w/ Apache Arrow backend
+- **Vector DB**: LanceDB with Apache Arrow backend
 - **Parsing**: BeautifulSoup4 for HTML, raw text for PHP/JS
 
 ### Data Flow
-1. **Sources** → Multiple Plesk docs sources (5 categories) w/ optional Git auto-cloning
+1. **Sources** → Multiple Plesk documentation sources (5 categories) with optional Git auto-cloning
 2. **Parsing** → Category-specific parsers extract text, title, breadcrumb hierarchy
 3. **Chunking** → Variable chunk sizes by type (HTML: 3000, PHP: 6000, JS: 5000 chars)
 4. **Embedding** → BAAI/bge-m3 generates vectors (auto-downloader model on first run)
-5. **Storage** → LanceDB table w/ `UnifiedSchema` (vector, text, title, filename, category, breadcrumb)
-6. **Retrieval** → Query search → rerank → top-5 results w/ relevance scores
+5. **Storage** → LanceDB table with `UnifiedSchema` (vector, text, title, filename, category, breadcrumb)
+6. **Retrieval** → Query search → rerank → top-5 results with relevance scores
 
 ### Key Files
 - [server.py](server.py) - Main entry point; contains all tools, parsers, indexing logic
@@ -43,43 +43,43 @@ Edit `SOURCES` list in [server.py](server.py#L32-L50). Structure:
 - **repo_url** triggers automatic Git cloning if source missing
 
 ### Category Defaults
-- `html`3000-char chunks, TOC-based metadata extraction
-- `php`6000-char chunks, raw parsing
-- `js`5000-char chunks, raw parsing
+- `html`: 3000-char chunks, TOC-based metadata extraction
+- `php`: 6000-char chunks, raw parsing
+- `js`: 5000-char chunks, raw parsing
 
 ### Git Integration for Auto-Cloning
-Sources w/ `repo_url` trigger automatic Git cloning if source dir is missing or empty:
+Sources with `repo_url` trigger automatic Git cloning if the source directory is missing or empty:
 
 **Behavior:**
 - If `path` exists and is non-empty: skips cloning
 - If `path` missing or empty: clones repo from `repo_url`
-- Cloning failures are silent; category is skipped w/ report entry
+- Cloning failures are silent; category is skipped with report entry
 
 ## MCP Tool API Reference
 
 ### `refresh_knowledge(target_category, reset_db)`
-**Purpose**: Indexes Plesk docs into LanceDB.
+**Purpose**: Indexes Plesk documentation into LanceDB.
 
 **Parameters:**
-- `target_category` (str, default: `"all"`) - Category to index. Choices: `"guide"` `"cli"` `"api"` `"php-stubs"` `"js-sdk"` `"all"`
+- `target_category` (str, default: `"all"`) - Category to index. Choices: `"guide"`, `"cli"`, `"api"`, `"php-stubs"`, `"js-sdk"`, or `"all"`
 - `reset_db` (bool, default: `False`) - Wipe database on start. Use `True` **only** for first run or full reindex
 
-**Returns:** String report w/ per-category status
+**Returns:** String report with per-category status
 
 **Behavior:**
-- On `reset_db=False`Skips already-indexed files by filename (incremental mode)
-- On `reset_db=True`Clears entire database before indexing
+- On `reset_db=False`: Skips already-indexed files by filename (incremental mode)
+- On `reset_db=True`: Clears entire database before indexing
 - Logs progress via stderr (`[LOG]` prefixed messages)
 - Silent failures on individual file parse errors
 
 ### `search_plesk_unified(query, category)`
-**Purpose**: Semantic search w/ reranking over indexed docs.
+**Purpose**: Semantic search with reranking over indexed documentation.
 
 **Parameters:**
 - `query` (str, required) - Natural language search query
-- `category` (str, optional) - Filter to single category, `None` for all
+- `category` (str, optional) - Filter to single category, or `None` for all
 
-**Returns:** String w/ up to 5 formatted results w/ relevance scores (0.0–1.0)
+**Returns:** String with up to 5 formatted results with relevance scores (0.0–1.0)
 
 **Performance:** ~100–500ms per query
 
@@ -95,12 +95,12 @@ TOC (table of contents) from `toc.json` provides breadcrumb hierarchy and titles
 
 ### Reranking Strategy
 - Initial search retrieves 25 results fast via vector similarity
-- CrossEncoderReranker reduces to top-5 w/ refined relevance scores
+- CrossEncoderReranker reduces to top-5 with refined relevance scores
 - Relevance score returned to users for transparency
 
 ### Error Handling
 - Silent failures on parse errors (returns `None`)
-- Missing sources skipped w/ report entry
+- Missing sources skipped with report entry
 - Encoding errors ignored (`encoding="utf-8", errors="ignore"`)
 
 ## Common Tasks
@@ -121,7 +121,7 @@ mcp.refresh_knowledge(target_category="cli", reset_db=False)
 - Check `_relevance_score` in results for reranking confidence
 
 ### Extend Parsers
-- Add new `parse_*` fn following signature: `(file_path, [toc_metadata]) → (title, breadcrumb, text)`
+- Add new `parse_*` function following signature: `(file_path, [toc_metadata]) → (title, breadcrumb, text)`
 - Update file type routing in `refresh_knowledge` loop
 - Update chunk size for type in `SOURCES` metadata
 
@@ -173,10 +173,10 @@ search_plesk_unified(query="button", category="api")
 
 ## Critical Implementation Details
 
-1. **Model Auto-Download**: First run downloads ~2GB ML models silently w/ `TQDM_DISABLE`  `TRANSFORMERS_VERBOSITY=error` to suppress noise
-2. **Chunk Overlap**: 500-char overlap btw chunks prevents semantic breaks
-3. **LanceDB Table**: `UnifiedSchema` w/ embedding metadata ensures consistency; reuse w/ `get_table(create_new=False)` for incremental updates
-4. **Category Filtering**: Applied at query time via LanceDB `.where()` clause, not at index time—supports broad indexing w/ flexible filtering
+1. **Model Auto-Download**: First run downloads ~2GB ML models silently with `TQDM_DISABLE` and `TRANSFORMERS_VERBOSITY=error` to suppress noise
+2. **Chunk Overlap**: 500-char overlap between chunks prevents semantic breaks
+3. **LanceDB Table**: `UnifiedSchema` with embedding metadata ensures consistency; reuse with `get_table(create_new=False)` for incremental updates
+4. **Category Filtering**: Applied at query time via LanceDB `.where()` clause, not at index time—supports broad indexing with flexible filtering
 5. **Filename Deduplication**: Prevents re-indexing same file when `reset_db=False` by storing processed filenames
 
 ## Performance & Resource Considerations
@@ -202,7 +202,7 @@ search_plesk_unified(query="button", category="api")
 
 ### Optimization Tips
 - Category filtering reduces rerank workload
-- Batch indexing w/ `reset_db=False` is much faster than full reindex
+- Batch indexing with `reset_db=False` is much faster than full reindex
 - Use `BATCH_SIZE_FILES = 10` as baseline; increase to 25 if memory permits
 
 ## Common Pitfalls & Troubleshooting
@@ -215,15 +215,15 @@ search_plesk_unified(query="button", category="api")
 ### First-Run Model Download Fails
 - **Problem**: Server hangs or crashes during first initialization
 - **Root Cause**: ~2GB model downloads over slow network
-- **Fix**: Run w/ increased timeout; check internet connectivity. Models cache to `~/.cache/huggingface/`
+- **Fix**: Run with increased timeout; check internet connectivity. Models cache to `~/.cache/huggingface/`
 
 ### Database Corruption After Interrupt
 - **Problem**: LanceDB table is corrupted or inaccessible after interrupting `python server.py`
 - **Root Cause**: LanceDB batch writes aren't atomic; partial data committed
-- **Fix**: Delete `storage/lancedb/` and rerun w/ `reset_db=True`
+- **Fix**: Delete `storage/lancedb/` and rerun with `reset_db=True`
 
 ### TOC Mismatch & Missing Breadcrumbs
-- **Problem**: Some HTML files index w/o breadcrumb context
+- **Problem**: Some HTML files index without breadcrumb context
 - **Root Cause**: `toc.json` filenames don't match actual files (e.g., `28709.htm` vs `28709.html`)
 - **Fix**: Verify filename matching in `load_toc_map()` output; fallback uses `<title>` tag only
 
@@ -236,12 +236,12 @@ search_plesk_unified(query="button", category="api")
 
 ### UnifiedSchema Fields
 LanceDB table `plesk_knowledge` has this structure:
-- `vector`1024-dim embedding (BAAI/bge-m3) — auto-indexed for similarity search
-- `text`Full document chunk w/ category prefix and breadcrumb context
-- `title`Page/file title from TOC `<title>` tag
-- `filename`Source filename (e.g., `28709.htm` `Button.php`)
-- `category`Source category (`"guide"` `"cli"` `"api"` `"php-stubs"` `"js-sdk"`)
-- `breadcrumb`Hierarchical path from TOC (e.g., `"Extensions > UI > Buttons"`)
+- `vector`: 1024-dim embedding (BAAI/bge-m3) — auto-indexed for similarity search
+- `text`: Full document chunk with category prefix and breadcrumb context
+- `title`: Page/file title from TOC or `<title>` tag
+- `filename`: Source filename (e.g., `28709.htm`, `Button.php`)
+- `category`: Source category (`"guide"`, `"cli"`, `"api"`, `"php-stubs"`, `"js-sdk"`)
+- `breadcrumb`: Hierarchical path from TOC (e.g., `"Extensions > UI > Buttons"`)
 
 ### Direct LanceDB Queries (for debugging)
 ```python
@@ -268,8 +268,8 @@ print(f"Indexed {len(files)} files in php-stubs")
 ## Testing & Validation
 
 - No automated tests in repo; verify via:
-  - Manual indexing: `python server.py` completes w/o errors
-  - Search query returns results w/ valid relevance scores
+  - Manual indexing: `python server.py` completes without errors
+  - Search query returns results with valid relevance scores
   - LanceDB persisted in `storage/lancedb/` survives restarts
 
 ## Dependencies & Environment
@@ -278,4 +278,3 @@ print(f"Indexed {len(files)} files in php-stubs")
 - **Key Packages**: fastmcp (≥2.14.5), lancedb (≥0.29.1), sentence-transformers (≥5.2.2)
 - **Storage**: ~2GB models + ~1GB embeddings + variable KB size
 - **Virtual Environment**: `.venv/` folder, activated before running
-

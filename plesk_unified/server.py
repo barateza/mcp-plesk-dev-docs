@@ -931,11 +931,11 @@ def _sync_single_source(
 
     fingerprint, file_count = io_utils.compute_source_fingerprint(source)
     prev_meta = source_entries.get(source["cat"], {})
-    
-    # Force re-index if reset_db is true, or source files changed, or CHUNK_VERSION bumped
+
+    # Force re-index if reset_db is true, source files changed, or CHUNK_VERSION bumped
     source_changed = (
-        reset_db 
-        or prev_meta.get("fingerprint") != fingerprint 
+        reset_db
+        or prev_meta.get("fingerprint") != fingerprint
         or prev_meta.get("chunk_version") != CHUNK_VERSION
     )
 
@@ -962,17 +962,26 @@ def _sync_single_source(
             existing_files = _existing_filenames_for_category(table, source["cat"])
 
         # Returns the set of all chunk hashes that should exist for this source
-        active_hashes = process_source_files(source, table, existing_files, existing_hashes)
+        active_hashes = process_source_files(
+            source, table, existing_files, existing_hashes
+        )
 
         if not reset_db:
-            # Delete stale chunks (hashes that were in DB but are no longer in the source)
+            # Delete stale chunks (hashes that were in DB but are no longer in source)
             stale_hashes = list(existing_hashes - active_hashes)
             if stale_hashes:
-                logger.info("Deleting %d stale chunks for %s...", len(stale_hashes), source["cat"])
+                logger.info(
+                    "Deleting %d stale chunks for %s...",
+                    len(stale_hashes),
+                    source["cat"],
+                )
                 for i in range(0, len(stale_hashes), 500):
                     batch = stale_hashes[i : i + 500]
                     hash_list_str = ", ".join([f"'{h}'" for h in batch])
-                    table.delete(f"category = '{source['cat']}' AND chunk_hash IN ({hash_list_str})")
+                    table.delete(
+                        f"category = '{source['cat']}' "
+                        f"AND chunk_hash IN ({hash_list_str})"
+                    )
 
         source_entries[source["cat"]] = {
             "fingerprint": fingerprint,
@@ -993,6 +1002,7 @@ def _sync_single_source(
 
 
 import concurrent.futures
+
 
 @mcp.tool
 def refresh_knowledge(

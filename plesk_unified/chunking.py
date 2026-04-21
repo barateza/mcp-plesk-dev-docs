@@ -1,5 +1,10 @@
+import hashlib
 import re
 from typing import Dict, List
+
+# Bump this version whenever the chunking logic or context injection changes
+# to force a re-embedding of changed chunks while preserving identical ones.
+CHUNK_VERSION = "v2"
 
 
 def chunk_by_chars(text: str, size: int = 1500, overlap: int = 200) -> List[str]:
@@ -181,7 +186,18 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
 
     for i, c in enumerate(chunks):
         # Task B: Prepend context to the text before embedding.
-        enriched_text = f"[Title: {title} | Path: {breadcrumb}] \n\n {c}"
+        category = meta.get("category", "unknown").upper()
+        doctype = meta.get("doctype", "unknown")
+        enriched_text = (
+            f"[{category}] DocType: {doctype}\n"
+            f"[Title: {title} | Path: {breadcrumb}] \n\n {c}"
+        )
+
+        # Strategy 2: Per-chunk fingerprinting
+        # Includes enriched_text (which has title/breadcrumb) and logic version.
+        h = hashlib.sha256()
+        h.update(f"{CHUNK_VERSION}:{enriched_text}".encode("utf-8"))
+        chunk_hash = h.hexdigest()
 
         records.append(
             {
@@ -193,6 +209,7 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
                 "doctype": meta.get("doctype", "unknown"),
                 "endpoint": meta.get("endpoint"),  # Prepare for Task E
                 "chunk_id": i,  # Task D
+                "chunk_hash": chunk_hash,
             }
         )
     return records

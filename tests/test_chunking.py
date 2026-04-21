@@ -26,6 +26,23 @@ def test_build_doc_records():
     assert len(recs) == 2
     assert recs[0]["title"] == "T"
     assert recs[1]["filename"] == "file.html"
+    assert "chunk_hash" in recs[0]
+    assert len(recs[0]["chunk_hash"]) == 64  # SHA-256 hex
+
+
+def test_chunk_hash_changes_with_version(monkeypatch):
+    import plesk_unified.chunking as chunking
+
+    chunks = ["content"]
+    meta = {"title": "T", "category": "cat", "breadcrumb": "B"}
+
+    monkeypatch.setattr(chunking, "CHUNK_VERSION", "v1")
+    recs_v1 = build_doc_records("f.html", chunks, meta)
+
+    monkeypatch.setattr(chunking, "CHUNK_VERSION", "v2")
+    recs_v2 = build_doc_records("f.html", chunks, meta)
+
+    assert recs_v1[0]["chunk_hash"] != recs_v2[0]["chunk_hash"]
 
 
 def test_chunk_by_sentence_window_uses_stride_one_windows():

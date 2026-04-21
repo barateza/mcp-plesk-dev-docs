@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import re
@@ -113,8 +112,8 @@ KB_DIR = BASE_DIR / "knowledge_base"
 KB_DIR.mkdir(exist_ok=True)
 (BASE_DIR / "storage").mkdir(exist_ok=True)
 
-# Bump this version to force a clean re-embed of all chunks when logic changes
-CHUNK_VERSION = "v2"
+# Note: CHUNK_VERSION has moved to chunking.py to ensure it stays in sync
+# with the hashing logic.
 
 VALID_CATEGORIES: frozenset[str] = frozenset(
     {"guide", "cli", "api", "php-stubs", "js-sdk"}
@@ -846,15 +845,6 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
         },
     )
 
-    # Task B enrichment and Chunk-Level Fingerprinting
-    for r in records:
-        # Prepend category and doctype
-        r["text"] = f"[{source['cat'].upper()}] DocType: {doctype}\n{r['text']}"
-        # Compute a unique hash for this exact chunk content and logic version
-        h = hashlib.sha256()
-        h.update(f"{CHUNK_VERSION}:{r['text']}".encode("utf-8"))
-        r["chunk_hash"] = h.hexdigest()
-
     return records
 
 
@@ -937,11 +927,12 @@ def _sync_single_source(
     fingerprint, file_count = io_utils.compute_source_fingerprint(source)
     prev_meta = source_entries.get(source["cat"], {})
 
-    # Force re-index if reset_db is true, source files changed, or CHUNK_VERSION bumped
+    # Force re-index if reset_db is true, source files changed,
+    # or chunking.CHUNK_VERSION bumped
     source_changed = (
         reset_db
         or prev_meta.get("fingerprint") != fingerprint
-        or prev_meta.get("chunk_version") != CHUNK_VERSION
+        or prev_meta.get("chunk_version") != chunking.CHUNK_VERSION
     )
 
     if not source_changed:
@@ -963,7 +954,7 @@ def _sync_single_source(
 
         existing_files = set()
         # Selective reindexing: only skip files if both content AND chunk version match
-        if not reset_db and prev_meta.get("chunk_version") == CHUNK_VERSION:
+        if not reset_db and prev_meta.get("chunk_version") == chunking.CHUNK_VERSION:
             existing_files = _existing_filenames_for_category(table, source["cat"])
 
         # Returns the set of all chunk hashes that should exist for this source
@@ -990,7 +981,7 @@ def _sync_single_source(
 
         source_entries[source["cat"]] = {
             "fingerprint": fingerprint,
-            "chunk_version": CHUNK_VERSION,
+            "chunk_version": chunking.CHUNK_VERSION,
             "file_count": file_count,
             "indexed_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -1086,6 +1077,29 @@ def refresh_knowledge(
             report.append("ERROR rebuilding TurboQuant index.")
 
     return "\n".join(report)
+
+
+@mcp.tool
+def requantize_knowledge() -> str:
+    """
+    Rebuild the TurboQuant index from already-stored LanceDB vectors.
+
+    This is useful if you change TurboQuant quantization settings or bits
+    in a model profile, or if the TQ index is missing but LanceDB is populated.
+    It performs NO new embedding work and NO document chunking.
+    """
+    profile = _get_profile()
+    if not getattr(profile, "use_turboquant", False):
+        return f"TurboQuant is disabled for the active profile '{profile.name}'."
+
+    logger.info("Starting requantize_knowledge for profile %s", profile.name)
+    global _tq_index
+    try:
+        _tq_index = _build_tq_index_from_table()
+        return f"TurboQuant index rebuilt successfully for profile '{profile.name}'."
+    except Exception as e:
+        logger.exception("Manual requantization failed.")
+        return f"Error rebuilding TurboQuant index: {e}"
 
 
 def _rrf_merge(

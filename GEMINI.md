@@ -8,8 +8,9 @@
     *   This preserves your context window and local iteration time.
 
 2.  **Use `reset_db=False` (Incremental Refresh) by default.** 
-    *   The fingerprinting system (`plesk_unified/io_utils.py`) automatically skips unchanged files.
-    *   Only use `reset_db=True` when changing chunking logic, schemas, or embedding models.
+    *   The system uses **Chunk-Level Fingerprinting** to skip re-embedding identical content.
+    *   `CHUNK_VERSION` (in `plesk_unified/server.py`) tracks logic changes. Bump this version when modifying structural HTML normalization, chunking boundaries, or embedding enrichment to force a clean re-embed of only affected chunks.
+    *   Only use `reset_db=True` for major schema migrations or when switching embedding models.
 
 3.  **Optimize GPU throughput via Chunk Batching.**
     *   Indexing now batches by **chunk count** (default: 1000) rather than file count. 

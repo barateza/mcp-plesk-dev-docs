@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import re
@@ -106,6 +107,9 @@ KB_DIR = BASE_DIR / "knowledge_base"
 
 KB_DIR.mkdir(exist_ok=True)
 (BASE_DIR / "storage").mkdir(exist_ok=True)
+
+# Bump this version to force a clean re-embed of all chunks when logic changes
+CHUNK_VERSION = "v2"
 
 VALID_CATEGORIES: frozenset[str] = frozenset(
     {"guide", "cli", "api", "php-stubs", "js-sdk"}
@@ -287,6 +291,7 @@ def get_schema() -> Any:
         category: str
         breadcrumb: str
         doctype: str  # Task: Persist doctype to enable doctype-aware reranking
+        chunk_hash: str  # Task: Chunk-level fingerprinting
         endpoint: Optional[str] = None
         chunk_id: int  # Task D: Sequential ID within filename
 
@@ -805,7 +810,7 @@ def _deduplicate_by_filename(results: list[dict], max_per_file: int = 1) -> list
 
 
 def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
-    """Chunks text and builds document records."""
+    """Chunks text and builds document records with chunk-level fingerprinting."""
     if not text or len(text) <= 10:
         return []
 
@@ -818,14 +823,11 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     # Task E: Extract endpoint if this is an API source
     endpoint = None
     if source["cat"] == "api":
-        # Match common REST API patterns like GET /api/v2/domains or POST /auth/keys
-        # Handles both v2 and standard paths
         match = re.search(
             r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", text
         )
         if match:
             endpoint = f"{match.group(1)} {match.group(2)}"
-            logger.debug("Extracted endpoint: %s", endpoint)
 
     records = chunking.build_doc_records(
         file_path.name,
@@ -839,52 +841,79 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
         },
     )
 
-    # Task B: Each record already has prepended title/path in chunking.py.
-    # Here we additionally prepend the category and doctype for the final corpus text.
+    # Task B enrichment and Chunk-Level Fingerprinting
     for r in records:
+        # Prepend category and doctype
         r["text"] = f"[{source['cat'].upper()}] DocType: {doctype}\n{r['text']}"
+        # Compute a unique hash for this exact chunk content and logic version
+        h = hashlib.sha256()
+        h.update(f"{CHUNK_VERSION}:{r['text']}".encode("utf-8"))
+        r["chunk_hash"] = h.hexdigest()
 
     return records
 
 
-def process_source_files(source, table, existing_files):
-    """Processes all files for a given source and indexes them using chunk-based batching."""
+def process_source_files(source, table, existing_files, existing_hashes) -> set[str]:
+    """Processes source files using chunk-level fingerprinting to skip re-embedding."""
     toc_map = get_toc_map_for_source(source)
     files = io_utils.collect_files_for_source(source)
     logger.info("Found %d files for source %s", len(files), source["cat"])
 
     pending_docs = []
-    BATCH_SIZE_CHUNKS = 1000  # Large batches to maximize 12GB VRAM utilization
+    active_hashes = set()
+    BATCH_SIZE_CHUNKS = 1000
 
     for f in files:
-        if f.name.startswith("_") or f.name == "toc.json" or f.name in existing_files:
+        if f.name.startswith("_") or f.name == "toc.json":
+            continue
+
+        # Task: Selective reindexing logic.
+        # If the file hasn't changed at the IO level, its chunks are already active.
+        if f.name in existing_files:
+            # Note: We still need to mark these chunks as active so they aren't deleted.
+            file_hashes = {
+                row["chunk_hash"]
+                for row in table.search()
+                .where(f"filename = '{f.name}' AND category = '{source['cat']}'")
+                .select(["chunk_hash"])
+                .limit(1000)
+                .to_list()
+            }
+            active_hashes.update(file_hashes)
             continue
 
         meta = toc_map.get(f.name) if toc_map else None
-
         if source["type"] == "html":
             title, breadcrumb, text = html_utils.parse_html_file(f, meta)
         else:
             title, breadcrumb, text = parse_code(f)
 
         records = build_and_chunk_docs(source, f, title, breadcrumb, text)
-        pending_docs.extend(records)
+        for r in records:
+            h = r["chunk_hash"]
+            active_hashes.add(h)
+            # Only embed if this exact chunk isn't already in the database.
+            if h not in existing_hashes:
+                pending_docs.append(r)
 
-        # Batch by chunk count to keep the GPU busy with large matrices
         if len(pending_docs) >= BATCH_SIZE_CHUNKS:
             logger.info(
-                "Saving batch of %d chunks for %s...", len(pending_docs), source["cat"]
+                "Embedding/Saving batch of %d new chunks for %s...",
+                len(pending_docs),
+                source["cat"],
             )
             chunking.persist_batch(table, pending_docs)
             pending_docs = []
 
     if pending_docs:
         logger.info(
-            "Saving final batch of %d chunks for %s...",
+            "Embedding/Saving final batch of %d new chunks for %s...",
             len(pending_docs),
             source["cat"],
         )
         chunking.persist_batch(table, pending_docs)
+
+    return active_hashes
 
 
 def _sync_single_source(
@@ -902,7 +931,13 @@ def _sync_single_source(
 
     fingerprint, file_count = io_utils.compute_source_fingerprint(source)
     prev_meta = source_entries.get(source["cat"], {})
-    source_changed = reset_db or prev_meta.get("fingerprint") != fingerprint
+    
+    # Force re-index if reset_db is true, or source files changed, or CHUNK_VERSION bumped
+    source_changed = (
+        reset_db 
+        or prev_meta.get("fingerprint") != fingerprint 
+        or prev_meta.get("chunk_version") != CHUNK_VERSION
+    )
 
     if not source_changed:
         msg = f"SKIPPED {source['cat']} (No source changes detected)"
@@ -910,24 +945,38 @@ def _sync_single_source(
         return msg
 
     try:
-        if not reset_db:
-            # Re-index changed source from scratch to avoid stale chunks.
-            try:
-                table.delete(f"category = '{source['cat']}'")
-            except Exception:
-                logger.warning(
-                    "Could not delete existing rows for category '%s' before reindex.",
-                    source["cat"],
-                    exc_info=True,
-                )
+        existing_hashes = set()
+        # Fetch existing chunk hashes for this category to skip re-embedding.
+        rows = (
+            table.search()
+            .where(f"category = '{source['cat']}'")
+            .select(["chunk_hash"])
+            .limit(100000)
+            .to_list()
+        )
+        existing_hashes = {r["chunk_hash"] for r in rows if r.get("chunk_hash")}
 
         existing_files = set()
-        if not reset_db:
+        # Selective reindexing: only skip files if both content AND chunk version match
+        if not reset_db and prev_meta.get("chunk_version") == CHUNK_VERSION:
             existing_files = _existing_filenames_for_category(table, source["cat"])
 
-        process_source_files(source, table, existing_files)
+        # Returns the set of all chunk hashes that should exist for this source
+        active_hashes = process_source_files(source, table, existing_files, existing_hashes)
+
+        if not reset_db:
+            # Delete stale chunks (hashes that were in DB but are no longer in the source)
+            stale_hashes = list(existing_hashes - active_hashes)
+            if stale_hashes:
+                logger.info("Deleting %d stale chunks for %s...", len(stale_hashes), source["cat"])
+                for i in range(0, len(stale_hashes), 500):
+                    batch = stale_hashes[i : i + 500]
+                    hash_list_str = ", ".join([f"'{h}'" for h in batch])
+                    table.delete(f"category = '{source['cat']}' AND chunk_hash IN ({hash_list_str})")
+
         source_entries[source["cat"]] = {
             "fingerprint": fingerprint,
+            "chunk_version": CHUNK_VERSION,
             "file_count": file_count,
             "indexed_at": datetime.now(timezone.utc).isoformat(),
         }

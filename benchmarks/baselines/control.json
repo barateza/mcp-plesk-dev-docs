@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": "2026-04-21T12:12:09.708763+00:00",
+  "created_at": "2026-04-21T14:16:30.062116+00:00",
   "runs": [
     {
       "suite": "control",
@@ -10,49 +10,10 @@
       "n_runs": 1,
       "hit_rate": 0.75,
       "mrr": 0.75,
-      "avg_latency_s": 3.579941500000132,
-      "faithfulness": 0.76,
-      "context_recall": 0.8724999999999999,
-      "context_precision": 0.8324999999999999
-    },
-    {
-      "suite": "control",
-      "profile": "full-tq",
-      "engine": "baseline",
-      "routing_policy": "baseline-only",
-      "n_runs": 1,
-      "hit_rate": 0.75,
-      "mrr": 0.75,
-      "avg_latency_s": 0.37094665999975407,
-      "faithfulness": 0.595,
-      "context_recall": 0.8875,
-      "context_precision": 0.76
-    },
-    {
-      "suite": "control",
-      "profile": "light",
-      "engine": "baseline",
-      "routing_policy": "baseline-only",
-      "n_runs": 1,
-      "hit_rate": 0.8,
-      "mrr": 0.8,
-      "avg_latency_s": 1.1835134000008112,
-      "faithfulness": 0.63,
-      "context_recall": 0.8700000000000001,
-      "context_precision": 0.8150000000000001
-    },
-    {
-      "suite": "control",
-      "profile": "medium",
-      "engine": "baseline",
-      "routing_policy": "baseline-only",
-      "n_runs": 1,
-      "hit_rate": 0.8,
-      "mrr": 0.735,
-      "avg_latency_s": 1.2961536349997913,
-      "faithfulness": 0.7,
-      "context_recall": 0.8474999999999999,
-      "context_precision": 0.8949999999999999
+      "avg_latency_s": 7.022313259997463,
+      "faithfulness": 0.5700000000000001,
+      "context_recall": 0.8425,
+      "context_precision": 0.8099999999999999
     }
   ]
 }

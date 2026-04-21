@@ -127,12 +127,13 @@ def _replace_tables_with_prose(
 
 def parse_html_file(
     path: Path, toc_meta: Optional[dict] = None
-) -> Tuple[str, Optional[str], str]:
-    """Parse an HTML file and return (title, breadcrumb, text).
+) -> Tuple[str, Optional[str], str, Optional[str]]:
+    """Parse an HTML file and return (title, breadcrumb, text, endpoint).
 
     - Removes nav/footer/script/style/aside elements before extracting text.
     - Prefers <main> or <article> when available.
     - Converts HTML to Markdown so that code blocks and headings are preserved.
+    - Extracts API endpoint signatures (e.g., GET /path) if present.
     """
     path = Path(path)
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
@@ -153,6 +154,16 @@ def parse_html_file(
     ):
         sel.decompose()
 
+    # Task REQ-4: Extract endpoint signatures (e.g. GET /api/v2/domains)
+    endpoint = None
+    # Common pattern in Plesk API docs:
+    # a code or strong tag containing the method and path
+    endpoint_match = re.search(
+        r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", html
+    )
+    if endpoint_match:
+        endpoint = f"{endpoint_match.group(1)} {endpoint_match.group(2)}"
+
     # Preserve parameter relationships before markdown conversion flattens tables.
     llm_enabled = os.environ.get("PLESK_HTML_LLM_TABLE_NORMALIZE") == "1"
     ai_client = AIClient() if llm_enabled else None
@@ -171,7 +182,7 @@ def parse_html_file(
 
     breadcrumb = (toc_meta or {}).get("breadcrumb")
 
-    return title, breadcrumb, text
+    return title, breadcrumb, text, endpoint
 
 
 def clean_html_for_markdown(html: str) -> str:

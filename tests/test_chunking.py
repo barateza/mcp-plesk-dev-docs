@@ -30,6 +30,23 @@ def test_build_doc_records():
     assert len(recs[0]["chunk_hash"]) == 64  # SHA-256 hex
 
 
+def test_build_doc_records_with_summary_and_endpoint():
+    chunks = ["content"]
+    meta = {
+        "title": "T",
+        "category": "api",
+        "breadcrumb": "B",
+        "summary": "This is a summary.",
+        "endpoint": "GET /test",
+    }
+    recs = build_doc_records("api.html", chunks, meta)
+    assert len(recs) == 1
+    assert recs[0]["summary"] == "This is a summary."
+    assert recs[0]["endpoint"] == "GET /test"
+    assert "Summary: This is a summary." in recs[0]["text"]
+    assert "Endpoint: GET /test" in recs[0]["text"]
+
+
 def test_chunk_hash_changes_with_version(monkeypatch):
     import plesk_unified.chunking as chunking
 

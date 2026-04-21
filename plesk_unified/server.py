@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 
 # ruff: noqa: E402
 import os
@@ -83,6 +82,7 @@ from pydantic import Field
 
 try:
     from plesk_unified import chunking, html_utils, io_utils, platform_utils
+    from plesk_unified.ai_client import AIClient
     from plesk_unified.model_config import get_active_profile, list_profiles
     from plesk_unified.tq_index import TurboQuantIndex
 except (ImportError, ModuleNotFoundError) as e:
@@ -95,6 +95,7 @@ except (ImportError, ModuleNotFoundError) as e:
     import html_utils
     import io_utils
     import platform_utils
+    from ai_client import AIClient  # type: ignore
 
     try:
         from model_config import get_active_profile, list_profiles  # type: ignore
@@ -297,6 +298,7 @@ def get_schema() -> Any:
         doctype: str  # Task: Persist doctype to enable doctype-aware reranking
         chunk_hash: str  # Task: Chunk-level fingerprinting
         endpoint: Optional[str] = None
+        summary: Optional[str] = None  # Task REQ-3: global macro-context
         chunk_id: int  # Task D: Sequential ID within filename
 
     _schema_class = UnifiedSchema
@@ -754,17 +756,20 @@ def list_model_profiles() -> str:
 
 
 # --- Content Parsers ---
-def parse_code(file_path: Path) -> Tuple[Optional[str], str, Optional[str]]:
-    """Parse a code file and return filename, empty string, and content."""
+def parse_code(
+    file_path: Path,
+) -> Tuple[Optional[str], str, Optional[str], Optional[str]]:
+    """Parse a code file and return (filename, breadcrumb, content, endpoint)."""
     try:
         return (
             file_path.name,
             "",
             file_path.read_text(encoding="utf-8", errors="ignore"),
+            None,
         )
     except Exception:
         logger.warning("Error parsing code file: %s", file_path.name, exc_info=True)
-        return None, "", None
+        return None, "", None, None
 
 
 # --- Tools ---
@@ -813,7 +818,9 @@ def _deduplicate_by_filename(results: list[dict], max_per_file: int = 1) -> list
     return deduped
 
 
-def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
+def build_and_chunk_docs(
+    source, file_path, title, breadcrumb, text, endpoint=None, summary=None
+):
     """Chunks text and builds document records with chunk-level fingerprinting."""
     if not text or len(text) <= 10:
         return []
@@ -824,15 +831,6 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     if not chunks:
         return []
 
-    # Task E: Extract endpoint if this is an API source
-    endpoint = None
-    if source["cat"] == "api":
-        match = re.search(
-            r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", text
-        )
-        if match:
-            endpoint = f"{match.group(1)} {match.group(2)}"
-
     records = chunking.build_doc_records(
         file_path.name,
         chunks,
@@ -842,10 +840,43 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
             "breadcrumb": breadcrumb,
             "doctype": doctype,
             "endpoint": endpoint,
+            "summary": summary,
         },
     )
 
     return records
+
+
+def _process_single_file(
+    f, source, toc_map, table, existing_files, ai_client
+) -> list[dict] | list[str]:
+    """Process a single file and return records or list of existing hashes."""
+    # Selective reindexing logic.
+    if f.name in existing_files:
+        rows = (
+            table.search()
+            .where(f"filename = '{f.name}' AND category = '{source['cat']}'")
+            .select(["chunk_hash"])
+            .limit(1000)
+            .to_list()
+        )
+        return [row["chunk_hash"] for row in rows]
+
+    meta = toc_map.get(f.name) if toc_map else None
+    if source["type"] == "html":
+        title, breadcrumb, text, endpoint = html_utils.parse_html_file(f, meta)
+    else:
+        title, breadcrumb, text, endpoint = parse_code(f)
+
+    summary = None
+    if ai_client and text:
+        summary = ai_client.generate_description(text)
+        if summary == "Description unavailable.":
+            summary = None
+
+    return build_and_chunk_docs(
+        source, f, title, breadcrumb, text, endpoint=endpoint, summary=summary
+    )
 
 
 def process_source_files(source, table, existing_files, existing_hashes) -> set[str]:
@@ -858,38 +889,30 @@ def process_source_files(source, table, existing_files, existing_hashes) -> set[
     active_hashes = set()
     BATCH_SIZE_CHUNKS = 1000
 
+    # REQ-3: summary generation if enabled
+    llm_summaries = os.environ.get("PLESK_INDEX_SUMMARIES") == "1"
+    ai_client = AIClient() if llm_summaries else None
+
     for f in files:
         if f.name.startswith("_") or f.name == "toc.json":
             continue
 
-        # Task: Selective reindexing logic.
-        # If the file hasn't changed at the IO level, its chunks are already active.
-        if f.name in existing_files:
-            # Note: We still need to mark these chunks as active so they aren't deleted.
-            file_hashes = {
-                row["chunk_hash"]
-                for row in table.search()
-                .where(f"filename = '{f.name}' AND category = '{source['cat']}'")
-                .select(["chunk_hash"])
-                .limit(1000)
-                .to_list()
-            }
-            active_hashes.update(file_hashes)
+        result = _process_single_file(
+            f, source, toc_map, table, existing_files, ai_client
+        )
+        if not result:
             continue
 
-        meta = toc_map.get(f.name) if toc_map else None
-        if source["type"] == "html":
-            title, breadcrumb, text = html_utils.parse_html_file(f, meta)
+        if isinstance(result[0], str):
+            # We got back a list of hashes (existing file)
+            active_hashes.update(result)
         else:
-            title, breadcrumb, text = parse_code(f)
-
-        records = build_and_chunk_docs(source, f, title, breadcrumb, text)
-        for r in records:
-            h = r["chunk_hash"]
-            active_hashes.add(h)
-            # Only embed if this exact chunk isn't already in the database.
-            if h not in existing_hashes:
-                pending_docs.append(r)
+            # We got back document records
+            for r in result:
+                h = r["chunk_hash"]
+                active_hashes.add(h)
+                if h not in existing_hashes:
+                    pending_docs.append(r)
 
         if len(pending_docs) >= BATCH_SIZE_CHUNKS:
             logger.info(
@@ -1103,7 +1126,7 @@ def requantize_knowledge() -> str:
 
 
 def _rrf_merge(
-    vector_results: list[dict], fts_results: list[dict], k: int = 60
+    vector_results: list[dict], fts_results: list[dict], k: int = 20
 ) -> list[dict]:
     """Merge two ranked lists using Reciprocal Rank Fusion."""
     scores: dict[str, float] = {}

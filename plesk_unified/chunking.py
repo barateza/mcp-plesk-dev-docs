@@ -4,7 +4,7 @@ from typing import Dict, List
 
 # Bump this version whenever the chunking logic or context injection changes
 # to force a re-embedding of changed chunks while preserving identical ones.
-CHUNK_VERSION = "v3"
+CHUNK_VERSION = "v4"
 
 
 def chunk_by_chars(text: str, size: int = 1500, overlap: int = 200) -> List[str]:
@@ -176,25 +176,32 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
     """Build a list of document dicts suitable for DB insertion.
 
     Each record includes `text`, `title`, `filename`, `category`, `breadcrumb`,
-    `doctype`, and `endpoint`.
+    `doctype`, `endpoint` and `summary`.
 
-    The `text` field is enriched with title and breadcrumb for better retrieval.
+    The `text` field is enriched with metadata for better retrieval.
     """
     records: List[Dict] = []
     title = meta.get("title") or ""
     breadcrumb = meta.get("breadcrumb") or ""
+    summary = meta.get("summary")
+    endpoint = meta.get("endpoint")
 
     for i, c in enumerate(chunks):
-        # Task B: Prepend context to the text before embedding.
+        # Task B & Phase 2: Prepend context to the text before embedding.
         category = meta.get("category", "unknown").upper()
         doctype = meta.get("doctype", "unknown")
-        enriched_text = (
-            f"[{category}] DocType: {doctype}\n"
-            f"[Title: {title} | Path: {breadcrumb}] \n\n {c}"
-        )
+
+        header = f"[{category}] DocType: {doctype}\n"
+        header += f"[Title: {title} | Path: {breadcrumb}] \n"
+        if endpoint:
+            header += f"[Endpoint: {endpoint}] \n"
+        if summary:
+            header += f"[Summary: {summary}] \n"
+
+        enriched_text = f"{header}\n {c}"
 
         # Strategy 2: Per-chunk fingerprinting
-        # Includes enriched_text (which has title/breadcrumb) and logic version.
+        # Includes enriched_text (which has all context) and logic version.
         h = hashlib.sha256()
         h.update(f"{CHUNK_VERSION}:{enriched_text}".encode("utf-8"))
         chunk_hash = h.hexdigest()
@@ -207,8 +214,9 @@ def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict
                 "category": meta.get("category"),
                 "breadcrumb": breadcrumb,
                 "doctype": meta.get("doctype", "unknown"),
-                "endpoint": meta.get("endpoint"),  # Prepare for Task E
-                "chunk_id": i,  # Task D
+                "endpoint": endpoint,
+                "summary": summary,
+                "chunk_id": i,
                 "chunk_hash": chunk_hash,
             }
         )

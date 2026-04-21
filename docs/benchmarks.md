@@ -5,6 +5,33 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
+## Quality Optimization Features (April 2026)
+
+Following Phase 6, several architectural improvements were implemented to recover Hit Rate and improve Faithfulness:
+
+1.  **Hybrid Search (Task A):** Combines dense vector retrieval (semantic) with Full-Text Search (keyword) using **Reciprocal Rank Fusion (RRF)**. This ensures that exact matches for technical terms (e.g., specific API paths or class names) are prioritized.
+2.  **Parent-Header Injection (Task B):** Automatically prepends document **Title** and **Breadcrumb** path to every chunk before embedding. This makes every chunk self-describing and improves relevance for smaller models.
+3.  **Sentinel Window Expansion (Task C):** Increased the default sentence window for narrative documents from 3 to **5 sentences**, providing more immediate context.
+4.  **Neighborhood Retrieval (Task D):** For the top results, the system now automatically fetches the **immediate previous and next chunks** from the same file, effectively tripling the context available to the AI for grounding.
+
+---
+
+## Interim results — 2026-04-21 (Apple M2 Ultra, MPS)
+
+**Hardware:** Apple M2 Ultra (76-core GPU)
+**Python:** 3.12.9
+**Query set:** 20 queries (Expanded suite + Hybrid Search + Neighborhood Retrieval)
+
+### Summary
+
+|Profile|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|
+|--------|----|-----|-----|------|----|----------|
+|`light`|**80.0%**|**0.800**|0.490|0.645|**0.840**|1.28 s|
+
+> **Observation:** Hybrid Search and context expansion have recovered the `light` profile's performance on the expanded 20-query suite, bringing MRR back to 0.800. Faithfulness is stabilizing as the expanded context window provides more grounded facts for the LLM judge.
+
+---
+
 ## Latest results — 2026-04-21 (RTX 4070 Super, CUDA)
 
 **Hardware:** NVIDIA GeForce RTX 4070 Super (12 GB VRAM)

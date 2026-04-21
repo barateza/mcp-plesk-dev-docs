@@ -5,7 +5,32 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
-## Latest results — 2026-03-08 (Apple M2, MacBook Air 2022)
+## Latest results — 2026-04-20 (RTX 4070 Super, CUDA)
+
+**Hardware:** NVIDIA GeForce RTX 4070 Super (12 GB VRAM)
+**Python:** 3.12.10
+**Query set:** 12 queries across all five documentation sources
+
+### Summary
+
+|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|------------|---|----|-----|----------|--------|
+|`light`|BAAI/bge-small-en-v1.5|384|91.7%|0.854|1.09 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.933**|1.30 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|91.7%|0.917|3.54 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|91.7%|0.917|**0.05 s**|~1 300 MB|
+
+### Observations
+
+1. **`full-tq` achieves 70x faster retrieval than `full`.** By using 5-bit TurboQuant compression and category-aware indexing, latency drops from 3.54s to 0.05s with zero regression in HR or MRR.
+
+2. **`medium` profile remains the quality leader.** Even on high-end hardware, the English-specialized `bge-base-en-v1.5` outperforms the multilingual `bge-m3` in MRR for this English-only corpus.
+
+3. **CUDA-accelerated `full` indexing is now stable.** Unlike the memory-constrained M2, the 4070 Super handles the BGE-M3 tensor expansion comfortably during both indexing and search.
+
+---
+
+## Results — 2026-03-08 (Apple M2, MacBook Air 2022)
 
 **Hardware:** Apple M2 (8-core CPU, 8-core GPU) — MacBook Air 2022
 **Python:** 3.12

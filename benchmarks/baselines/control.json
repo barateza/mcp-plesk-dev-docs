@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "created_at": "2026-04-21T01:10:00.000000+00:00",
+  "runs": [
+    {
+      "suite": "control",
+      "profile": "light",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.9166666666666666,
+      "mrr": 0.8541666666666666,
+      "avg_latency_s": 1.3140692638329103
+    },
+    {
+      "suite": "control",
+      "profile": "medium",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 1.0,
+      "mrr": 0.9333333333333332,
+      "avg_latency_s": 1.6079034966666466
+    },
+    {
+      "suite": "control",
+      "profile": "full",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "avg_latency_s": 3.5383569416666324
+    },
+    {
+      "suite": "control",
+      "profile": "full-tq",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.9166666666666666,
+      "mrr": 0.9166666666666666,
+      "avg_latency_s": 0.0487541666665511
+    }
+  ]
+}

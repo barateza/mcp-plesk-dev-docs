@@ -120,6 +120,60 @@ def load_baseline(path: str) -> list[dict[str, Any]]:
     raise ValueError("Baseline file must be a JSON list or object with 'runs'.")
 
 
+def _check_required_metrics(run, run_name, metrics, failures):
+    """Check that all required metrics are present in the run."""
+    for metric in metrics:
+        if metric not in run:
+            failures.append(
+                f"Missing required metric '{metric}' in current run: {run_name}"
+            )
+
+
+def _check_regression_gates(run, baseline, run_name, config, failures, warnings):
+    """Check metrics against baseline to detect regressions."""
+    for metric, cfg in config.items():
+        if metric not in run:
+            warnings.append(f"Metric '{metric}' missing in current run: {run_name}")
+            continue
+        if metric not in baseline:
+            warnings.append(f"Metric '{metric}' missing in baseline run: {run_name}")
+            continue
+
+        curr = float(run[metric])
+        base = float(baseline[metric])
+
+        if "max_drop" in cfg:
+            drop = base - curr
+            if drop > float(cfg["max_drop"]):
+                failures.append(
+                    f"Regression gate failed for {metric} ({run_name}): "
+                    f"drop={drop:.4f}, allowed={float(cfg['max_drop']):.4f}"
+                )
+        if "max_increase_ratio" in cfg and base > 0:
+            ratio = (curr - base) / base
+            if ratio > float(cfg["max_increase_ratio"]):
+                failures.append(
+                    f"Regression gate failed for {metric} ({run_name}): "
+                    f"increase_ratio={ratio:.4f}, "
+                    f"allowed={float(cfg['max_increase_ratio']):.4f}"
+                )
+
+
+def _check_absolute_minimums(run, run_name, config, failures, warnings):
+    """Check metrics against absolute minimum thresholds."""
+    for metric, threshold in config.items():
+        if metric not in run:
+            warnings.append(
+                f"Absolute gate metric '{metric}' missing in current run: {run_name}"
+            )
+            continue
+        if float(run[metric]) < float(threshold):
+            failures.append(
+                f"Absolute gate failed for {metric} ({run_name}): "
+                f"value={float(run[metric]):.4f}, threshold={float(threshold):.4f}"
+            )
+
+
 def _check_metrics(
     run: dict[str, Any],
     baseline: dict[str, Any],
@@ -129,58 +183,20 @@ def _check_metrics(
     warnings: list[str],
 ):
     """Internal helper to check metrics for a single run against gate config."""
-    regression_cfg = gate_config.get("regression", {})
-    absolute_cfg = gate_config.get("absolute_minimums", {})
-    required_metrics = gate_config.get("required_metrics", [])
-
-    # 1. Required Metrics
-    for metric in required_metrics:
-        if metric not in run:
-            failures.append(
-                f"Missing required metric '{metric}' in current run: {run_name}"
-            )
-
-    # 2. Regression Gates
-    for metric, cfg in regression_cfg.items():
-        if metric not in run:
-            warnings.append(f"Metric '{metric}' missing in current run: {run_name}")
-            continue
-        if metric not in baseline:
-            warnings.append(f"Metric '{metric}' missing in baseline run: {run_name}")
-            continue
-
-        current_val = float(run[metric])
-        base_val = float(baseline[metric])
-
-        if "max_drop" in cfg:
-            drop = base_val - current_val
-            if drop > float(cfg["max_drop"]):
-                failures.append(
-                    f"Regression gate failed for {metric} ({run_name}): "
-                    f"drop={drop:.4f}, allowed={float(cfg['max_drop']):.4f}"
-                )
-        if "max_increase_ratio" in cfg and base_val > 0:
-            ratio = (current_val - base_val) / base_val
-            if ratio > float(cfg["max_increase_ratio"]):
-                failures.append(
-                    f"Regression gate failed for {metric} ({run_name}): "
-                    f"increase_ratio={ratio:.4f}, "
-                    f"allowed={float(cfg['max_increase_ratio']):.4f}"
-                )
-
-    # 3. Absolute Minimums
-    for metric, threshold in absolute_cfg.items():
-        if metric not in run:
-            warnings.append(
-                f"Absolute gate metric '{metric}' missing "
-                f"in current run: {run_name}"
-            )
-            continue
-        if float(run[metric]) < float(threshold):
-            failures.append(
-                f"Absolute gate failed for {metric} ({run_name}): "
-                f"value={float(run[metric]):.4f}, threshold={float(threshold):.4f}"
-            )
+    _check_required_metrics(
+        run, run_name, gate_config.get("required_metrics", []), failures
+    )
+    _check_regression_gates(
+        run,
+        baseline,
+        run_name,
+        gate_config.get("regression", {}),
+        failures,
+        warnings,
+    )
+    _check_absolute_minimums(
+        run, run_name, gate_config.get("absolute_minimums", {}), failures, warnings
+    )
 
 
 def evaluate_quality_gates(

@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 from typing import List, Optional
 
 import requests
@@ -11,6 +12,13 @@ DEFAULT_MODELS = [
     "arcee-ai/trinity-large-preview:free",
     "stepfun/step-3-5-flash:free",
     "liquid/lfm-2.5-1.2b-thinking:free",
+]
+
+# RAGAS judge model — chosen for instruction-following + low verbosity on strict
+# "Score 0.0–1.0" tasks. Haiku is the fallback when primary fails.
+RAGAS_DEFAULT_MODELS = [
+    "google/gemini-2.5-flash-lite",
+    "anthropic/claude-3-haiku",
 ]
 
 
@@ -66,3 +74,57 @@ class AIClient:
                 continue
 
         return "Description unavailable."
+
+    def evaluate_ragas_score(
+        self, prompt: str, model_list: Optional[List[str]] = None
+    ) -> float:
+        """
+        Evaluate a RAGAS metric prompt and return a score between 0.0 and 1.0.
+        Uses stricter instruction following for the judge model.
+        """
+        models = model_list if model_list is not None else RAGAS_DEFAULT_MODELS
+
+        for model in models:
+            try:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a precise evaluator. Output ONLY a single "
+                                "float number between 0.0 and 1.0 representing the "
+                                "score. No explanation, no extra text."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": 10,
+                }
+
+                response = requests.post(
+                    url="https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    data=json.dumps(payload),
+                    timeout=20,
+                )
+                if response.status_code == 200:
+                    text = response.json()["choices"][0]["message"]["content"].strip()
+                    # Try to find a float in the response
+                    match = re.search(r"(\d?\.\d+)", text)
+                    if match:
+                        return float(match.group(1))
+                    if text in ["0", "1"]:
+                        return float(text)
+                else:
+                    logger.debug(
+                        f"RAGAS Model {model} returned status {response.status_code}"
+                    )
+            except Exception as e:
+                logger.debug(f"RAGAS Model {model} failed with exception: {e}")
+                continue
+
+        return 0.0

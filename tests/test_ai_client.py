@@ -70,3 +70,42 @@ def test_generate_description_all_fail(mock_post, ai_client):
 
     assert result == "Description unavailable."
     assert mock_post.call_count == len(DEFAULT_MODELS)
+
+
+@patch("plesk_unified.ai_client.requests.post")
+def test_evaluate_ragas_score_success(mock_post, ai_client):
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"choices": [{"message": {"content": "0.85"}}]}
+    mock_post.return_value = mock_response
+
+    score = ai_client.evaluate_ragas_score("Judge this.")
+
+    assert score == 0.85
+    assert mock_post.call_count == 1
+
+
+@patch("plesk_unified.ai_client.requests.post")
+def test_evaluate_ragas_score_parsing(mock_post, ai_client):
+    # Tests parsing float out of text
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "choices": [{"message": {"content": "The score is 0.95."}}]
+    }
+    mock_post.return_value = mock_response
+
+    score = ai_client.evaluate_ragas_score("Judge this.")
+
+    assert score == 0.95
+
+
+@patch("plesk_unified.ai_client.requests.post")
+def test_evaluate_ragas_score_fail(mock_post, ai_client):
+    mock_fail = MagicMock()
+    mock_fail.status_code = 500
+    mock_post.return_value = mock_fail
+
+    score = ai_client.evaluate_ragas_score("Judge this.")
+
+    assert score == 0.0

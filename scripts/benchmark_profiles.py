@@ -58,6 +58,7 @@ from typing import Any
 
 import numpy as np
 
+from plesk_unified.ai_client import AIClient
 from plesk_unified.benchmark_engines import (
     DEFAULT_PILOT_CONFIG,
     StructurePilotConfig,
@@ -114,6 +115,50 @@ def _hit_rank(result_texts: list[str], relevant: list[str]) -> int | None:
     return None
 
 
+def evaluate_ragas_metrics(
+    query: str,
+    answer: str,
+    retrieved_context: str,
+    ground_truth: str | None,
+    reference_context: str | None,
+    ai_client: AIClient,
+    model: str | None = None,
+) -> dict[str, float]:
+    """
+    Evaluate faithfulness, context recall, and context precision using LLM judge.
+    """
+    model_list = [model] if model else None
+    metrics = {}
+
+    # 1. Faithfulness: Is the answer grounded in the retrieved context?
+    prompt_f = (
+        f"RETRIEVED CONTEXT:\n{retrieved_context}\n\n"
+        f"ANSWER:\n{answer}\n\n"
+        "Does the answer only use facts from the context? Score 0.0–1.0."
+    )
+    metrics["faithfulness"] = ai_client.evaluate_ragas_score(prompt_f, model_list)
+
+    # 2. Context Recall: Did we retrieve the reference context?
+    if reference_context:
+        prompt_r = (
+            f"REFERENCE CONTEXT:\n{reference_context}\n\n"
+            f"RETRIEVED CONTEXT:\n{retrieved_context}\n\n"
+            "Was the retrieved context able to recall key facts from the reference? "
+            "Score 0.0–1.0."
+        )
+        metrics["context_recall"] = ai_client.evaluate_ragas_score(prompt_r, model_list)
+
+    # 3. Context Precision: Are the retrieved chunks relevant to the query?
+    prompt_p = (
+        f"QUERY:\n{query}\n\n"
+        f"RETRIEVED CONTEXT:\n{retrieved_context}\n\n"
+        "Are the retrieved chunks relevant to answering the query? Score 0.0–1.0."
+    )
+    metrics["context_precision"] = ai_client.evaluate_ragas_score(prompt_p, model_list)
+
+    return metrics
+
+
 def _load_server_for_profile(profile_name: str):
     """Reload the server module after selecting the active profile."""
     sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -166,6 +211,59 @@ def _search_candidates(
 # ---------------------------------------------------------------------------
 
 
+def _get_selected_engine(
+    query_str: str,
+    bucket: str,
+    routing_policy: str,
+    engine_name: str,
+    pilot_config: StructurePilotConfig | None,
+) -> tuple[str, StructurePilotConfig | None, str]:
+    """Determine the engine and pilot config based on the routing policy."""
+    if routing_policy and routing_policy != "baseline-only":
+        decision = route_query(query_str, bucket, routing_policy=routing_policy)
+        return decision.engine, decision.pilot_config, decision.reason
+    return engine_name, pilot_config, "manual-engine"
+
+
+def _perform_retrieval(
+    srv: Any,
+    query_str: str,
+    category: str | None,
+    candidate_limit: int,
+    profile_name: str,
+    tq_index: TurboQuantIndex | None,
+    final_k: int,
+    selected_engine: str,
+    selected_pilot_config: StructurePilotConfig | None,
+) -> list[dict[str, Any]]:
+    """Execute search and reranking steps."""
+    results = _search_candidates(
+        srv,
+        query_str,
+        category,
+        candidate_limit,
+        profile_name,
+        tq_index,
+    )
+
+    reranker = srv.get_reranker()
+    if reranker and results:
+        texts_raw = [r.get("text", "") for r in results]
+        scores = reranker.predict([(query_str, t) for t in texts_raw])
+        ranked = sorted(
+            zip(scores, results, strict=True), key=lambda x: x[0], reverse=True
+        )
+        results = [r for _, r in ranked[:final_k]]
+
+    if selected_engine == "pageindex-pilot" and results:
+        results = rerank_with_structure(
+            query_str,
+            results,
+            config=selected_pilot_config or DEFAULT_PILOT_CONFIG,
+        )[:final_k]
+    return results
+
+
 def run_benchmark(
     queries: list[dict],
     profile_name: str,
@@ -175,15 +273,13 @@ def run_benchmark(
     engine_name: str = "baseline",
     pilot_config: StructurePilotConfig | None = None,
     routing_policy: str = "baseline-only",
+    ragas: bool = False,
+    ragas_model: str | None = None,
 ) -> dict[str, Any]:
     """
-    Run the full query set against the currently loaded server module
-    (with PLESK_MODEL_PROFILE already set in the environment).
-
-    Returns a results dict.
+    Run the full query set against the currently loaded server module.
     """
     srv = _load_server_for_profile(profile_name)
-
     rss_before = _rss_mb()
 
     # Force model initialisation
@@ -200,98 +296,81 @@ def run_benchmark(
 
     tq_index: TurboQuantIndex | None = None
     if profile_name == "full-tq":
-        tq_bits = int(os.getenv("TQ_BITS", "3"))
-        tq_index = TurboQuantIndex(
-            dim=1024,
-            bits=tq_bits,
-            device=srv._detect_device(),
-        )
-        all_docs = srv.get_table().search().limit(100000).to_list()
-        if all_docs:
-            corpus_vecs = np.array(
-                [doc["vector"] for doc in all_docs], dtype=np.float32
-            )
-            tq_index.add(corpus_vecs, all_docs)
+        tq_index = _init_tq_index(srv)
 
-    hits = []
-    reciprocal_ranks = []
-    latencies = []
+    ai_client = AIClient() if ragas else None
+
+    hits, reciprocal_ranks, latencies = [], [], []
     query_meta: list[dict[str, Any]] = []
-    bucket_hits: dict[str, list[int]] = {}
-    bucket_rrs: dict[str, list[float]] = {}
-    bucket_latencies: dict[str, list[float]] = {}
+    bucket_metrics_raw: dict[str, dict[str, list]] = {}
+    ragas_metrics: list[dict[str, float]] = []
 
     for q in queries:
         t0 = time.perf_counter()
         bucket = q.get("bucket") or bucket_query(q["query"])
-
-        bucket_hits.setdefault(bucket, [])
-        bucket_rrs.setdefault(bucket, [])
-        bucket_latencies.setdefault(bucket, [])
-
-        if routing_policy and routing_policy != "baseline-only":
-            decision = route_query(q["query"], bucket, routing_policy=routing_policy)
-            selected_engine = decision.engine
-            selected_pilot_config = decision.pilot_config
-            routing_reason = decision.reason
-        else:
-            selected_engine = engine_name
-            selected_pilot_config = pilot_config
-            routing_reason = "manual-engine"
-
-        reranker = srv.get_reranker()
-        candidate_limit = (
-            top_k if (reranker or selected_engine == "pageindex-pilot") else final_k
+        bm = bucket_metrics_raw.setdefault(
+            bucket, {"hits": [], "rrs": [], "latencies": []}
         )
 
-        results = _search_candidates(
+        sel_engine, sel_pilot, reason = _get_selected_engine(
+            q["query"], bucket, routing_policy, engine_name, pilot_config
+        )
+
+        reranker = srv.get_reranker()
+        limit = top_k if (reranker or sel_engine == "pageindex-pilot") else final_k
+
+        results = _perform_retrieval(
             srv,
             q["query"],
             q.get("category"),
-            candidate_limit,
+            limit,
             profile_name,
             tq_index,
+            final_k,
+            sel_engine,
+            sel_pilot,
         )
 
-        if reranker and results:
-            texts_raw = [r.get("text", "") for r in results]
-            scores = reranker.predict([(q["query"], t) for t in texts_raw])
-            ranked = sorted(
-                zip(scores, results, strict=True), key=lambda x: x[0], reverse=True
-            )
-            results = [r for _, r in ranked[:final_k]]
-
-        if selected_engine == "pageindex-pilot" and results:
-            results = rerank_with_structure(
-                q["query"],
-                results,
-                config=selected_pilot_config or DEFAULT_PILOT_CONFIG,
-            )[:final_k]
-
         latency = time.perf_counter() - t0
-        latencies.append(latency)
-
         result_texts = [r.get("text", "") for r in results]
         rank = _hit_rank(result_texts, q["relevant"])
 
-        hits.append(1 if rank is not None else 0)
-        reciprocal_ranks.append(1 / rank if rank is not None else 0.0)
-        bucket_hits[bucket].append(1 if rank is not None else 0)
-        bucket_rrs[bucket].append(1 / rank if rank is not None else 0.0)
-        bucket_latencies[bucket].append(latency)
+        # Record metrics
+        hit_val = 1 if rank is not None else 0
+        rr_val = 1 / rank if rank is not None else 0.0
+        hits.append(hit_val)
+        reciprocal_ranks.append(rr_val)
+        latencies.append(latency)
+        bm["hits"].append(hit_val)
+        bm["rrs"].append(rr_val)
+        bm["latencies"].append(latency)
+
+        current_ragas = {}
+        if ragas and ai_client:
+            retrieved_context = "\n---\n".join(result_texts)
+            answer = q.get("ground_truth", "No ground truth provided.")
+            current_ragas = evaluate_ragas_metrics(
+                q["query"],
+                answer,
+                retrieved_context,
+                q.get("ground_truth"),
+                q.get("reference_context"),
+                ai_client,
+                ragas_model,
+            )
+        ragas_metrics.append(current_ragas)
+
         query_meta.append(
             {
                 "bucket": bucket,
-                "selected_engine": selected_engine,
-                "selected_pilot_config": (
-                    selected_pilot_config.name if selected_pilot_config else None
-                ),
-                "routing_reason": routing_reason,
+                "selected_engine": sel_engine,
+                "selected_pilot_config": sel_pilot.name if sel_pilot else None,
+                "routing_reason": reason,
             }
         )
 
     n = len(queries)
-    return {
+    res = {
         "profile": profile_name,
         "n_queries": n,
         "hit_rate": sum(hits) / n if n else 0.0,
@@ -303,24 +382,14 @@ def run_benchmark(
         "routing_policy": routing_policy,
         "bucket_metrics": {
             name: {
-                "n": len(vals),
-                "hit_rate": (
-                    sum(bucket_hits[name]) / len(bucket_hits[name])
-                    if bucket_hits[name]
-                    else 0.0
-                ),
-                "mrr": (
-                    sum(bucket_rrs[name]) / len(bucket_rrs[name])
-                    if bucket_rrs[name]
-                    else 0.0
-                ),
+                "n": len(m["hits"]),
+                "hit_rate": sum(m["hits"]) / len(m["hits"]) if m["hits"] else 0.0,
+                "mrr": sum(m["rrs"]) / len(m["rrs"]) if m["rrs"] else 0.0,
                 "avg_latency_s": (
-                    sum(bucket_latencies[name]) / len(bucket_latencies[name])
-                    if bucket_latencies[name]
-                    else 0.0
+                    sum(m["latencies"]) / len(m["latencies"]) if m["latencies"] else 0.0
                 ),
             }
-            for name, vals in bucket_hits.items()
+            for name, m in bucket_metrics_raw.items()
         },
         "per_query": [
             {
@@ -332,10 +401,50 @@ def run_benchmark(
                 "selected_engine": query_meta[i]["selected_engine"],
                 "selected_pilot_config": query_meta[i]["selected_pilot_config"],
                 "routing_reason": query_meta[i]["routing_reason"],
+                **ragas_metrics[i],
             }
             for i, q in enumerate(queries)
         ],
     }
+
+    if ragas:
+        _add_ragas_summary(res, ragas_metrics)
+
+    return res
+
+
+def _init_tq_index(srv: Any) -> TurboQuantIndex:
+    """Initialise TQ index for the full-tq profile."""
+    tq_bits = int(os.getenv("TQ_BITS", "3"))
+    tq_index = TurboQuantIndex(
+        dim=1024,
+        bits=tq_bits,
+        device=srv._detect_device(),
+    )
+    all_docs = srv.get_table().search().limit(100000).to_list()
+    if all_docs:
+        corpus_vecs = np.array([doc["vector"] for doc in all_docs], dtype=np.float32)
+        tq_index.add(corpus_vecs, all_docs)
+    return tq_index
+
+
+def _add_ragas_summary(
+    res: dict[str, Any], ragas_metrics: list[dict[str, float]]
+) -> None:
+    """Calculate and add aggregated RAGAS metrics to results."""
+
+    evaluated = [m for m in ragas_metrics if m]
+    if evaluated:
+        res["faithfulness"] = sum(m.get("faithfulness", 0.0) for m in evaluated) / len(
+            evaluated
+        )
+        res["context_recall"] = sum(
+            m.get("context_recall", 0.0) for m in evaluated
+        ) / len(evaluated)
+        res["context_precision"] = sum(
+            m.get("context_precision", 0.0) for m in evaluated
+        ) / len(evaluated)
+        res["ragas_n_evaluated"] = len(evaluated)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -445,6 +554,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=False,
         help="Exit with non-zero status when any quality gate fails.",
     )
+    parser.add_argument(
+        "--ragas",
+        action="store_true",
+        default=False,
+        help="Enable RAGAS metrics evaluation using LLM judge.",
+    )
+    parser.add_argument(
+        "--ragas-model",
+        help="LLM model to use as RAGAS judge (default from AIClient).",
+    )
     return parser
 
 
@@ -462,6 +581,10 @@ def _load_queries(args: argparse.Namespace) -> list[dict]:
 def _print_result(result: dict[str, Any], final_k: int) -> None:
     print(f"  Hit Rate (HR@{final_k}) : {result['hit_rate']:.1%}")
     print(f"  MRR@{final_k}           : {result['mrr']:.3f}")
+    if "faithfulness" in result:
+        print(f"  Faithfulness       : {result['faithfulness']:.3f}")
+        print(f"  Context Recall     : {result['context_recall']:.3f}")
+        print(f"  Context Precision  : {result['context_precision']:.3f}")
     print(f"  Avg latency      : {result['avg_latency_s']:.3f}s")
     print(f"  Model RSS delta  : {result['model_rss_mb']:.0f} MB")
     print(f"  Routing policy   : {result['routing_policy']}")
@@ -488,20 +611,38 @@ def _print_summary_table(all_results: list[dict[str, Any]]) -> None:
     print(f"\n{'=' * 60}")
     print("SUMMARY")
     print("=" * 60)
-    header = (
-        f"{'Profile':<10} {'Engine':<15} {'HR@5':>8} {'MRR@5':>8} "
-        f"{'Latency':>10} {'RSS MB':>10}"
-    )
+    has_ragas = any("faithfulness" in r for r in all_results)
+    if has_ragas:
+        header = (
+            f"{'Profile':<10} {'Engine':<15} {'HR@5':>8} {'MRR@5':>8} "
+            f"{'Faith':>8} {'Recall':>8} {'Prec':>8} {'Latency':>10}"
+        )
+    else:
+        header = (
+            f"{'Profile':<10} {'Engine':<15} {'HR@5':>8} {'MRR@5':>8} "
+            f"{'Latency':>10} {'RSS MB':>10}"
+        )
     print(header)
     print("-" * len(header))
     for result in all_results:
-        print(
-            f"{result['profile']:<10} {result['engine']:<15} "
-            f"{result['hit_rate']:>7.1%} "
-            f"{result['mrr']:>8.3f} "
-            f"{result['avg_latency_s']:>9.3f}s "
-            f"{result['model_rss_mb']:>9.0f}"
-        )
+        if has_ragas:
+            print(
+                f"{result['profile']:<10} {result['engine']:<15} "
+                f"{result['hit_rate']:>7.1%} "
+                f"{result['mrr']:>8.3f} "
+                f"{result.get('faithfulness', 0.0):>8.3f} "
+                f"{result.get('context_recall', 0.0):>8.3f} "
+                f"{result.get('context_precision', 0.0):>8.3f} "
+                f"{result['avg_latency_s']:>9.3f}s"
+            )
+        else:
+            print(
+                f"{result['profile']:<10} {result['engine']:<15} "
+                f"{result['hit_rate']:>7.1%} "
+                f"{result['mrr']:>8.3f} "
+                f"{result['avg_latency_s']:>9.3f}s "
+                f"{result['model_rss_mb']:>9.0f}"
+            )
 
 
 def _print_autoresearch_summary(all_results: list[dict[str, Any]]) -> None:
@@ -531,30 +672,22 @@ def _print_autoresearch_summary(all_results: list[dict[str, Any]]) -> None:
     )
 
 
-def _run_benchmark_cli(args: argparse.Namespace) -> None:
-    profiles_to_run = [args.profile] if args.profile else args.profiles
-    engines_to_run = (
-        ["baseline", "pageindex-pilot"] if args.autoresearch else [args.engine]
-    )
-    if args.routing_policy != "baseline-only" and args.autoresearch:
-        print(
-            "Routing policy is active; ignoring --autoresearch and using a "
-            "single routed run."
-        )
-        engines_to_run = [args.engine]
-    repeat_count = max(1, args.repeat)
-    pilot_configs = {cfg.name: cfg for cfg in get_pilot_configs()}
-    selected_pilot_config = pilot_configs.get(args.pilot_config, DEFAULT_PILOT_CONFIG)
-
-    queries = _load_queries(args)
-
+def _execute_benchmark_matrix(
+    profiles: list[str],
+    engines: list[str],
+    repeat_count: int,
+    queries: list[dict],
+    args: argparse.Namespace,
+    pilot_config: StructurePilotConfig | None,
+) -> list[dict[str, Any]]:
+    """Run the benchmark for all profile/engine combinations across repeats."""
     all_results = []
     for repeat_idx in range(repeat_count):
         if repeat_count > 1:
             print(f"\n--- Repeat {repeat_idx + 1}/{repeat_count} ---")
 
-        for profile_name in profiles_to_run:
-            for engine_name in engines_to_run:
+        for profile_name in profiles:
+            for engine_name in engines:
                 print(f"\n{'=' * 60}")
                 print(f"Benchmarking profile: {profile_name} | engine: {engine_name}")
                 print("=" * 60)
@@ -567,24 +700,27 @@ def _run_benchmark_cli(args: argparse.Namespace) -> None:
                         final_k=args.final_k,
                         refresh=args.refresh and repeat_idx == 0,
                         engine_name=engine_name,
-                        pilot_config=selected_pilot_config,
+                        pilot_config=pilot_config,
                         routing_policy=args.routing_policy,
+                        ragas=args.ragas,
+                        ragas_model=args.ragas_model,
                     )
                     result["suite"] = args.suite
                     result["repeat"] = repeat_idx + 1
                     all_results.append(result)
-
                     _print_result(result, args.final_k)
-
                 except Exception as exc:
                     print(f"  ERROR running profile '{profile_name}': {exc}")
                     import traceback
 
                     traceback.print_exc()
+    return all_results
 
-    _print_summary_table(all_results)
-    _print_autoresearch_summary(all_results)
 
+def _handle_baseline_and_gates(
+    args: argparse.Namespace, all_results: list[dict[str, Any]]
+) -> None:
+    """Process baseline capture and quality gate evaluation."""
     baseline_path = args.baseline_file
     if args.capture_baseline:
         if not baseline_path:
@@ -604,6 +740,36 @@ def _run_benchmark_cli(args: argparse.Namespace) -> None:
         print(format_gate_report(gate_report))
         if args.fail_on_gate and not gate_report["passed"]:
             raise SystemExit(2)
+
+
+def _run_benchmark_cli(args: argparse.Namespace) -> None:
+    profiles_to_run = [args.profile] if args.profile else args.profiles
+    engines_to_run = (
+        ["baseline", "pageindex-pilot"] if args.autoresearch else [args.engine]
+    )
+    if args.routing_policy != "baseline-only" and args.autoresearch:
+        print(
+            "Routing policy is active; ignoring --autoresearch and using a "
+            "single routed run."
+        )
+        engines_to_run = [args.engine]
+
+    pilot_configs = {cfg.name: cfg for cfg in get_pilot_configs()}
+    selected_pilot_config = pilot_configs.get(args.pilot_config, DEFAULT_PILOT_CONFIG)
+    queries = _load_queries(args)
+
+    all_results = _execute_benchmark_matrix(
+        profiles_to_run,
+        engines_to_run,
+        max(1, args.repeat),
+        queries,
+        args,
+        selected_pilot_config,
+    )
+
+    _print_summary_table(all_results)
+    _print_autoresearch_summary(all_results)
+    _handle_baseline_and_gates(args, all_results)
 
     if args.output:
         Path(args.output).write_text(

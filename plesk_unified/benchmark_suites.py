@@ -1,71 +1,332 @@
 from __future__ import annotations
 
 BUILTIN_QUERIES: list[dict] = [
-    # php-stubs
+    # --- EXISTING 12 (ground_truth + reference_context added) ---
     {
         "query": "how to define default config settings for a Plesk extension",
         "relevant": ["ConfigDefaults", "getDefaults"],
-        "category": "php-stubs",
+        "bucket": "php-stubs",
+        "ground_truth": (
+            "Default configuration values for a Plesk extension are defined by "
+            "implementing the `getDefaults()` method in the class extending "
+            "`pm_Config`. This method returns an associative array of key-value "
+            "pairs representing the default settings."
+        ),
+        "reference_context": (
+            "The `pm_Config::getDefaults()` method should return an associative "
+            "array of default values. Your extension config class extends "
+            "`pm_Config` and overrides `getDefaults()` to supply initial values "
+            "used when no saved config exists."
+        ),
     },
     {
         "query": "retrieve extension configuration values",
-        "relevant": ["pm_Config", "getDefaults"],
-        "category": "php-stubs",
+        "relevant": ["pmConfig", "getDefaults"],
+        "bucket": "php-stubs",
+        "ground_truth": (
+            "Extension configuration values are retrieved using "
+            "`pm_Config::get($key)`, which returns the stored value for the "
+            "given key, falling back to the default defined in `getDefaults()` "
+            "if no value has been saved."
+        ),
+        "reference_context": (
+            "`pm_Config::get(string $key)` retrieves the value associated with "
+            "the configuration key. If the key has not been set, it falls back "
+            "to the default returned by `getDefaults()`."
+        ),
     },
     {
         "query": "hook interface for Plesk modules",
-        "relevant": ["pm_Hook_Interface", "Hook"],
-        "category": "php-stubs",
+        "relevant": ["pmHookInterface", "Hook"],
+        "bucket": "php-stubs",
+        "ground_truth": (
+            "Plesk modules implement hooks by extending or implementing "
+            "`pm_Hook_Interface`. Each hook class must implement the required methods "
+            "defined by the interface, which are called by Plesk at specific "
+            "lifecycle events."
+        ),
+        "reference_context": (
+            "`pm_Hook_Interface` defines the contract for Plesk hook implementations. "
+            "Module hook classes implement this interface and are registered via the "
+            "extension descriptor to be invoked at defined lifecycle points."
+        ),
     },
-    # cli
     {
         "query": "restart Plesk service from command line",
         "relevant": ["plesk repair", "restart"],
-        "category": "cli",
+        "bucket": "cli",
+        "ground_truth": (
+            "The Plesk service can be restarted from the command line using "
+            "`plesk repair all` or the system service manager (e.g., `systemctl "
+            "restart psa`). The `plesk repair` command performs diagnostics and "
+            "restarts key services."
+        ),
+        "reference_context": (
+            "To restart Plesk components, run `plesk repair all` from the shell. "
+            "This command checks and restarts all Plesk services. Alternatively, "
+            "individual services can be controlled via the OS service manager."
+        ),
     },
     {
         "query": "create a new subscription via CLI",
         "relevant": ["subscription", "add"],
-        "category": "cli",
+        "bucket": "cli",
+        "ground_truth": (
+            "A new subscription is created via CLI using the command `plesk bin "
+            "subscription --create <subscription-name> -owner <login> -ip <ip> "
+            "-service-plan <plan-name>`. The owner and service plan must exist before "
+            "the subscription is created."
+        ),
+        "reference_context": (
+            "`plesk bin subscription --create` creates a new hosting subscription. "
+            "Required parameters include `-owner` (customer login), `-ip` (IP "
+            "address), and `-service-plan` (the name of an existing hosting plan)."
+        ),
     },
-    # api
     {
         "query": "list all domains via Plesk REST API",
-        "relevant": ["List of Domains", "admin-domain-list", "domain-list"],
-        "category": "api",
+        "relevant": ["GET domains", "apiv2domains"],
+        "bucket": "api",
+        "ground_truth": (
+            "All domains are listed by sending a GET request to `/api/v2/domains`. "
+            "The response is a JSON array of domain objects, each containing fields "
+            "such as `id`, `name`, `status`, and associated hosting details."
+        ),
+        "reference_context": (
+            "`GET /api/v2/domains` returns a paginated list of all domains on the "
+            "server. Each domain object includes `id`, `name`, `hosting_type`, and "
+            "`status` fields."
+        ),
     },
     {
         "query": "authenticate with Plesk API using secret key",
-        "relevant": ["X-API-Key", "secret_key", "Authorization"],
-        "category": "api",
+        "relevant": ["X-API-Key", "secretkey", "Authorization"],
+        "bucket": "api",
+        "ground_truth": (
+            "Plesk REST API authentication uses the `X-API-Key` header. The value is "
+            "the secret key generated in Plesk under Tools & Settings > API Access. "
+            "Alternatively, HTTP Basic Auth with admin credentials is supported."
+        ),
+        "reference_context": (
+            "To authenticate REST API requests, include the `X-API-Key: "
+            "<your-secret-key>` header. The secret key is generated in Plesk admin "
+            "under Tools & Settings > API Access Keys."
+        ),
     },
-    # guide
     {
         "query": "add a custom button to Plesk panel",
-        "relevant": ["button", "custom_buttons", "addButton"],
-        "category": "guide",
+        "relevant": ["button", "custombuttons", "addButton"],
+        "bucket": "guide",
+        "ground_truth": (
+            "Custom buttons are added to the Plesk panel by defining a `buttons.xml` "
+            "descriptor file in the extension's `htdocs` folder, specifying the "
+            "button's label, URL, placement context (e.g., domain list, service "
+            "plans), and optional icon."
+        ),
+        "reference_context": (
+            "Custom buttons are configured via `buttons.xml` in the extension "
+            "package. Each `<button>` element defines `name`, `url`, `place` (the "
+            "Plesk UI location), and optionally `icon` and `description`."
+        ),
     },
     {
         "query": "package a Plesk extension for distribution",
         "relevant": ["plesk ext", "package", ".zip"],
-        "category": "guide",
+        "bucket": "guide",
+        "ground_truth": (
+            "A Plesk extension is packaged for distribution by running `plesk ext "
+            "--package` from the extension directory. This produces a `.zip` archive "
+            "following Plesk's required structure: `meta.xml`, `htdocs/`, and an "
+            "optional `plib/` directory."
+        ),
+        "reference_context": (
+            "Run `plesk ext <ext-name> --package` to produce a distributable `.zip` "
+            "archive. The package must contain a valid `meta.xml` descriptor and "
+            "the `htdocs/` directory. The `plib/` directory is optional for "
+            "server-side PHP logic."
+        ),
     },
-    # js-sdk
     {
         "query": "register a new page in Plesk JS SDK",
         "relevant": ["registerPage", "router"],
-        "category": "js-sdk",
+        "bucket": "js-sdk",
+        "ground_truth": (
+            "A new page is registered in the Plesk JS SDK using "
+            "`plesk.router.registerPage({ name, component, path })`. The page "
+            "component must be a Vue component exported from the extension's JS "
+            "bundle."
+        ),
+        "reference_context": (
+            "`plesk.router.registerPage()` registers a Vue-based page in the Plesk "
+            "panel. It accepts an object with `name` (route name), `path` (URL "
+            "path), and `component` (Vue component reference)."
+        ),
     },
-    # cross-source
     {
         "query": "SSL certificate management",
         "relevant": ["certificate", "SSL", "TLS"],
-        "category": None,
+        "bucket": None,
+        "ground_truth": (
+            "SSL certificates in Plesk are managed under Domains > <domain> > "
+            "SSL/TLS Certificates. The REST API supports certificate operations via "
+            "`/api/v2/certificates`. CLI management uses `plesk bin certificate`."
+        ),
+        "reference_context": (
+            "SSL/TLS certificate management is available across Plesk's "
+            "interfaces: the panel UI under domain settings, the REST API at "
+            "`/api/v2/certificates`, and the CLI via `plesk bin certificate "
+            "--list|--install|--remove`."
+        ),
     },
     {
         "query": "backup and restore Plesk",
         "relevant": ["backup", "restore"],
-        "category": None,
+        "bucket": None,
+        "ground_truth": (
+            "Plesk backups are created and restored via Tools & Settings > Backup "
+            "Manager in the UI, via CLI using `plesk bin pleskbackup` and `plesk "
+            "bin pleskrestore`, or through the REST API endpoints under "
+            "`/api/v2/backups`."
+        ),
+        "reference_context": (
+            "`plesk bin pleskbackup` creates a full or partial server backup. "
+            "`plesk bin pleskrestore` restores from a backup file. Both commands "
+            "accept flags for scope (domains, mail, databases) and destination path."
+        ),
+    },
+    # --- NEW 8 QUERIES ---
+    {
+        "query": "handle errors returned by the Plesk REST API",
+        "relevant": ["error", "status_code", "response"],
+        "bucket": "api",
+        "ground_truth": (
+            "Plesk REST API errors are returned as JSON objects with a `code` "
+            "field (HTTP status) and a `message` field describing the error. "
+            "Clients should check the HTTP status code and parse the error body "
+            "to display meaningful messages."
+        ),
+        "reference_context": (
+            "When a Plesk REST API request fails, the response body is typically "
+            '{"code": 0, "message": "<description>"} (for internal/fatal errors) '
+            "or includes additional fields in some cases. Always check the HTTP "
+            "status code (4xx/5xx) first. Common codes include 400 (bad request), "
+            "401 (unauthorized), 404 (not found), and 409 (conflict)."
+        ),
+    },
+    {
+        "query": "list all databases for a domain via API",
+        "relevant": ["databases", "GET", "domain_id"],
+        "bucket": "api",
+        "ground_truth": (
+            "Databases for a specific domain are listed using `GET "
+            "/api/v2/domains/{domain_id}/databases`. The response is a JSON array "
+            "of database objects including `id`, `name`, `type` (MySQL, "
+            "PostgreSQL), and `server_id`."
+        ),
+        "reference_context": (
+            "`GET /api/v2/domains/{domain_id}/databases` returns all databases "
+            "belonging to a domain. Each entry includes `id`, `name`, `db_type`, "
+            "and `db_server_id`."
+        ),
+    },
+    {
+        "query": "enable or disable a Plesk extension from CLI",
+        "relevant": ["plesk ext", "enable", "disable"],
+        "bucket": "cli",
+        "ground_truth": (
+            "A Plesk extension is enabled with `plesk ext <ext-name> --enable` "
+            "and disabled with `plesk ext <ext-name> --disable`. These commands "
+            "toggle the extension state without uninstalling it."
+        ),
+        "reference_context": (
+            "`plesk ext <ext-name> --enable` activates an installed extension. "
+            "`plesk ext <ext-name> --disable` deactivates it without removing "
+            "files. Use `plesk ext --list` to see all extensions and their states."
+        ),
+    },
+    {
+        "query": "emit and listen to custom events in the Plesk JS SDK",
+        "relevant": ["emit", "on", "event"],
+        "bucket": "js-sdk",
+        "ground_truth": (
+            "Custom events in the Plesk JS SDK are dispatched using "
+            "`plesk.events.emit(eventName, payload)` and subscribed to with "
+            "`plesk.events.on(eventName, handler)`. This allows cross-component "
+            "communication within extension UI."
+        ),
+        "reference_context": (
+            "`plesk.events.on(event, callback)` registers a listener for the "
+            "named event. `plesk.events.emit(event, data)` dispatches the event "
+            "to all registered listeners. Both methods are available on the "
+            "global `plesk` object injected into extension scripts."
+        ),
+    },
+    {
+        "query": "what PHP version is required to use pm_Config",
+        "relevant": ["pm_Config", "php", "version"],
+        "bucket": "php-stubs",
+        "ground_truth": (
+            "The Plesk PHP stubs do not specify a minimum PHP version for "
+            "`pm_Config` directly; however, Plesk extensions generally require "
+            "PHP 7.4 or higher based on Plesk's supported PHP stack."
+        ),
+        "reference_context": (
+            "The `pm_Config` class is part of the Plesk PHP API stubs. No "
+            "explicit PHP version constraint is documented in the stubs; "
+            "compatibility follows the minimum PHP version enforced by the "
+            "Plesk installation environment."
+        ),
+    },
+    {
+        "query": "show DNS records for a domain via Plesk REST API",
+        "relevant": ["dns", "records", "GET", "domain"],
+        "bucket": "api",
+        "ground_truth": (
+            "DNS records for a domain are retrieved with `GET "
+            "/api/v2/domains/{domain_id}/dns/records`. The response is a JSON "
+            "array of DNS record objects, each with `type`, `host`, `value`, "
+            "and `ttl`."
+        ),
+        "reference_context": (
+            "`GET /api/v2/domains/{domain_id}/dns/records` lists all DNS "
+            "records for the domain. Each record object includes `id`, `type` "
+            "(A, CNAME, MX, TXT, etc.), `host`, `value`, and `ttl`."
+        ),
+    },
+    {
+        "query": "how to display a notification in the Plesk panel from an extension",
+        "relevant": ["notification", "alert", "UI", "js-sdk"],
+        "bucket": "js-sdk",
+        "ground_truth": (
+            "Notifications in the Plesk panel are displayed from an extension "
+            "using `plesk.ui.notify({ type, message })`, where `type` is one "
+            "of `success`, `info`, `warning`, or `error`."
+        ),
+        "reference_context": (
+            "`plesk.ui.notify({ type: 'success' | 'info' | 'warning' | 'error', "
+            "message: string })` displays a toast-style notification in the "
+            "Plesk panel UI. It is available on the global `plesk` object "
+            "within extension JavaScript."
+        ),
+    },
+    {
+        "query": (
+            "what happens if you call plesk bin subscription on a non-existent domain"
+        ),
+        "relevant": ["subscription", "error", "not found"],
+        "bucket": "cli",
+        "ground_truth": (
+            "If `plesk bin subscription` is called with a domain that does not "
+            "exist, the CLI returns a non-zero exit code and an error message "
+            "indicating the domain or subscription was not found. No changes "
+            "are made."
+        ),
+        "reference_context": (
+            "When `plesk bin subscription --info <name>` or similar commands "
+            "reference a non-existent subscription, Plesk CLI outputs an error "
+            "such as `Subscription '<name>' was not found` and exits with a "
+            "non-zero status code."
+        ),
     },
 ]
 

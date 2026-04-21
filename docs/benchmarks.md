@@ -102,6 +102,9 @@ All three profiles share the same reranker (`cross-encoder/ms-marco-MiniLM-L-6-v
 |------|----------|
 |**HR@5** (Hit Rate at 5)|Fraction of queries where at least one relevant chunk appears in the top-5 results. A query is a "hit" if any of its `relevant` substrings appear (case-insensitive) in any result text.|
 |**MRR@5** (Mean Reciprocal Rank at 5)|Average of `1/(rank of first hit)` across queries. A first hit at rank 1 scores 1.0; at rank 2 scores 0.5; no hit scores 0.0. Measures how high up relevant content appears, not just whether it appears.|
+|**Faithfulness** (RAGAS)|LLM-judged metric (0.0–1.0) measuring whether the answer is grounded exclusively in the retrieved context. High scores mean no hallucinations.|
+|**Context Recall** (RAGAS)|LLM-judged metric (0.0–1.0) measuring whether the retrieved context contains all necessary facts to answer the query, relative to a human-provided reference.|
+|**Context Precision** (RAGAS)|LLM-judged metric (0.0–1.0) measuring the relevance of retrieved chunks to the query. High scores mean few distracting or unrelated results.|
 |**Avg latency**|Wall-clock time per query including ANN search and reranking, measured on the benchmark host.|
 |**Est. RAM**|Approximate resident-set-size increase from loading the embedding model and reranker, as reported by the model profile definition.|
 
@@ -191,6 +194,12 @@ python scripts/benchmark_profiles.py --queries my_queries.json
 
 # Save full JSON results
 python scripts/benchmark_profiles.py --refresh --output results.json
+
+# Run with RAGAS evaluation (requires OPENROUTER_API_KEY)
+python scripts/benchmark_profiles.py --ragas --ragas-model google/gemini-2.5-flash-lite
+
+# Enable LLM-assisted complex table normalization during indexing
+PLESK_HTML_LLM_TABLE_NORMALIZE=1 python scripts/benchmark_profiles.py --refresh
 ```
 
 ### Automated baseline capture and quality gates

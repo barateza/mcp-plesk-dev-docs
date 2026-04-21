@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from pathlib import Path
@@ -7,6 +8,8 @@ from bs4 import BeautifulSoup
 from markdownify import markdownify as _md
 
 from plesk_unified.ai_client import AIClient
+
+logger = logging.getLogger(__name__)
 
 
 def _is_table_complex(table) -> bool:

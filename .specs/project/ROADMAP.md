@@ -168,6 +168,30 @@
 
 ---
 
+## M6 — Retrieval Quality Optimization
+
+**Goal:** Improve retrieval precision and recall through hybrid search, structural context injection, and specialized chunking strategies.
+
+### Features
+
+**Hybrid Search (Vector + BM25)** — PLANNED
+- Integrate Full-Text Search (FTS) using LanceDB.
+- Combine vector similarity with keyword matching using Reciprocal Rank Fusion (RRF).
+
+**Parent-Header Context Injection** — PLANNED
+- Prepend document title and breadcrumb path to every chunk before embedding.
+
+**Neighborhood Retrieval** — PLANNED
+- Automatically retrieve adjacent chunks (prev/next) for the top results to provide richer context.
+
+**API Endpoint Extraction** — PLANNED
+- Specialized parser to detect and index REST API endpoints for exact path matching.
+
+**Hierarchical Code Chunking** — PLANNED
+- Implement structural chunkers for PHP and JS that respect class and method boundaries.
+
+---
+
 ## Future Considerations
 
 - Multi-tenant session isolation with per-user LanceDB namespaces

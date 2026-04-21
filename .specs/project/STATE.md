@@ -1,14 +1,14 @@
 # Project State — Enterprise AI Infrastructure Uplift
 
-**Last Updated:** 2026-04-16
-**Session:** Initial spec creation
-**Status:** Planning phase complete; ready for M1 implementation
+**Last Updated:** 2026-04-21
+**Session:** Structural refactor and Quality Spec creation
+**Status:** In-progress; Phase 6 complete; structural refactor complete.
 
 ---
 
 ## Current Focus
 
-Milestone M1 — Foundation & Protocol Contracts (4 features, all low-impact quick wins)
+Milestone M6 — Retrieval Quality Optimization (Tasks A-F)
 
 ---
 
@@ -22,6 +22,8 @@ Milestone M1 — Foundation & Protocol Contracts (4 features, all low-impact qui
 | D4 | Async refactor uses `run_in_executor` for ML calls, not native async | sentence-transformers and TurboQuant are not async-native; thread pool offload is the correct pattern | 2026-04-16 |
 | D5 | Docker base is `python:3.12-slim` not fully distroless | Distroless Python images lack `pip`; multi-stage build installs in `python:3.12-slim` builder, copies to slim final. True distroless deferred to post-MVP | 2026-04-16 |
 | D6 | Sampling (Feature 5.2) gated by `PLESK_ENABLE_SAMPLING` env var | Not all MCP host clients support the sampling capability; opt-in prevents silent degradation | 2026-04-16 |
+| D7 | Decouple benchmark data from code into JSON suites | Hardcoded dictionaries in `benchmark_suites.py` were becoming unmaintainable and violating line length rules. | 2026-04-21 |
+| D8 | Decompose `server.py` god functions to helpers | Reducing cyclomatic complexity in `_infer_doctype`, `refresh_knowledge`, and `search_plesk_unified` to satisfy engineering standards. | 2026-04-21 |
 
 ---
 
@@ -39,7 +41,10 @@ _No model guidance tips have been shown yet._
 
 ## Completed
 
-_Nothing yet — spec phase only._
+- **Phase 6:** RAGAS evaluation plumbing (Faithfulness, Recall, Precision metrics).
+- **P2:** LLM-assisted complex table normalization.
+- **Structural Refactor:** Decoupled benchmark suites to JSON; decomposed search/indexing logic in `server.py`.
+- **Golden Alignment:** Aligned ground-truth labels with actual retrieved chunks for 20 queries.
 
 ---
 
@@ -47,4 +52,4 @@ _Nothing yet — spec phase only._
 
 - The `.specs/features/enterprise-ai-infrastructure/` feature folder covers all 20 features across 10 pillars as a single coordinated uplift
 - Individual milestones (M1–M5) map to natural implementation phases; each milestone is independently shippable
-- The `server.py` file is 800+ lines; the async refactor (M2) will likely require splitting it into `server.py` + `indexing.py` + `search.py` sub-modules
+- M6 has been added as a high-priority optimization path based on RAGAS results.

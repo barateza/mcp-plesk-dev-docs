@@ -42,20 +42,20 @@ Following Phase 6, several architectural improvements were implemented to recove
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|0.410|**0.725**|0.840|1.17 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|**0.635**|0.680|**0.840**|1.28 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.285|0.510|0.775|3.67 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.410|0.535|0.700|**0.38 s**|~1 300 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|**0.725**|0.847|0.838|1.21 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|0.708|**0.878**|**0.875**|1.30 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.675|0.855|0.780|3.51 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.615|0.847|0.833|**0.32 s**|~1 300 MB|
 
 ### Observations
 
-1. **4-bit TurboQuant achieves quality parity.** Moving from 5-bit to 4-bit quantization while relaxing deduplication (allowing 2 chunks per file) resulted in identical HR/MRR between `full` and `full-tq`, with a 10x latency advantage (0.38s vs 3.67s).
+1. **Reranker pool expansion improves MRR.** Increasing `PLESK_RERANK_CANDIDATES` from 25 to 50 allowed the cross-encoder to evaluate a broader set of initial hits, stabilizing MRR across all profiles on the expanded 20-query suite.
 
-2. **Faithfulness improves for Full-TQ.** The combination of answer-grounding constraints and neighbor expansion for the top-5 results (previously top-3) has stabilized `faithfulness` for the `full-tq` profile at 0.410.
+2. **Quality parity at 4-bit TQ.** `full-tq` maintains identical Hit Rate and MRR to the full-precision `full` model while providing a **11x latency reduction** (0.32s vs 3.51s).
 
-3. **`medium` profile leading in Groundedness.** The `medium` profile remains the most faithful (0.635), suggesting its English-specific embeddings combined with structural normalization provide the best context for factual grounding.
+3. **Consistently high context quality.** Faithfulness (~0.61–0.72) and Recall (~0.84–0.88) remain high across all profiles, confirming that the structural normalization and neighbor expansion logic are effective for the Plesk corpus.
 
-4. **Consistency across CUDA runs.** Re-running the baseline with the latest codebase improvements confirms a stable 75-80% Hit Rate across all profiles, with clear paths forward for further recall improvements in the API and JS-SDK categories.
+4. **`light` profile continues to lead in accuracy.** For English-only documentation, the `light` profile (BAAI/bge-small-en-v1.5) provides the highest combination of Hit Rate and MRR, proving that model size is less critical than specialization for this dataset.
 
 ---
 

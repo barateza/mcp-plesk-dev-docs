@@ -1232,7 +1232,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     logger.info("Search request: q='%s' category='%s'", safe_query, category)
 
     reranker = get_reranker()
-    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "25"))
+    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "50"))
 
     candidates = _get_search_candidates(query, category, n_candidates)
 

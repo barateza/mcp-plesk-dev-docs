@@ -90,19 +90,19 @@ flowchart TD
     subgraph Server["FastMCP Server · plesk_unified/server.py"]
         direction TB
         E["1 · Embed query\n(profile-selected model)"]
-        S["2 · ANN search\nLanceDB (Apache Arrow)"]
-        R["3 · Rerank top-N\n(profile-selected reranker)"]
-        O["4 · Return top-5 results"]
+        S["2 · Hybrid Search\nVector (LanceDB) + FTS (Apache Arrow)"]
+        R["3 · RRF Merge + Rerank\n(Reciprocal Rank Fusion)"]
+        O["4 · Relevance Gate + Return"]
         E --> S --> R --> O
     end
 
-    subgraph Store["LanceDB Vector Store"]
+    subgraph Store["LanceDB Vector & FTS Store"]
         direction LR
-        G["Guide\nHTML"]
-        A["API\nHTML"]
-        C["CLI\nHTML"]
-        P["PHP Stubs\nPHP"]
-        J["JS SDK\nJS"]
+        G["Guide\nDoc-aware chunks"]
+        A["API\nDoc-aware chunks"]
+        C["CLI\nMarkdown chunks"]
+        P["PHP Stubs\nHierarchical"]
+        J["JS SDK\nHierarchical"]
     end
 
     S <--> Store
@@ -114,60 +114,70 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 |---|---|---|
 |Embeddings|BAAI/bge-small · bge-base · bge-m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
 |Reranker|ms-marco-MiniLM / bge-reranker-base (profile)|Cross-encoder result reranking (always applied)|
-|Vector DB|LanceDB|Apache Arrow-based ANN search|
+|Vector DB|LanceDB|Apache Arrow-based ANN search + Full-Text Search (FTS)|
 |MCP Server|FastMCP|Tool exposure to AI clients (`plesk_unified/server.py`)|
-|HTML Parser|BeautifulSoup4|Documentation ingestion|
-|Git integration|Git (stdlib subprocess)|Auto-fetches PHP stubs and JS SDK|
+|Ingestion|Document-aware Chunkers|Preserves semantic boundaries (sentence-window, hierarchical)|
+|Normalization|Table-to-Prose (Optional LLM)|Preserves table semantics during embedding|
+|Integration|Git (stdlib subprocess)|Auto-fetches PHP stubs and JS SDK|
 
 **Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~1–5 s retrieval on CUDA (profile-dependent)
 
 ---
 
+## Key Features
+
+- **Hybrid Search (Vector + FTS):** Combines semantic ANN search with Full-Text Search (FTS) using Reciprocal Rank Fusion (RRF). This ensures precise matching for specific technical terms (like error codes or CLI flags) while maintaining semantic understanding.
+- **Document-aware Chunking:** Moves beyond fixed-size windows. HTML guides use sentence-window sliding for better narrative flow, while PHP stubs and JS SDK files are indexed using hierarchical declaration boundaries to keep classes and methods intact.
+- **Table-to-Prose Normalization:** Converts complex HTML tables into descriptive prose before embedding. This preserves the semantic relationships between headers and values that are often lost in raw text extraction.
+- **Selective Reindexing:** Uses source fingerprinting and content signatures to only reindex files that have changed. Drastically reduces "warmup" time for the unified corpus.
+- **Relevance Gate:** Profile-aware confidence thresholding. If the top-ranked results don't meet a minimum quality score (configurable via `PLESK_MIN_RELEVANCE_THRESHOLD`), the server returns a safe fallback instead of misleading hallucinated chunks.
+- **TurboQuant Acceleration:** Fast 5-bit quantized search for the `full` profile, allowing large multilingual models to run with ultra-low latency on CUDA hardware.
+
+---
+
 ## Model profiles
 
-The server ships with three profiles that trade RAM and latency against retrieval quality. There is also a TurboQuant-powered `full-tq` profile that reuses the `full` LanceDB corpus but compresses the 1024-dim vectors to 5 bits before scoring (see the TurboQuant section below).
-Set `PLESK_MODEL_PROFILE` before starting the server:
+The server ships with four profiles that trade RAM and latency against retrieval quality. Set `PLESK_MODEL_PROFILE` before starting the server:
 
 ```env
 PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-tq)
 ```
 
-|Profile|Embed model|Dim|HR@5|MRR@5|Avg latency*|Est. RAM|
+|Profile|Embed model|Dim|HR@5*|MRR@5*|Avg latency*|Est. RAM|
 |---|---|---|---|---|---|---|
 |`light`|BAAI/bge-small-en-v1.5|384|100%|0.933|1.0 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|100%|**0.938**|1.2 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|100%|0.889|4.6 s|~1 800 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.938**|1.2 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|85%|0.792|3.6 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75%|0.692|**0.4 s**|~1 300 MB|
 
-\* Measured on NVIDIA CUDA. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology, per-query breakdown, and reproduction steps.
+\* Measured on NVIDIA CUDA. Latency includes ANN search + reranking. `light` and `medium` use the 12-query baseline; `full` and `full-tq` use the expanded 20-query RAGAS suite. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology.
 
-> **Tip:** `medium` has the best MRR on the English-only Plesk corpus and is ~4× faster than
+> **Tip:** `medium` has the best MRR on the English-only Plesk corpus and is significantly faster than
 > `full`. Prefer `full` only if you add non-English documentation sources.
 
 Each profile uses a separate LanceDB index (`storage/lancedb_<profile>/`), so
 you can switch profiles without re-indexing the others.
 
-The `full-tq` profile shares the `full` index but routes searches through `TurboQuantIndex`, keeping the embeddings in a 5-bit quantized buffer instead of dense floats so candidate scoring can run faster while aiming to match the metrics above. Use `PLESK_MODEL_PROFILE=full-tq` on a CUDA-capable host and rebuild the TurboQuant index with `python scripts/benchmark_profiles.py --refresh --profiles full-tq` after any re-index. See [docs/turboquant.md](docs/turboquant.md) for full technical details.
+The `full-tq` profile shares the `full` index but routes searches through `TurboQuantIndex`, keeping the embeddings in a 5-bit quantized buffer instead of dense floats so candidate scoring can run faster while aiming to match the metrics above. Use `PLESK_MODEL_PROFILE=full-tq` on a CUDA-capable host and rebuild the TurboQuant index with `refresh_knowledge` (it builds automatically if the profile supports it). See [docs/turboquant.md](docs/turboquant.md) for full technical details.
 
 ---
 
 ## Benchmarks
 
-Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 12 query set):
+Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 2026-04-20):
 
 <details>
 <summary>Show full benchmark table</summary>
 
-|Profile|HR@5|MRR@5|Avg latency|Est. RAM|
-|---|---|---|---|---|
-|`light`|100%|0.933|1.04 s|~200 MB|
-|`medium`|100%|0.938|1.19 s|~600 MB|
-|`full`|100%|0.889|4.58 s|~1 800 MB|
-|`full-tq`|91.7%|0.875|0.07 s|~1 300 MB (5-bit) |
+|Profile|HR@5|MRR@5|Faithfulness|Context Recall|Avg latency|
+|---|---|---|---|---|---|
+|`medium`|100%|0.938|—|—|1.19 s|
+|`full`|85.0%|0.792|0.065|0.525|3.59 s|
+|`full-tq`|75.0%|0.692|0.045|0.545|0.39 s|
 
-- All three profiles reach 100% HR@5, showing the index covers the corpus end-to-end.
-- `medium` hits the highest MRR@5 (0.938) while only adding ~0.15 s over `light`.
-- `full` offers a multilingual embedding (BAAI/bge-m3) but is roughly 4× slower. The `full-tq` profile reuses this index via TurboQuant 5-bit quantization to keep the same hit rates while shrinking its working set and keeping candidate scoring localized to GPU memory; see [docs/turboquant.md](docs/turboquant.md) for compression and accuracy trade-offs.
-- `full-tq`’s CUDA run trades a slightly lower HR@5 (91.7%) for an ultra-low latency of 0.07 s because the quantized corpus stays on the GPU; reproduce with `uv run python scripts/benchmark_profiles.py --profiles full-tq`.
+- `medium` hits the highest MRR@5 (0.938) on the control set.
+- `full` offers a multilingual embedding (BAAI/bge-m3) and deep RAGAS evaluation support.
+- `full-tq`’s CUDA run trades a slightly lower HR@5 for an ultra-low latency of 0.39 s because the quantized corpus stays on the GPU; reproduce with `uv run python scripts/benchmark_profiles.py --profiles full-tq`.
 
 </details>
 
@@ -217,7 +227,7 @@ and confirm which one is active.
 uv run plesk-unified-mcp
 ```
 
-The server fetches documentation, generates embeddings on first run, and starts listening for MCP connections.
+The server fetches documentation, performs selective reindexing based on source fingerprints, and starts listening for MCP connections.
 
 #### Daemon / background mode
 
@@ -233,9 +243,19 @@ Then verify readiness from your MCP client:
 - `daemon_health` → `"warmup_state": "ready"`
 - `daemon_health` → `"table_ready": true`
 
-Use `daemon_health` at any time to check warmup state (`idle`, `running`,
-`ready`, or `failed`) plus table and TurboQuant artifact status. Call
-`warmup_server` manually for deterministic preloading without indexing.
+---
+
+## Available MCP Tools
+
+| Tool | Description |
+|---|---|
+| `search_plesk_unified` | **Primary tool.** Search across all 5 sources with hybrid ranking and reranking. |
+| `refresh_knowledge` | Re-fetch sources and update the index. Supports incremental sync or full `--reset_db`. |
+| `warmup_server` | Manually preload models and DB state without waiting for the first query. |
+| `daemon_health` | Check warmup status, hardware acceleration, and index availability. |
+| `list_model_profiles` | Show available profiles (`light`, `medium`, `full`, `full-tq`) and indicate which is active. |
+
+---
 
 #### GPU acceleration (optional)
 
@@ -314,6 +334,7 @@ mcp-plesk-unified/
 │   ├── log_handler.py         # Cross-platform native OS logging handler factory
 │   ├── tq_index.py            # TurboQuant search index
 │   ├── benchmark_engines.py   # Benchmarking engine implementations
+│   ├── benchmark_gates.py     # Benchmark gate and baseline management
 │   ├── benchmark_suites.py    # Benchmark suite loader
 │   └── turboquant/            # In-repo TurboQuant quantization package
 ├── scripts/
@@ -362,13 +383,14 @@ cp .env.example .env
 Key variables:
 
 ```env
-OPENROUTER_API_KEY=sk-or-v1-...   # for RAGAS and table normalization
-PLESK_HTML_LLM_TABLE_NORMALIZE=1   # optional: enable LLM-assisted complex table parsing
-FORCE_DEVICE=cpu                   # optional: override GPU detection
-PLESK_DAEMON_AUTO_WARMUP=true      # optional: daemon-only background warmup
-PLESK_MIN_RELEVANCE_THRESHOLD=0.55 # optional: profile-aware fallback gate
-PLESK_RERANK_CANDIDATES=25         # optional: candidate pool size before reranking
-KB_ROOT=/custom/path               # optional: override knowledge_base dir
+OPENROUTER_API_KEY=sk-or-v1-...   # required for RAGAS and optional LLM table normalization
+PLESK_MODEL_PROFILE=full-tq        # light | medium | full | full-tq (default: full-tq)
+PLESK_MIN_RELEVANCE_THRESHOLD=0.55 # relevance gate (profile-aware defaults: light:0.50, medium:0.60, full:0.55)
+PLESK_HTML_LLM_TABLE_NORMALIZE=1   # enable LLM-assisted complex table parsing during indexing
+PLESK_DAEMON_AUTO_WARMUP=true      # background model loading on startup
+FORCE_DEVICE=cpu                   # override GPU/MPS detection
+PLESK_RERANK_CANDIDATES=25         # size of candidate pool passed to cross-encoder
+KB_ROOT=/custom/path               # override knowledge_base directory
 LOG_HANDLER=os                     # os | file | both (default: os)
 LOG_LEVEL=INFO                     # DEBUG | INFO | WARNING | ERROR
 ```
@@ -424,8 +446,9 @@ PLESK_HTML_LLM_TABLE_NORMALIZE=1 uv run python scripts/benchmark_profiles.py --r
 
 ## Troubleshooting
 
-**MCP Inspector fails on Windows with backslash errors:**
+**"I could not find a reliable answer":** This is the **Relevance Gate** in action. The top search result's score was lower than `PLESK_MIN_RELEVANCE_THRESHOLD`. If you're getting this too often, check if your profile is correct or try lowering the threshold (e.g., `0.50`).
 
+**MCP Inspector fails on Windows with backslash errors:**
 ```powershell
 # Use the console script name instead of a file path
 npx @modelcontextprotocol/inspector uv run plesk-unified-mcp

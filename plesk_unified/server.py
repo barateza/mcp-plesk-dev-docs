@@ -477,7 +477,7 @@ def _existing_filenames_for_category(table: Any, category: str) -> set[str]:
         return set()
 
 
-def _infer_doctype(
+def _infer_doctype(  # noqa: C901
     source: Dict[str, Any], filename: str, title: str | None, breadcrumb: str | None
 ) -> str:
     stype = source.get("type", "")
@@ -848,7 +848,7 @@ def process_source_files(source, table, existing_files):
 
 
 @mcp.tool
-def refresh_knowledge(
+def refresh_knowledge(  # noqa: C901
     target_category: str = Field(
         "all",
         description=(
@@ -916,12 +916,13 @@ def refresh_knowledge(
 
         try:
             if not reset_db:
-                # A changed source should be re-indexed from scratch to avoid stale chunks.
+                # Re-index changed source from scratch to avoid stale chunks.
                 try:
                     table.delete(f"category = '{source['cat']}'")
                 except Exception:
                     logger.warning(
-                        "Could not delete existing rows for category '%s' before reindex.",
+                        "Could not delete existing rows for category '%s' "
+                        "before reindex.",
                         source["cat"],
                         exc_info=True,
                     )
@@ -962,7 +963,7 @@ def refresh_knowledge(
 
 
 @mcp.tool
-def search_plesk_unified(query: str, category: str | None = None) -> str:
+def search_plesk_unified(query: str, category: str | None = None) -> str:  # noqa: C901
     """
     Search the unified knowledge base and return up to 5 formatted results.
 
@@ -1024,14 +1025,25 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     # Deduplicate: keep only the top-ranked chunk per source file.
     results = _deduplicate_by_filename(candidates)[:5]
 
-    min_relevance = float(os.environ.get("PLESK_MIN_RELEVANCE_THRESHOLD", "0.55"))
+    profile_name = os.environ.get("PLESK_MODEL_PROFILE", "full-tq")
+    default_threshold = 0.55
+    if profile_name == "light":
+        default_threshold = 0.50
+    elif profile_name == "medium":
+        default_threshold = 0.60
+
+    min_relevance = float(
+        os.environ.get("PLESK_MIN_RELEVANCE_THRESHOLD", str(default_threshold))
+    )
     if not results:
         return "I could not find a reliable answer."
     if results[0].get("_relevance", 0.0) < min_relevance:
         logger.info(
-            "Search confidence below threshold (%.4f < %.4f). Returning fallback.",
+            "Search confidence below threshold (%.4f < %.4f) for profile '%s'. "
+            "Returning fallback.",
             results[0].get("_relevance", 0.0),
             min_relevance,
+            profile_name,
         )
         return "I could not find a reliable answer."
 

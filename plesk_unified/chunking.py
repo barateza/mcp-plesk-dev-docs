@@ -144,17 +144,27 @@ def chunk_js_hierarchical(
 def build_doc_records(filename: str, chunks: List[str], meta: Dict) -> List[Dict]:
     """Build a list of document dicts suitable for DB insertion.
 
-    Each record includes `text`, `title`, `filename`, `category`, and `breadcrumb`.
+    Each record includes `text`, `title`, `filename`, `category`, `breadcrumb`,
+    and `endpoint`.
+
+    The `text` field is enriched with title and breadcrumb for better retrieval.
     """
     records: List[Dict] = []
+    title = meta.get("title") or ""
+    breadcrumb = meta.get("breadcrumb") or ""
+
     for c in chunks:
+        # Task B: Prepend context to the text before embedding.
+        enriched_text = f"[Title: {title} | Path: {breadcrumb}] \n\n {c}"
+
         records.append(
             {
-                "text": c,
-                "title": meta.get("title"),
+                "text": enriched_text,
+                "title": title,
                 "filename": filename,
                 "category": meta.get("category"),
-                "breadcrumb": meta.get("breadcrumb") or "",
+                "breadcrumb": breadcrumb,
+                "endpoint": meta.get("endpoint"),  # Prepare for Task E
             }
         )
     return records

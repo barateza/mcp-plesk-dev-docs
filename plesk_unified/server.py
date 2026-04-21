@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 # ruff: noqa: E402
 import os
@@ -285,6 +286,7 @@ def get_schema() -> Any:
         filename: str
         category: str
         breadcrumb: str
+        endpoint: Optional[str] = None
 
     _schema_class = UnifiedSchema
     return _schema_class
@@ -334,15 +336,28 @@ def get_table(create_new: bool = False) -> Any:
     try:
         if create_new:
             logger.info("Creating/overwriting table 'plesk_knowledge'")
-            return db.create_table(
+            try:
+                db.drop_table("plesk_knowledge")
+            except Exception:
+                pass
+            table = db.create_table(
                 "plesk_knowledge", schema=get_schema(), mode="overwrite"
             )
+            # Task A: Enable Full-Text Search (FTS) for hybrid retrieval.
+            table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
+            return table
         return db.open_table("plesk_knowledge")
     except Exception:
         logger.info(
             "Table not found or error opening. Creating new 'plesk_knowledge' table."
         )
-        return db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
+        try:
+            db.drop_table("plesk_knowledge")
+        except Exception:
+            pass
+        table = db.create_table("plesk_knowledge", schema=get_schema(), mode="create")
+        table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
+        return table
 
 
 def _get_tq_index_path() -> Path:
@@ -797,16 +812,31 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     if not chunks:
         return []
 
+    # Task E: Extract endpoint if this is an API source
+    endpoint = None
+    if source["cat"] == "api":
+        # Match common REST API patterns like GET /api/v2/domains
+        match = re.search(
+            r"(GET|POST|PUT|DELETE|PATCH)\s+(\/api\/v2\/[a-zA-Z0-9\/\-\_{}]+)", text
+        )
+        if match:
+            endpoint = f"{match.group(1)} {match.group(2)}"
+
     records = chunking.build_doc_records(
         file_path.name,
         chunks,
-        {"title": title, "category": source["cat"], "breadcrumb": breadcrumb},
+        {
+            "title": title,
+            "category": source["cat"],
+            "breadcrumb": breadcrumb,
+            "endpoint": endpoint,
+        },
     )
 
+    # Task B: Each record already has prepended title/path in chunking.py.
+    # Here we additionally prepend the category and doctype for the final corpus text.
     for r in records:
-        r["text"] = (
-            f"[{source['cat'].upper()}] {title}\nDocType: {doctype}\n---\n{r['text']}"
-        )
+        r["text"] = f"[{source['cat'].upper()}] DocType: {doctype}\n{r['text']}"
 
     return records
 
@@ -975,11 +1005,44 @@ def refresh_knowledge(
     return "\n".join(report)
 
 
+def _rrf_merge(
+    vector_results: list[dict], fts_results: list[dict], k: int = 60
+) -> list[dict]:
+    """Merge two ranked lists using Reciprocal Rank Fusion."""
+    scores: dict[str, float] = {}
+    docs: dict[str, dict] = {}
+
+    for rank, doc in enumerate(vector_results):
+        # We need a stable key, use text + filename
+        key = f"{doc.get('filename')}:{doc.get('text')}"
+        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+        docs[key] = doc
+
+    for rank, doc in enumerate(fts_results):
+        key = f"{doc.get('filename')}:{doc.get('text')}"
+        scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank + 1)
+        if key not in docs:
+            docs[key] = doc
+
+    # Sort by RRF score
+    sorted_keys = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
+    results = []
+    for key in sorted_keys:
+        doc = docs[key]
+        # Store the RRF score as our new preliminary relevance
+        doc["_relevance"] = scores[key]
+        results.append(doc)
+
+    return results
+
+
 def _get_search_candidates(
     query: str, category: str | None, n_candidates: int
 ) -> list[dict[str, Any]]:
-    """Retrieve initial candidate pool from LanceDB or TurboQuant."""
+    """Retrieve candidate pool using Hybrid Search (Vector + FTS)."""
     profile = _get_profile()
+
+    # 1. Vector Search
     if getattr(profile, "use_turboquant", False):
         query_vec = np.asarray(
             get_embedding_model().compute_query_embeddings(query)[0],
@@ -990,30 +1053,47 @@ def _get_search_candidates(
             top_k=max(profile.tq_top_k, n_candidates),
             category=category,
         )
-        candidates = []
+        vector_candidates = []
         for meta, score in tq_results:
             r = dict(meta)
-            # TQ returns an inner-product of L2-normalised vectors (cosine
-            # similarity, range ≈ -1..1).  A scale of 5 spreads the sigmoid
-            # across this narrow range, producing meaningful 0..1 values as a
-            # preliminary sort key before the cross-encoder reranker runs.
             r["_relevance"] = float(_sigmoid(float(score) * 5.0))
-            candidates.append(r)
+            vector_candidates.append(r)
     else:
         table = get_table()
         search_op = table.search(query)
         if category:
             search_op = search_op.where(f"category = '{category}'")
         raw = search_op.limit(n_candidates).to_list()
-        candidates = []
+        vector_candidates = []
         for r in raw:
             rc = dict(r)
-            # Derive a preliminary relevance from vector distance so the
-            # fallback sort produces reasonable ordering.
             dist = float(rc.get("_distance") or 0.0)
             rc["_relevance"] = float(1.0 / (1.0 + dist))
-            candidates.append(rc)
-    return candidates
+            vector_candidates.append(rc)
+
+    # 2. FTS Search (Task A)
+    if getattr(profile, "use_turboquant", False):
+        # TQ does not support FTS directly yet, fallback to LanceDB table
+        table = get_table()
+    else:
+        table = get_table()
+
+    fts_candidates = []
+    try:
+        # Search the FTS index
+        fts_op = table.search(query, query_type="fts")
+        if category:
+            fts_op = fts_op.where(f"category = '{category}'")
+        fts_raw = fts_op.limit(n_candidates).to_list()
+        fts_candidates = [dict(r) for r in fts_raw]
+    except Exception as e:
+        logger.warning("FTS search failed: %s", e)
+
+    # 3. Hybrid Merge (RRF)
+    if fts_candidates:
+        return _rrf_merge(vector_candidates, fts_candidates)
+
+    return vector_candidates
 
 
 def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:

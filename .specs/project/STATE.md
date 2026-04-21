@@ -45,6 +45,7 @@ _No model guidance tips have been shown yet._
 - **P2:** LLM-assisted complex table normalization.
 - **Structural Refactor:** Decoupled benchmark suites to JSON; decomposed search/indexing logic in `server.py`.
 - **Golden Alignment:** Aligned ground-truth labels with actual retrieved chunks for 20 queries.
+- **Task A & B:** Implemented Hybrid Search (Vector + FTS) and Parent-Header Context Injection. HR@5 improved to 80%.
 
 ---
 

@@ -7,12 +7,28 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ## Quality Optimization Features (April 2026)
 
-Following Phase 6, several architectural improvements were implemented to recover Hit Rate and improve Faithfulness:
+Following Phase 6 and the subsequent regression analysis on the expanded 20-query suite, several targeted retrieval and context enhancements were implemented:
 
-1.  **Hybrid Search (Task A):** Combines dense vector retrieval (semantic) with Full-Text Search (keyword) using **Reciprocal Rank Fusion (RRF)**. This ensures that exact matches for technical terms (e.g., specific API paths or class names) are prioritized.
-2.  **Parent-Header Injection (Task B):** Automatically prepends document **Title** and **Breadcrumb** path to every chunk before embedding. This makes every chunk self-describing and improves relevance for smaller models.
-3.  **Sentinel Window Expansion (Task C):** Increased the default sentence window for narrative documents from 3 to **5 sentences**, providing more immediate context.
-4.  **Neighborhood Retrieval (Task D):** For the top results, the system now automatically fetches the **immediate previous and next chunks** from the same file, effectively tripling the context available to the AI for grounding.
+1.  **Hybrid Search Tuning (REQ-2):** Optimized the Reciprocal Rank Fusion (RRF) `k` constant from 60 to **20**. This shift increases the weight of top-ranked results from both dense vector and keyword searches, specifically improving accuracy for technical terms and API paths.
+2.  **Global File Summaries (REQ-3):** During indexing, the system now optionally generates a one-sentence summary of each source file using a lightweight LLM call. This summary is injected into every chunk, providing a macro-context that helps the retriever understand the document's overall purpose even in isolated chunks.
+3.  **API Endpoint Extraction (REQ-4):** Enhanced the HTML parser to explicitly extract REST API signatures (e.g., `GET /v1/domains`). These signatures are added to the chunk text and included in the unique chunk hash, significantly improving retrieval for ambiguous API queries.
+4.  **Rerank Pool Expansion (REQ-1):** Increased the default candidate pool size for the cross-encoder reranker from 25 to **50**. This allows the reranker to evaluate a broader set of initial semantic hits, stabilizing MRR on complex technical corpora.
+
+---
+
+## Latest results — 2026-04-21 (Apple M2 Ultra, MPS)
+
+**Hardware:** Apple M2 Ultra (76-core GPU)
+**Python:** 3.12.12
+**Query set:** 20 queries (Expanded control suite with RAGAS evaluation)
+
+### Summary
+
+|Profile|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|----|-----|----------|--------|
+|`medium`|**80.0%**|**0.735**|1.44 s|~600 MB|
+
+> **Note:** The historical 100% HR / 0.933 MRR baseline recorded in March 2026 used a smaller, 12-query suite. The current results on the expanded 20-query suite represent a more rigorous and accurate performance baseline for the English-only Plesk documentation corpus.
 
 ---
 

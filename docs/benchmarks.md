@@ -9,24 +9,24 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 **Hardware:** NVIDIA GeForce RTX 4070 Super (12 GB VRAM)
 **Python:** 3.12.10
-**Query set:** 12 queries across all five documentation sources
+**Query set:** 20 queries (Expanded control suite with RAGAS support)
 
 ### Summary
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|----------|--------|
-|`light`|BAAI/bge-small-en-v1.5|384|91.7%|0.854|1.09 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.933**|1.30 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|91.7%|0.917|3.54 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|91.7%|0.917|**0.05 s**|~1 300 MB|
+|`full`|BAAI/bge-m3|1024|85.0%|0.792|3.55 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.692|**0.18 s**|~1 300 MB|
+
+*Note: Faithfulness and Context Recall metrics require an LLM judge via OPENROUTER_API_KEY and were not captured in this run.*
 
 ### Observations
 
-1. **`full-tq` achieves 70x faster retrieval than `full`.** By using 5-bit TurboQuant compression and category-aware indexing, latency drops from 3.54s to 0.05s with zero regression in HR or MRR.
+1. **Expanded query set increases task difficulty.** The addition of 8 new targeted queries (totaling 20) has revealed retrieval gaps in both the `full` and `full-tq` profiles, particularly in the API and JS-SDK categories.
 
-2. **`medium` profile remains the quality leader.** Even on high-end hardware, the English-specialized `bge-base-en-v1.5` outperforms the multilingual `bge-m3` in MRR for this English-only corpus.
+2. **TurboQuant latency remains class-leading.** Even with a larger query set and 5-bit compression, `full-tq` maintains sub-200ms average latency, being ~20x faster than the full precision model on the same hardware.
 
-3. **CUDA-accelerated `full` indexing is now stable.** Unlike the memory-constrained M2, the 4070 Super handles the BGE-M3 tensor expansion comfortably during both indexing and search.
+3. **RAGAS scoring integration complete.** The benchmarking pipeline is now ready to use LLM-based evaluation for `faithfulness` and `context_recall` as soon as API credentials are provided.
 
 ---
 

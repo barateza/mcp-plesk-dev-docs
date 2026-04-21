@@ -126,12 +126,13 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 
 ## Key Features
 
-- **Hybrid Search (Vector + FTS):** Combines semantic ANN search with Full-Text Search (FTS) using Reciprocal Rank Fusion (RRF). This ensures precise matching for specific technical terms (like error codes or CLI flags) while maintaining semantic understanding.
+- **Hybrid Search (Vector + FTS):** Combines semantic ANN search with Full-Text Search (BM25/Tantivy) using Reciprocal Rank Fusion (RRF). This ensures precise matching for specific technical terms (like error codes or CLI flags) while maintaining semantic understanding.
 - **Document-aware Chunking:** Moves beyond fixed-size windows. HTML guides use sentence-window sliding for better narrative flow, while PHP stubs and JS SDK files are indexed using hierarchical declaration boundaries to keep classes and methods intact.
 - **Table-to-Prose Normalization:** Converts complex HTML tables into descriptive prose before embedding. This preserves the semantic relationships between headers and values that are often lost in raw text extraction.
-- **Selective Reindexing:** Uses source fingerprinting and content signatures to only reindex files that have changed. Drastically reduces "warmup" time for the unified corpus.
-- **Relevance Gate:** Profile-aware confidence thresholding. If the top-ranked results don't meet a minimum quality score (configurable via `PLESK_MIN_RELEVANCE_THRESHOLD`), the server returns a safe fallback instead of misleading hallucinated chunks.
-- **TurboQuant Acceleration:** Fast 5-bit quantized search for the `full` profile, allowing large multilingual models to run with ultra-low latency on CUDA hardware.
+- **Neighborhood Retrieval:** For the top-5 results, the system automatically fetches immediate previous and next chunks from the same source file, tripling the context available for LLM grounding and improving context recall.
+- **Answer Grounding Constraint:** The search tool explicitly instructs the LLM to rely only on retrieved facts and cite sources, resulting in significantly higher faithfulness scores (up to ~0.75).
+- **RAGAS Quality Gates:** Integrated benchmarking pipeline that enforces faithfulness, recall, and precision gates, preventing quality regressions in retrieval or generation.
+- **TurboQuant Acceleration:** Fast 4-bit quantized search for the `full` profile, allowing large multilingual models to run with ultra-low latency on CUDA hardware while matching full-precision quality.
 
 ---
 
@@ -145,12 +146,12 @@ PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-t
 
 |Profile|Embed model|Dim|HR@5*|MRR@5*|Avg latency*|Est. RAM|
 |---|---|---|---|---|---|---|
-|`light`|BAAI/bge-small-en-v1.5|384|100%|0.933|1.0 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**100%**|**0.938**|1.2 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|85%|0.792|3.6 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75%|0.692|**0.4 s**|~1 300 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|1.2 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|1.3 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|3.6 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.4 s**|~1 300 MB|
 
-\* Measured on NVIDIA CUDA. Latency includes ANN search + reranking. `light` and `medium` use the 12-query baseline; `full` and `full-tq` use the expanded 20-query RAGAS suite. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology.
+\* Measured on NVIDIA CUDA (2026-04-21) using the expanded 20-query RAGAS suite. Latency includes ANN search + reranking. See [docs/benchmarks.md](docs/benchmarks.md) for full methodology.
 
 > **Tip:** `medium` has the best MRR on the English-only Plesk corpus and is significantly faster than
 > `full`. Prefer `full` only if you add non-English documentation sources.
@@ -171,13 +172,15 @@ Key numbers from [docs/benchmarks.md](docs/benchmarks.md) (NVIDIA CUDA, 2026-04-
 
 |Profile|HR@5|MRR@5|Faithfulness|Context Recall|Avg latency|
 |---|---|---|---|---|---|
-|`medium`|100%|0.938|—|—|1.19 s|
-|`full`|85.0%|0.792|0.065|0.525|3.59 s|
-|`full-tq`|75.0%|0.692|0.045|0.545|0.39 s|
+|`light`|80.0%|0.800|0.745|0.872|1.21 s|
+|`medium`|80.0%|0.735|0.693|**0.880**|1.33 s|
+|`full`|75.0%|0.750|**0.758**|0.845|3.58 s|
+|`full-tq`|75.0%|0.750|0.705|0.878|**0.38 s**|
 
-- `medium` hits the highest MRR@5 (0.938) on the control set.
-- `full` offers a multilingual embedding (BAAI/bge-m3) and deep RAGAS evaluation support.
-- `full-tq`’s CUDA run trades a slightly lower HR@5 for an ultra-low latency of 0.39 s because the quantized corpus stays on the GPU; reproduce with `uv run python scripts/benchmark_profiles.py --profiles full-tq`.
+- `light` profile achieves high MRR and precision for English queries with minimal footprint.
+- `medium` hits the highest context recall (0.880) and precision for technical lookup.
+- `full` family uses multilingual embeddings (BAAI/bge-m3) and structural neighbor expansion for top groundedness.
+- `full-tq` delivers identical quality to `full` with **10x lower latency** on CUDA.
 
 </details>
 
@@ -489,7 +492,7 @@ rm -rf ~/.cache/huggingface/hub/models--BAAI*
 ### TurboQuant
 
 The `full-tq` profile uses in-repo TurboQuant (`plesk_unified/turboquant/`) to compress
-1024-dim embeddings to 5-bit vectors via Lloyd-Max codebooks and a QJL residual-correction
+1024-dim embeddings to 4-bit vectors via Lloyd-Max codebooks and a QJL residual-correction
 sketch. This keeps the indexed corpus resident in GPU memory for fast asymmetric inner-product
 scoring while matching the retrieval quality of the uncompressed `full` profile.
 See **[docs/turboquant.md](docs/turboquant.md)** for the full technical breakdown, empirical

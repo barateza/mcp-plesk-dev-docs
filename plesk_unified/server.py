@@ -848,14 +848,13 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
 
 
 def process_source_files(source, table, existing_files):
-    """Processes all files for a given source and indexes them."""
+    """Processes all files for a given source and indexes them using chunk-based batching."""
     toc_map = get_toc_map_for_source(source)
     files = io_utils.collect_files_for_source(source)
     logger.info("Found %d files for source %s", len(files), source["cat"])
 
-    cat_docs = []
-    files_processed_count = 0
-    BATCH_SIZE_FILES = 50
+    pending_docs = []
+    BATCH_SIZE_CHUNKS = 1000  # Large batches to maximize 12GB VRAM utilization
 
     for f in files:
         if f.name.startswith("_") or f.name == "toc.json" or f.name in existing_files:
@@ -869,23 +868,23 @@ def process_source_files(source, table, existing_files):
             title, breadcrumb, text = parse_code(f)
 
         records = build_and_chunk_docs(source, f, title, breadcrumb, text)
-        cat_docs.extend(records)
+        pending_docs.extend(records)
 
-        files_processed_count += 1
-        if files_processed_count >= BATCH_SIZE_FILES:
-            if cat_docs:
-                logger.info(
-                    "Saving batch of %d chunks for %s...", len(cat_docs), source["cat"]
-                )
-                chunking.persist_batch(table, cat_docs)
-                cat_docs = []
-            files_processed_count = 0
+        # Batch by chunk count to keep the GPU busy with large matrices
+        if len(pending_docs) >= BATCH_SIZE_CHUNKS:
+            logger.info(
+                "Saving batch of %d chunks for %s...", len(pending_docs), source["cat"]
+            )
+            chunking.persist_batch(table, pending_docs)
+            pending_docs = []
 
-    if cat_docs:
+    if pending_docs:
         logger.info(
-            "Saving final batch of %d chunks for %s...", len(cat_docs), source["cat"]
+            "Saving final batch of %d chunks for %s...",
+            len(pending_docs),
+            source["cat"],
         )
-        chunking.persist_batch(table, cat_docs)
+        chunking.persist_batch(table, pending_docs)
 
 
 def _sync_single_source(
@@ -944,6 +943,8 @@ def _sync_single_source(
     return f"Finished pass for {source['cat']}."
 
 
+import concurrent.futures
+
 @mcp.tool
 def refresh_knowledge(
     target_category: str = Field(
@@ -990,12 +991,20 @@ def refresh_knowledge(
 
     report = []
 
-    for source in SOURCES:
-        if target_category != "all" and source["cat"] != target_category:
-            continue
-
-        msg = _sync_single_source(source, table, reset_db, source_entries)
-        report.append(msg)
+    # Parallelize indexing across sources to saturate GPU/CPU
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_source = {
+            executor.submit(_sync_single_source, source, table, reset_db, source_entries): source
+            for source in SOURCES
+            if target_category == "all" or source["cat"] == target_category
+        }
+        for future in concurrent.futures.as_completed(future_to_source):
+            try:
+                report.append(future.result())
+            except Exception as exc:
+                source = future_to_source[future]
+                logger.exception("Source %s generated an exception: %s", source["cat"], exc)
+                report.append(f"ERROR indexing {source['cat']}: {exc}")
 
     _save_source_state(source_state)
 

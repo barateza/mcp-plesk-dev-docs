@@ -29,12 +29,14 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "fastmcp>=3.2.0",
     "lancedb>=0.29.1",
+    "pylance>=0.23.0",
     "numpy>=1.26.0",  # used directly in server.py, tq_index.py, and scripts
     "psutil>=6.1.1",
     "pydantic>=2.10.0",
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
+    "tantivy>=0.22.0",
 ]
 
 [project.urls]

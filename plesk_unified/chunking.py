@@ -4,7 +4,7 @@ from typing import Dict, List
 
 # Bump this version whenever the chunking logic or context injection changes
 # to force a re-embedding of changed chunks while preserving identical ones.
-CHUNK_VERSION = "v2"
+CHUNK_VERSION = "v3"
 
 
 def chunk_by_chars(text: str, size: int = 1500, overlap: int = 200) -> List[str]:

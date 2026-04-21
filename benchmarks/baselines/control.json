@@ -4,6 +4,32 @@
   "runs": [
     {
       "suite": "control",
+      "profile": "light",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.75,
+      "mrr": 0.75,
+      "avg_latency_s": 1.3012805083508283,
+      "faithfulness": 0.61,
+      "context_recall": 0.6,
+      "context_precision": 0.85
+    },
+    {
+      "suite": "control",
+      "profile": "medium",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.7,
+      "mrr": 0.7,
+      "avg_latency_s": 1.3394220999503887,
+      "faithfulness": 0.47,
+      "context_recall": 0.69,
+      "context_precision": 0.785
+    },
+    {
+      "suite": "control",
       "profile": "full",
       "engine": "baseline",
       "routing_policy": "baseline-only",

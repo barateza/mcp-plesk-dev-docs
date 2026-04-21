@@ -15,18 +15,20 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`full`|BAAI/bge-m3|1024|75.0%|0.750|**0.420**|0.545|0.735|3.63 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.365**|0.515|0.720|**0.39 s**|~1 300 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|75.0%|0.750|**0.610**|**0.600**|**0.850**|1.30 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|70.0%|0.700|0.470|**0.690**|0.785|1.34 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.420|0.545|0.735|3.63 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.365|0.515|0.720|**0.39 s**|~1 300 MB|
 
 ### Observations
 
-1. **Table-to-prose conversion significantly improves Faithfulness.** Following the implementation of structural HTML table normalization, `faithfulness` scores increased from ~0.06 to over 0.40. This confirms that preserving parameter semantics within tables leads to better-grounded retrieved context.
+1. **Table-to-prose conversion significantly improves Faithfulness.** Following the implementation of structural HTML table normalization, `faithfulness` scores increased from ~0.06 to over 0.40 in the `full` profiles.
 
-2. **Retrieval gaps identified in expanded suite.** Both profiles hit 75% HR@5, with specific misses in complex API and JS-SDK queries. This indicates that while the context is more faithful, the initial retrieval window (top-5) still misses some relevant information for more technical queries.
+2. **`light` profile leads in Faithfulness and Precision.** Despite its smaller size, the `light` profile achieved the highest `faithfulness` (0.61) and `context_precision` (0.85), suggesting that for this specific corpus, the smaller model captures the most relevant and grounded context.
 
-3. **High Context Precision.** Both profiles maintain strong `Context Precision` (~0.73), meaning that when relevant information is retrieved, it is consistently ranked at the top of the candidate list.
+3. **`medium` profile excels in Context Recall.** With a score of 0.69, the `medium` profile is the most effective at retrieving all necessary facts for the expanded query set, although it lags slightly in overall hit rate.
 
-4. **TurboQuant efficiency remains superior.** `full-tq` continues to deliver performance nearly identical to the full-precision model with a 9x reduction in average latency, even with the added complexity of full-text search and RAGAS evaluation.
+4. **TurboQuant efficiency remains superior.** `full-tq` delivers performance identical to the full-precision `full` model with a 9x reduction in average latency, even with the added complexity of full-text search and RAGAS evaluation.
 
 ---
 

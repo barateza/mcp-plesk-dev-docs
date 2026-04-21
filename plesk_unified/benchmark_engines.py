@@ -104,7 +104,7 @@ def tokenize(text: str) -> list[str]:
 def bucket_query(query: str) -> str:
     """Classify a query as structural, lookup, or multi-hop for reporting/routing."""
     normalized = (query or "").lower()
-    
+
     # N-gram markers for compound/multi-hop queries
     multi_hop_markers = (
         " and ",
@@ -115,7 +115,7 @@ def bucket_query(query: str) -> str:
         " followed by ",
         " as well as ",
     )
-    
+
     structural_markers = (
         "how to",
         "add ",

@@ -848,7 +848,7 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
 
 
 def process_source_files(source, table, existing_files):
-    """Processes all files for a given source and indexes them using chunk-based batching."""
+    """Process all files and index them using chunk-based batching."""
     toc_map = get_toc_map_for_source(source)
     files = io_utils.collect_files_for_source(source)
     logger.info("Found %d files for source %s", len(files), source["cat"])
@@ -994,7 +994,9 @@ def refresh_knowledge(
     # Parallelize indexing across sources to saturate GPU/CPU
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         future_to_source = {
-            executor.submit(_sync_single_source, source, table, reset_db, source_entries): source
+            executor.submit(
+                _sync_single_source, source, table, reset_db, source_entries
+            ): source
             for source in SOURCES
             if target_category == "all" or source["cat"] == target_category
         }
@@ -1003,7 +1005,9 @@ def refresh_knowledge(
                 report.append(future.result())
             except Exception as exc:
                 source = future_to_source[future]
-                logger.exception("Source %s generated an exception: %s", source["cat"], exc)
+                logger.exception(
+                    "Source %s generated an exception: %s", source["cat"], exc
+                )
                 report.append(f"ERROR indexing {source['cat']}: {exc}")
 
     _save_source_state(source_state)

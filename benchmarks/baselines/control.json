@@ -1,33 +1,7 @@
 {
   "version": 1,
-  "created_at": "2026-04-21T04:06:55.901442+00:00",
+  "created_at": "2026-04-21T04:44:30.933524+00:00",
   "runs": [
-    {
-      "suite": "control",
-      "profile": "light",
-      "engine": "baseline",
-      "routing_policy": "baseline-only",
-      "n_runs": 1,
-      "hit_rate": 0.8,
-      "mrr": 0.8,
-      "avg_latency_s": 1.180938399999286,
-      "faithfulness": 0.525,
-      "context_recall": 0.735,
-      "context_precision": 0.865
-    },
-    {
-      "suite": "control",
-      "profile": "medium",
-      "engine": "baseline",
-      "routing_policy": "baseline-only",
-      "n_runs": 1,
-      "hit_rate": 0.8,
-      "mrr": 0.76,
-      "avg_latency_s": 1.3116493700006686,
-      "faithfulness": 0.635,
-      "context_recall": 0.72,
-      "context_precision": 0.810
-    },
     {
       "suite": "control",
       "profile": "full",
@@ -36,10 +10,10 @@
       "n_runs": 1,
       "hit_rate": 0.75,
       "mrr": 0.75,
-      "avg_latency_s": 3.6283588799997233,
-      "faithfulness": 0.420,
-      "context_recall": 0.545,
-      "context_precision": 0.735
+      "avg_latency_s": 3.716108279999389,
+      "faithfulness": 0.37,
+      "context_recall": 0.5349999999999999,
+      "context_precision": 0.745
     },
     {
       "suite": "control",
@@ -49,10 +23,36 @@
       "n_runs": 1,
       "hit_rate": 0.75,
       "mrr": 0.75,
-      "avg_latency_s": 0.3942173100000218,
-      "faithfulness": 0.365,
+      "avg_latency_s": 0.3991807199996401,
+      "faithfulness": 0.36,
       "context_recall": 0.515,
-      "context_precision": 0.720
+      "context_precision": 0.755
+    },
+    {
+      "suite": "control",
+      "profile": "light",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.8,
+      "mrr": 0.8,
+      "avg_latency_s": 1.1581609800003207,
+      "faithfulness": 0.44000000000000006,
+      "context_recall": 0.6799999999999999,
+      "context_precision": 0.85
+    },
+    {
+      "suite": "control",
+      "profile": "medium",
+      "engine": "baseline",
+      "routing_policy": "baseline-only",
+      "n_runs": 1,
+      "hit_rate": 0.8,
+      "mrr": 0.735,
+      "avg_latency_s": 1.2762306549997446,
+      "faithfulness": 0.495,
+      "context_recall": 0.7100000000000001,
+      "context_precision": 0.8300000000000001
     }
   ]
 }

@@ -42,20 +42,20 @@ Following Phase 6, several architectural improvements were implemented to recove
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Avg latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|0.525|**0.735**|**0.865**|1.18 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.760|**0.635**|0.720|0.810|1.31 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.420|0.545|0.735|3.63 s|~1 800 MB|
-|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.365|0.515|0.720|**0.39 s**|~1 300 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|0.440|0.680|**0.850**|1.16 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|**0.495**|**0.710**|0.830|1.28 s|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|0.370|0.535|0.745|3.72 s|~1 800 MB|
+|`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|0.360|0.515|0.755|**0.40 s**|~1 300 MB|
 
 ### Observations
 
-1. **`light` profile provides the best retrieval/latency balance.** Surprising for this expanded suite, the `light` profile achieved the highest `MRR@5` (0.800) and `Context Precision` (0.865), while maintaining very low latency.
+1. **`light` profile maintains surprising retrieval dominance.** On the expanded 20-query suite, the smallest profile (`light`) leads in `MRR@5` (0.800) and `Context Precision` (0.850), reaffirming its efficiency for the Plesk English corpus.
 
-2. **Table-to-prose conversion significantly improves Faithfulness.** Following the implementation of structural HTML table normalization, all profiles now show healthy `faithfulness` scores, with `medium` leading at 0.635.
+2. **`medium` profile excels in Fact Retrieval.** With the highest `faithfulness` (0.495) and `context_recall` (0.710), the `medium` profile is the most effective at capturing complete and grounded context for complex technical queries.
 
-3. **TurboQuant efficiency remains superior.** `full-tq` delivers performance nearly identical to the full-precision `full` model with a 9x reduction in average latency, even with the added complexity of full-text search and RAGAS evaluation.
+3. **TurboQuant latency remains class-leading.** `full-tq` delivers retrieval metrics identical to the full-precision `full` model while being ~9x faster (0.40s vs 3.72s), demonstrating massive efficiency gains from 5-bit quantization.
 
-4. **Expanded query set reveals corpus-wide gaps.** All profiles hit between 75-80% HR@5, highlighting specific areas in the API and JS-SDK documentation that remain challenging for current embedding models.
+4. **Consistency across CUDA runs.** Re-running the entire baseline from scratch shows stable retrieval patterns, with a consistent 75-80% Hit Rate across all profiles, identifying clear targets for future documentation indexing improvements.
 
 ---
 

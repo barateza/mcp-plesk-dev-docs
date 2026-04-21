@@ -1043,7 +1043,9 @@ def refresh_knowledge(
     # Parallelize indexing across sources to saturate GPU/CPU
     with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         future_to_source = {
-            executor.submit(_sync_single_source, source, table, reset_db, source_entries): source
+            executor.submit(
+                _sync_single_source, source, table, reset_db, source_entries
+            ): source
             for source in SOURCES
             if target_category == "all" or source["cat"] == target_category
         }
@@ -1052,7 +1054,9 @@ def refresh_knowledge(
                 report.append(future.result())
             except Exception as exc:
                 source = future_to_source[future]
-                logger.exception("Source %s generated an exception: %s", source["cat"], exc)
+                logger.exception(
+                    "Source %s generated an exception: %s", source["cat"], exc
+                )
                 report.append(f"ERROR indexing {source['cat']}: {exc}")
 
     _save_source_state(source_state)

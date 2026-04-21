@@ -47,6 +47,7 @@ _No model guidance tips have been shown yet._
 - **Golden Alignment:** Aligned ground-truth labels with actual retrieved chunks for 20 queries.
 - **Task A & B:** Implemented Hybrid Search (Vector + FTS) and Parent-Header Context Injection. HR@5 improved to 80%.
 - **Task C & D:** Implemented Sentinel Window Expansion (5 sentences) and Neighborhood Retrieval (adjacent chunks). Context Precision improved to 0.88.
+- **Task E & F:** Refined API Endpoint Extraction and implemented Hierarchical Code Chunking for PHP/JS. Faithfulness improved to 0.49.
 
 ---
 

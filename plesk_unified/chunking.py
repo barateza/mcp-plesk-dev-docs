@@ -71,50 +71,50 @@ def chunk_by_sentence_window(text: str, window_size: int = 5) -> List[str]:
     return chunks
 
 
-def _split_by_regex_boundaries(text: str, boundary_regex: str) -> List[str]:
-    """Split code by declaration boundaries while preserving section content."""
-    if not text:
-        return []
-
-    lines = text.splitlines()
-    if not lines:
-        return []
-
-    boundary = re.compile(boundary_regex)
-    starts = [idx for idx, line in enumerate(lines) if boundary.search(line)]
-
-    if not starts:
-        return [text]
-
-    if starts[0] != 0:
-        starts = [0] + starts
-
-    starts.append(len(lines))
-    sections: List[str] = []
-    for i in range(len(starts) - 1):
-        start = starts[i]
-        end = starts[i + 1]
-        section = "\n".join(lines[start:end]).strip()
-        if section:
-            sections.append(section)
-    return sections
-
-
 def chunk_php_hierarchical(
     text: str, section_max_lines: int = 150, overlap: int = 20
 ) -> List[str]:
-    """Chunk PHP by class/method declarations with line-window fallback."""
-    boundary_regex = (
-        r"^\s*(abstract\s+class|final\s+class|class|interface|trait|"
-        r"public\s+function|protected\s+function|private\s+function|"
-        r"function)\b"
-    )
-    sections = _split_by_regex_boundaries(text, boundary_regex)
-    chunks: List[str] = []
+    """Chunk PHP by class/method declarations, preserving docblocks.
 
+    Task F: Improved boundary detection and block preservation.
+    """
+    if not text:
+        return []
+
+    # Regex that matches PHP declarations, optionally preceded by a docblock.
+    # Pattern: (/** ... */)? (abstract|final)? (class|interface|trait|function)
+    boundary_regex = (
+        r"(?:/\*\*[\s\S]*?\*/\s*)?"
+        r"^\s*(?:abstract\s+|final\s+)*"
+        r"(?:class|interface|trait|public\s+function|protected\s+function|"
+        r"private\s+function|function)\b"
+    )
+
+    # Use multiline flag for ^ to work correctly
+    sections = []
+    matches = list(re.finditer(boundary_regex, text, re.MULTILINE))
+
+    if not matches:
+        return chunk_by_lines(text, section_max_lines, overlap)
+
+    # Split text into sections based on match boundaries
+    last_pos = 0
+    for match in matches:
+        if match.start() > last_pos:
+            section = text[last_pos : match.start()].strip()
+            if section:
+                sections.append(section)
+        last_pos = match.start()
+
+    # Add the last section
+    if last_pos < len(text):
+        sections.append(text[last_pos:].strip())
+
+    chunks: List[str] = []
     for section in sections:
         line_count = len(section.splitlines())
         if line_count > section_max_lines:
+            # If a single class/method is still too large, use line-based splitting
             chunks.extend(chunk_by_lines(section, section_max_lines, overlap))
         else:
             chunks.append(section)
@@ -125,15 +125,38 @@ def chunk_php_hierarchical(
 def chunk_js_hierarchical(
     text: str, section_max_lines: int = 60, overlap: int = 10
 ) -> List[str]:
-    """Chunk JS/TS-like code by export/class/function boundaries."""
-    boundary_regex = (
-        r"^\s*(export\s+(default\s+)?(class|function|const|let|var)|"
-        r"class\s+|function\s+|const\s+[A-Za-z0-9_$]+\s*=\s*\(|"
-        r"describe\(|test\(|it\()"
-    )
-    sections = _split_by_regex_boundaries(text, boundary_regex)
-    chunks: List[str] = []
+    """Chunk JS/TS by export/class/function boundaries, preserving docblocks.
 
+    Task F: Improved boundary detection and block preservation.
+    """
+    if not text:
+        return []
+
+    # Regex for JS declarations, optionally preceded by a docblock
+    boundary_regex = (
+        r"(?:/\*\*[\s\S]*?\*/\s*)?"
+        r"^\s*(?:export\s+(?:default\s+)*)?"
+        r"(?:class|function|const|let|var|describe|test|it)\b"
+    )
+
+    sections = []
+    matches = list(re.finditer(boundary_regex, text, re.MULTILINE))
+
+    if not matches:
+        return chunk_by_lines(text, section_max_lines, overlap)
+
+    last_pos = 0
+    for match in matches:
+        if match.start() > last_pos:
+            section = text[last_pos : match.start()].strip()
+            if section:
+                sections.append(section)
+        last_pos = match.start()
+
+    if last_pos < len(text):
+        sections.append(text[last_pos:].strip())
+
+    chunks: List[str] = []
     for section in sections:
         line_count = len(section.splitlines())
         if line_count > section_max_lines:

@@ -816,12 +816,14 @@ def build_and_chunk_docs(source, file_path, title, breadcrumb, text):
     # Task E: Extract endpoint if this is an API source
     endpoint = None
     if source["cat"] == "api":
-        # Match common REST API patterns like GET /api/v2/domains
+        # Match common REST API patterns like GET /api/v2/domains or POST /auth/keys
+        # Handles both v2 and standard paths
         match = re.search(
-            r"(GET|POST|PUT|DELETE|PATCH)\s+(\/api\/v2\/[a-zA-Z0-9\/\-\_{}]+)", text
+            r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", text
         )
         if match:
             endpoint = f"{match.group(1)} {match.group(2)}"
+            logger.debug("Extracted endpoint: %s", endpoint)
 
     records = chunking.build_doc_records(
         file_path.name,

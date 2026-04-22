@@ -139,6 +139,30 @@ def parse_html_file(
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         html = fh.read()
 
+    # Task REQ-4: Extract all endpoint signatures, XML packets, and CLI commands.
+    # We do this FIRST before any BeautifulSoup cleaning.
+    found_endpoints = set()
+
+    # 1. REST API patterns (Method followed by path)
+    rest_matches = re.findall(
+        r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", html
+    )
+    for method, path, _ in rest_matches:
+        found_endpoints.add(f"{method} {path}")
+
+    # 2. XML API patterns (Tags ending in _list, _get, _set)
+    xml_matches = re.findall(r"([a-z0-9\_]+(?:_list|_get|_set))", html)
+    for packet in xml_matches:
+        if len(packet) > 5:  # avoid tiny noise
+            found_endpoints.add(f"XML: {packet}")
+
+    # 3. CLI patterns (plesk [bin] <obj> <cmd>)
+    cli_matches = re.findall(r"plesk\s+(?:bin\s+)?([a-z0-9\_]+)\s+([a-z0-9\_]+)", html)
+    for obj, cmd in cli_matches:
+        found_endpoints.add(f"CLI: {obj} {cmd}")
+
+    endpoint = ", ".join(sorted(list(found_endpoints))) if found_endpoints else None
+
     soup = BeautifulSoup(html, "html.parser")
 
     title_tag = soup.find("title")
@@ -153,16 +177,6 @@ def parse_html_file(
         "nav, footer, script, style, aside, .sidebar, .toc, noscript"
     ):
         sel.decompose()
-
-    # Task REQ-4: Extract endpoint signatures (e.g. GET /api/v2/domains)
-    endpoint = None
-    # Common pattern in Plesk API docs:
-    # a code or strong tag containing the method and path
-    endpoint_match = re.search(
-        r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", html
-    )
-    if endpoint_match:
-        endpoint = f"{endpoint_match.group(1)} {endpoint_match.group(2)}"
 
     # Preserve parameter relationships before markdown conversion flattens tables.
     llm_enabled = os.environ.get("PLESK_HTML_LLM_TABLE_NORMALIZE") == "1"

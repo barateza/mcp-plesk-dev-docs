@@ -182,6 +182,13 @@ def _search_candidates(
     tq_index: TurboQuantIndex | None,
 ) -> list[dict[str, Any]]:
     """Return candidate documents using the active retrieval path."""
+    # Use the server's internal hybrid retrieval logic
+    # (which handles FTS, Vector, and RRF).
+    # This ensures benchmarks evaluate the actual production search path.
+    if hasattr(srv, "_get_search_candidates"):
+        return srv._get_search_candidates(query, category, candidate_limit)
+
+    # Fallback for older server versions or different profiles
     if profile_name == "full-tq" and tq_index is not None:
         query_vec = np.asarray(
             srv.get_embedding_model().compute_query_embeddings(query)[0],
@@ -237,6 +244,18 @@ def _perform_retrieval(
     selected_pilot_config: StructurePilotConfig | None,
 ) -> list[dict[str, Any]]:
     """Execute search and reranking steps."""
+    # Use the production search path for baseline engine
+    if selected_engine == "baseline" and hasattr(srv, "_get_search_candidates"):
+        # We use a custom search that returns raw dicts for benchmarking metrics
+        candidates = srv._get_search_candidates(query_str, category, candidate_limit)
+        reranker = srv.get_reranker()
+        if reranker and candidates:
+            candidates = srv._rerank_and_score(query_str, candidates, reranker)
+        else:
+            candidates.sort(key=lambda x: x.get("_relevance", 0.0), reverse=True)
+        return candidates[:final_k]
+
+    # Fallback/Pilot engine path
     results = _search_candidates(
         srv,
         query_str,

@@ -13,15 +13,20 @@ def test_parse_html_file(tmp_path):
 
 
 def test_parse_html_file_extracts_endpoint(tmp_path):
+    # Multiple types and results
     html = (
-        "<!doctype html><html><head><title>T</title></head><body>"
-        "<code>GET /api/v2/domains</code>"
-        "</body></html>"
+        "GET /api/v2/domains "
+        "POST /api/v2/clients "
+        "cform_buttons_list "
+        "plesk bin subscription"
     )
-    src = tmp_path / "api.html"
+    src = tmp_path / "mixed.html"
     src.write_text(html, encoding="utf-8")
     _, _, _, endpoint = parse_html_file(src)
-    assert endpoint == "GET /api/v2/domains"
+    assert "GET /api/v2/domains" in endpoint
+    assert "POST /api/v2/clients" in endpoint
+    assert "XML: cform_buttons_list" in endpoint
+    assert "CLI: bin subscription" in endpoint or "CLI: subscription" in endpoint
 
 
 def test_clean_html_for_markdown():

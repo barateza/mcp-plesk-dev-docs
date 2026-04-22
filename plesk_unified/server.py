@@ -1090,6 +1090,15 @@ def refresh_knowledge(
 
     _save_source_state(source_state)
 
+    # Rebuild FTS index to include all newly added/updated chunks.
+    # Hybrid search depends on this index being up-to-date.
+    try:
+        table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
+        report.append("FTS index rebuilt successfully.")
+    except Exception:
+        logger.exception("Failed to rebuild FTS index after refresh.")
+        report.append("ERROR rebuilding FTS index.")
+
     profile = _get_profile()
     if getattr(profile, "use_turboquant", False):
         try:

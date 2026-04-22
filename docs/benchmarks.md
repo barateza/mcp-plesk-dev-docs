@@ -26,9 +26,9 @@ Following Phase 6 and the subsequent regression analysis on the expanded 20-quer
 
 |Profile|HR@5|MRR@5|Avg latency|Est. RAM|
 |--------|----|-----|----------|--------|
-|`medium`|**80.0%**|**0.735**|1.44 s|~600 MB|
+|`medium`|**85.0%**|**0.850**|1.54 s|~600 MB|
 
-> **Note:** The historical 100% HR / 0.933 MRR baseline recorded in March 2026 used a smaller, 12-query suite. The current results on the expanded 20-query suite represent a more rigorous and accurate performance baseline for the English-only Plesk documentation corpus.
+> **Note:** The current results on the expanded 20-query suite represent a more rigorous and accurate performance baseline. Recent fixes to Full-Text Search (FTS) indexing and multi-endpoint extraction (REST, XML, CLI) recovered Hit Rate from 80% to 85%.
 
 ---
 

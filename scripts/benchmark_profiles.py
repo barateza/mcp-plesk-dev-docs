@@ -327,6 +327,10 @@ def run_benchmark(
     for q in queries:
         t0 = time.perf_counter()
         bucket = q.get("bucket") or bucket_query(q["query"])
+        category = q.get("category") or q.get("bucket")
+        if category == "mixed":
+            category = None
+
         bm = bucket_metrics_raw.setdefault(
             bucket, {"hits": [], "rrs": [], "latencies": []}
         )
@@ -341,7 +345,7 @@ def run_benchmark(
         results = _perform_retrieval(
             srv,
             q["query"],
-            q.get("category"),
+            category,
             limit,
             profile_name,
             tq_index,

@@ -12,7 +12,7 @@
   {
     "query": "retrieve extension configuration values",
     "relevant": [
-      "pmConfig",
+      "pm_Config",
       "getDefaults"
     ],
     "bucket": "php-stubs",
@@ -52,8 +52,8 @@
   {
     "query": "list all domains via Plesk REST API",
     "relevant": [
-      "GET domains",
-      "apiv2domains"
+      "GET /api/v2/domains",
+      "admin-domain-list"
     ],
     "bucket": "api",
     "ground_truth": "Domain information in Plesk is held by the admin-domain-list node in the XML API.",
@@ -63,7 +63,7 @@
     "query": "authenticate with Plesk API using secret key",
     "relevant": [
       "X-API-Key",
-      "secretkey",
+      "secret_key",
       "Authorization"
     ],
     "bucket": "api",
@@ -95,8 +95,8 @@
   {
     "query": "register a new page in Plesk JS SDK",
     "relevant": [
-      "registerPage",
-      "router"
+      "extension.config.js",
+      "routes"
     ],
     "bucket": "js-sdk",
     "ground_truth": "The Plesk Extension SDK offers routes to map URLs to components for creating extension pages.",
@@ -137,9 +137,8 @@
   {
     "query": "list all databases for a domain via API",
     "relevant": [
-      "databases",
-      "GET",
-      "domain_id"
+      "database",
+      "db_get"
     ],
     "bucket": "api",
     "ground_truth": "The filter node is used in the XML API to specify criteria for selecting service plans or other database objects.",

@@ -51,3 +51,8 @@ done
 ### Retrieval Integrity
 - **FTS Validation:** Hybrid search is a core feature. After any indexing operation, you must verify that the Full-Text Search (FTS) index has been rebuilt and is returning keyword-exact results.
 - **Verification over Inference:** Never assume a logic change improved metrics. Always rerun the `control` suite and inspect the database directly to confirm metadata injection.
+
+### Hard Quality Restriction
+1. **No Speculative Pushing:** You are strictly forbidden from executing `git push` or `bd close` until you have executed `scripts/benchmark_profiles.py` with the `--fail-on-gate` flag.
+2. **Evidence-Based Completion:** You must include the `MRR@5` and `Hit Rate` results in your final session summary.
+3. **Regression Recovery:** If a gate fails, you must revert the logic change or optimize the chunking/embedding parameters until the metrics match or exceed the baseline.

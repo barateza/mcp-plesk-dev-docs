@@ -143,9 +143,11 @@ def parse_html_file(
     # We do this FIRST before any BeautifulSoup cleaning.
     found_endpoints = set()
 
-    # 1. REST API patterns (Method followed by path)
+    # 1. REST API patterns (Method followed by optional flags and then path)
+    # This handles both "GET /path" and "curl -X GET ... /api/v2/path"
     rest_matches = re.findall(
-        r"(GET|POST|PUT|DELETE|PATCH)\s+((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)", html
+        r"(GET|POST|PUT|DELETE|PATCH).{0,100}?((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)",
+        html,
     )
     for method, path, _ in rest_matches:
         found_endpoints.add(f"{method} {path}")

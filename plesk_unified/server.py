@@ -1158,10 +1158,23 @@ def _rrf_merge(
     # Sort by RRF score
     sorted_keys = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
     results = []
+
+    # Normalization: rank 0 in at least one list should be potentially 1.0
+    # Before blending with existing relevance.
+    rrf_factor = float(k + 1)
+
     for key in sorted_keys:
         doc = docs[key]
-        # Store the RRF score as our new preliminary relevance
-        doc["_relevance"] = scores[key]
+        rrf_score = min(1.0, scores[key] * rrf_factor)
+
+        # If we have existing relevance (from vector search), blend them.
+        # We take the minimum to ensure the relevance gate still blocks
+        # high-distance vector matches even if they are rank 0.
+        if "_relevance" in doc:
+            doc["_relevance"] = min(doc["_relevance"], rrf_score)
+        else:
+            doc["_relevance"] = rrf_score
+
         results.append(doc)
 
     logger.debug(

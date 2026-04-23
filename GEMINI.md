@@ -25,6 +25,12 @@
 *   Always re-verify retrieval quality after logic changes using `scripts/benchmark_profiles.py`.
 *   Maintain the **Golden Baseline** in `benchmarks/baselines/control.json`.
 *   Hybrid Search (Vector + FTS) is now the default; ensure any schema changes preserve the Tantivy FTS index.
+*   **Maintain low cyclomatic complexity.** Refactor functions that exceed Ruff C901 thresholds by decomposing logic into focused helper functions.
+*   **Keep pre-commit hooks active.** Ensure `ruff check` and `ruff format` pass locally before pushing to CI.
+
+## Tooling Utilities
+
+*   Use `verify_refresh.py` to confirm that the incremental indexing logic correctly skips unchanged sources. This is essential for verifying that `CHUNK_VERSION` or fingerprinting logic is working as intended without waiting for a full re-index.
 
 ---
 

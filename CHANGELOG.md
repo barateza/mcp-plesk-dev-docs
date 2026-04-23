@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-04-21
+
+### Added
+- **`verify_refresh.py` utility.** A new helper script to verify that documentation indexing correctly skips unchanged sources based on fingerprinting.
+
+### Changed
+- **Cyclomatic complexity reduction.** Refactored `evaluate_quality_gates` and `_check_metrics` in `plesk_unified/benchmark_gates.py` into smaller, testable helper functions to improve maintainability and satisfy C901 linting rules.
+
+### Fixed
+- **Ruff linting compliance.** Resolved multiple linting failures (E501 line length, W293 blank line whitespace, C901 complexity) across `benchmark_gates.py`, `server.py`, and `benchmark_engines.py`.
+
+### Security
+- **Git pre-commit hooks.** Installed and activated `pre-commit` locally to enforce `ruff` linting and formatting on every commit, preventing future CI regressions.
+
 ## [0.4.3] - 2026-04-20
 
 ### Added
@@ -184,6 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.4.4]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.4
+[0.4.3]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.3
 [0.4.2]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.2
 [0.4.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.1
 [0.4.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.0

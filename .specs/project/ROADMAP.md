@@ -160,7 +160,7 @@
 - Runs `manage_plesk_docs.py` and `enrich_toc.py`; if any file changes detected, commits the updated KB and opens a PR or pushes to a `docs-sync` branch
 - Sends a summary notification via workflow annotation
 
-**Automated Benchmark Regression** — PLANNED
+**Automated Benchmark Regression** — COMPLETED
 
 - GitHub Actions workflow `benchmark-regression.yml` on `pull_request`
 - Runs `benchmark_profiles.py` against the PR branch
@@ -171,23 +171,24 @@
 ## M6 — Retrieval Quality Optimization
 
 **Goal:** Improve retrieval precision and recall through hybrid search, structural context injection, and specialized chunking strategies.
+**Status:** COMPLETED
 
 ### Features
 
-**Hybrid Search (Vector + BM25)** — PLANNED
+**Hybrid Search (Vector + BM25)** — COMPLETED
 - Integrate Full-Text Search (FTS) using LanceDB.
 - Combine vector similarity with keyword matching using Reciprocal Rank Fusion (RRF).
 
-**Parent-Header Context Injection** — PLANNED
+**Parent-Header Context Injection** — COMPLETED
 - Prepend document title and breadcrumb path to every chunk before embedding.
 
-**Neighborhood Retrieval** — PLANNED
+**Neighborhood Retrieval** — COMPLETED
 - Automatically retrieve adjacent chunks (prev/next) for the top results to provide richer context.
 
-**API Endpoint Extraction** — PLANNED
+**API Endpoint Extraction** — COMPLETED
 - Specialized parser to detect and index REST API endpoints for exact path matching.
 
-**Hierarchical Code Chunking** — PLANNED
+**Hierarchical Code Chunking** — COMPLETED
 - Implement structural chunkers for PHP and JS that respect class and method boundaries.
 
 ---

@@ -1,0 +1,13 @@
+file: /home/siqueira/mcp-plesk-unified/GEMINI.md
+description: Add engineering guidelines regarding cyclomatic complexity and linting enforcement.
+change_type: update
+sections:
+  - title: Engineering Guidelines
+    content: |
+      ## Quality & Benchmarking
+
+      *   Always re-verify retrieval quality after logic changes using `scripts/benchmark_profiles.py`.
+      *   Maintain the **Golden Baseline** in `benchmarks/baselines/control.json`.
+      *   Hybrid Search (Vector + FTS) is now the default; ensure any schema changes preserve the Tantivy FTS index.
+      *   **Maintain low cyclomatic complexity.** Refactor functions that exceed Ruff C901 thresholds by decomposing logic into focused helper functions.
+      *   **Keep pre-commit hooks active.** Ensure `ruff check` and `ruff format` pass locally before pushing to CI.

@@ -1,0 +1,28 @@
+file: /home/siqueira/mcp-plesk-unified/.specs/project/ROADMAP.md
+description: Mark Milestone M6 as completed and update status of quality-related tasks.
+change_type: update
+sections:
+  - title: Milestone M6
+    content: |
+      ## M6 — Retrieval Quality Optimization
+
+      **Goal:** Improve retrieval precision and recall through hybrid search, structural context injection, and specialized chunking strategies.
+      **Status:** COMPLETED
+
+      ### Features
+
+      **Hybrid Search (Vector + BM25)** — COMPLETED
+      - Integrate Full-Text Search (FTS) using LanceDB.
+      - Combine vector similarity with keyword matching using Reciprocal Rank Fusion (RRF).
+
+      **Parent-Header Context Injection** — COMPLETED
+      - Prepend document title and breadcrumb path to every chunk before embedding.
+
+      **Neighborhood Retrieval** — COMPLETED
+      - Automatically retrieve adjacent chunks (prev/next) for the top results to provide richer context.
+
+      **API Endpoint Extraction** — COMPLETED
+      - Specialized parser to detect and index REST API endpoints for exact path matching.
+
+      **Hierarchical Code Chunking** — COMPLETED
+      - Implement structural chunkers for PHP and JS that respect class and method boundaries.

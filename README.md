@@ -353,6 +353,7 @@ mcp-plesk-unified/
 ├── docs/
 │   ├── benchmarks.md          # Benchmark results and methodology
 │   └── turboquant.md          # TurboQuant technical breakdown and validation
+├── verify_refresh.py          # Utility to verify incremental indexing
 ├── knowledge_base/            # Fetched and parsed documentation sources
 ├── storage/                   # LanceDB vector indexes (generated, per-profile)
 ├── pyproject.toml

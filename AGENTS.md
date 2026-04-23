@@ -63,7 +63,7 @@ bd close <id>         # Complete work
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run Retrieval Quality Gates** - You must verify that `context_recall` and `faithfulness` meet the absolute minimums defined in `benchmarks/gates/default.json` before closing any issue. Run `python scripts/benchmark_profiles.py --fail-on-gate`.
+2. **Run quality gates** - You must verify that `context_recall` and `faithfulness` meet the absolute minimums defined in `benchmarks/gates/default.json` before closing any issue. Run `python scripts/benchmark_profiles.py --fail-on-gate`. Also run all tests, linters, and builds.
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash

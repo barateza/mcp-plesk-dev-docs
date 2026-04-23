@@ -1,0 +1,17 @@
+file: /home/siqueira/mcp-plesk-unified/README.md
+description: Add verify_refresh.py to the project structure section.
+change_type: update
+sections:
+  - title: Project structure
+    content: |
+      mcp-plesk-unified/
+      ├── plesk_unified/
+      │   ├── ...
+      ├── scripts/
+      │   ├── ...
+      ├── tests/                     # Pytest test suite
+      ├── docs/
+      │   ├── ...
+      ├── verify_refresh.py          # Utility to verify incremental indexing
+      ├── pyproject.toml
+      └── README.md

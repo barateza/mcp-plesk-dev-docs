@@ -1,8 +1,8 @@
 # Project State — Enterprise AI Infrastructure Uplift
 
 **Last Updated:** 2026-04-21
-**Session:** Structural refactor and Quality Spec creation
-**Status:** In-progress; Phase 6 complete; structural refactor complete.
+**Session:** Linting compliance and structural decomposition
+**Status:** In-progress; Phase 6 complete; linting & pre-commit active.
 
 ---
 
@@ -24,6 +24,7 @@ Milestone M6 — Retrieval Quality Optimization (Tasks A-F)
 | D6 | Sampling (Feature 5.2) gated by `PLESK_ENABLE_SAMPLING` env var | Not all MCP host clients support the sampling capability; opt-in prevents silent degradation | 2026-04-16 |
 | D7 | Decouple benchmark data from code into JSON suites | Hardcoded dictionaries in `benchmark_suites.py` were becoming unmaintainable and violating line length rules. | 2026-04-21 |
 | D8 | Decompose `server.py` god functions to helpers | Reducing cyclomatic complexity in `_infer_doctype`, `refresh_knowledge`, and `search_plesk_unified` to satisfy engineering standards. | 2026-04-21 |
+| D9 | Enforce Ruff C901 (Complexity) and activate pre-commit | Ensures long-term maintainability by preventing "god functions" from re-emerging; pre-commit prevents CI regressions. | 2026-04-21 |
 
 ---
 
@@ -48,6 +49,9 @@ _No model guidance tips have been shown yet._
 - **Task A & B:** Implemented Hybrid Search (Vector + FTS) and Parent-Header Context Injection. HR@5 improved to 80%.
 - **Task C & D:** Implemented Sentinel Window Expansion (5 sentences) and Neighborhood Retrieval (adjacent chunks). Context Precision improved to 0.88.
 - **Task E & F:** Refined API Endpoint Extraction and implemented Hierarchical Code Chunking for PHP/JS. Faithfulness improved to 0.49.
+- **Code Quality:** Resolved all Ruff E501, W293, and C901 failures.
+- **Refactoring:** Decomposed quality gate evaluation logic in `benchmark_gates.py`.
+- **Tooling:** Installed and activated Git pre-commit hooks; added `verify_refresh.py` utility.
 
 ---
 

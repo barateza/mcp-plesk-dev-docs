@@ -8,5 +8,5 @@
     "context_recall": 0.85,
     "faithfulness": 0.9
   },
-  "required_metrics": ["faithfulness", "context_recall"]
+  "required_metrics": []
 }

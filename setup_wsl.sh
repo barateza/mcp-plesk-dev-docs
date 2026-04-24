@@ -30,14 +30,16 @@ else
     git config core.hooksPath .beads/hooks
 fi
 
-# 4. Install Pre-Commit into Beads hooks directory
-echo "🛠️  Installing pre-commit hooks into .beads/hooks..."
-# We tell pre-commit to install into our tracked hooks directory
-./.venv/bin/pre-commit install --hook-dir .beads/hooks --overwrite
+# 4. Install Pre-Commit
+echo "🛠️  Installing pre-commit hooks..."
+# pre-commit automatically respects git config core.hooksPath (.beads/hooks)
+./.venv/bin/pre-commit install --overwrite
 
-# 5. Restore Quality Enforcement (if overwritten by pre-commit)
-if ! grep -q "RETRIEVAL QUALITY ENFORCEMENT" .beads/hooks/pre-push; then
-    echo "🩹 Restoring quality enforcement to pre-push hook..."
+# 5. Ensure Quality Enforcement in pre-push hook
+# (pre-commit install --overwrite only touches hooks it manages,
+# but we check just in case or if it was never set up)
+if [ ! -f .beads/hooks/pre-push ] || ! grep -q "RETRIEVAL QUALITY ENFORCEMENT" .beads/hooks/pre-push; then
+    echo "🩹 Setting up quality enforcement in pre-push hook..."
     cat >> .beads/hooks/pre-push <<EOF
 
 # --- RETRIEVAL QUALITY ENFORCEMENT ---

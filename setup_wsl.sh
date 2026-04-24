@@ -1,5 +1,6 @@
 #!/bin/bash
 # setup_wsl.sh - Automate quality enforcement setup for WSL
+# Fixed version to handle core.hooksPath conflicts
 
 echo "🚀 Starting mcp-plesk-unified setup on WSL..."
 
@@ -21,7 +22,26 @@ else
     exit 1
 fi
 
-# 3. Initialize Beads and Hooks
+# 3. Handle Pre-commit installation with custom hooks path
+echo "🛠️  Installing pre-commit hooks..."
+# We temporarily unset core.hooksPath to satisfy pre-commit's safety check
+EXISTING_HOOKS_PATH=$(git config core.hooksPath)
+git config --unset core.hooksPath
+
+# Install to default .git/hooks location
+./.venv/bin/pre-commit install --overwrite
+
+# Create .beads/hooks if it doesn't exist
+mkdir -p .beads/hooks
+
+# Migrate the pre-commit hook to our beads directory
+if [ -f .git/hooks/pre-commit ]; then
+    echo "🚚 Migrating pre-commit hook to .beads/hooks..."
+    cp .git/hooks/pre-commit .beads/hooks/pre-commit
+    chmod +x .beads/hooks/pre-commit
+fi
+
+# 4. Initialize/Restore Beads hooks
 if command -v bd >/dev/null 2>&1; then
     echo "⚓ Setting up Beads hooks..."
     bd prime
@@ -30,14 +50,7 @@ else
     git config core.hooksPath .beads/hooks
 fi
 
-# 4. Install Pre-Commit
-echo "🛠️  Installing pre-commit hooks..."
-# pre-commit automatically respects git config core.hooksPath (.beads/hooks)
-./.venv/bin/pre-commit install --overwrite
-
 # 5. Ensure Quality Enforcement in pre-push hook
-# (pre-commit install --overwrite only touches hooks it manages,
-# but we check just in case or if it was never set up)
 if [ ! -f .beads/hooks/pre-push ] || ! grep -q "RETRIEVAL QUALITY ENFORCEMENT" .beads/hooks/pre-push; then
     echo "🩹 Setting up quality enforcement in pre-push hook..."
     cat >> .beads/hooks/pre-push <<EOF
@@ -63,6 +76,7 @@ if [ \$? -ne 0 ]; then
 fi
 # --- END RETRIEVAL QUALITY ENFORCEMENT ---
 EOF
+    chmod +x .beads/hooks/pre-push
 fi
 
 # 6. Verify OpenRouter API Key

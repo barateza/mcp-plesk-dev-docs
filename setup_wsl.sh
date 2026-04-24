@@ -30,11 +30,40 @@ else
     git config core.hooksPath .beads/hooks
 fi
 
-# 4. Install Pre-Commit
-echo "🛠️  Installing pre-commit hooks..."
-./.venv/bin/pre-commit install
+# 4. Install Pre-Commit into Beads hooks directory
+echo "🛠️  Installing pre-commit hooks into .beads/hooks..."
+# We tell pre-commit to install into our tracked hooks directory
+./.venv/bin/pre-commit install --hook-dir .beads/hooks --overwrite
 
-# 5. Verify OpenRouter API Key
+# 5. Restore Quality Enforcement (if overwritten by pre-commit)
+if ! grep -q "RETRIEVAL QUALITY ENFORCEMENT" .beads/hooks/pre-push; then
+    echo "🩹 Restoring quality enforcement to pre-push hook..."
+    cat >> .beads/hooks/pre-push <<EOF
+
+# --- RETRIEVAL QUALITY ENFORCEMENT ---
+echo "Verifying retrieval quality before push..."
+cd "\$(git rev-parse --show-toplevel)"
+PYTHON_CMD="./.venv/bin/python3"
+if [ ! -f "\$PYTHON_CMD" ]; then
+  PYTHON_CMD="python3"
+fi
+
+\$PYTHON_CMD scripts/benchmark_profiles.py \\
+  --suite control \\
+  --profile medium \\
+  --baseline-file benchmarks/baselines/control-medium.json \\
+  --gate-config benchmarks/gates/default.json \\
+  --fail-on-gate
+
+if [ \$? -ne 0 ]; then
+  echo "CRITICAL: Quality regression detected. Push aborted."
+  exit 1
+fi
+# --- END RETRIEVAL QUALITY ENFORCEMENT ---
+EOF
+fi
+
+# 6. Verify OpenRouter API Key
 if [ -z "$OPENROUTER_API_KEY" ]; then
     echo "⚠️  Note: OPENROUTER_API_KEY is not set. Retrieval benchmarks will skip RAGAS metrics."
 else

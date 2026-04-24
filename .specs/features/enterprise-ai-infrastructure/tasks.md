@@ -758,7 +758,7 @@ Phase 3 (Parallel — M3 Protocol Richness):
     ├── T10 [P]   (prompt templates)
     ├── T11 [P]   (progress notifications)
     └── T12 [P]   (LLM sampling)
-  
+
   All four → T13 (integration concurrency test)
 
 Phase 4 (Parallel — M4 Observability):

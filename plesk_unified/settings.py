@@ -34,6 +34,7 @@ class PleskSettings(BaseSettings):
     plesk_daemon_auto_warmup: bool = False
     plesk_auto_refresh_on_startup: bool = True
     plesk_index_summaries: bool = False
+    plesk_enable_sampling: bool = False
     plesk_rerank_candidates: int = 50
     plesk_min_relevance_threshold: Optional[float] = None
 

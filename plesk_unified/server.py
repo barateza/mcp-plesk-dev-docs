@@ -72,11 +72,12 @@ STARTUP_AT = time.perf_counter()
 os.environ["TQDM_DISABLE"] = "1" if settings.tqdm_disable else "0"
 os.environ["TRANSFORMERS_VERBOSITY"] = settings.transformers_verbosity
 
-from typing import Annotated, Any, Dict, Optional, Tuple
+from typing import Annotated, Any, Dict, Optional, Tuple, cast
 
 import lancedb  # type: ignore
 import numpy as np
-from fastmcp import FastMCP
+from fastmcp import Context, FastMCP
+from mcp.types import SamplingMessage
 from pydantic import Field
 
 try:
@@ -745,11 +746,11 @@ def _maybe_refresh_changed_sources() -> None:
         try:
             asyncio.get_running_loop()
             asyncio.create_task(
-                refresh_knowledge(target_category="all", reset_db=False)
+                refresh_knowledge(None, target_category="all", reset_db=False)
             )
         except RuntimeError:
             report = asyncio.run(
-                refresh_knowledge(target_category="all", reset_db=False)
+                refresh_knowledge(None, target_category="all", reset_db=False)
             )
             logger.info("Startup source refresh report:\n%s", report)
     except Exception:
@@ -767,15 +768,27 @@ def _table_health() -> tuple[bool, str | None]:
 
 @mcp.tool
 @tool_error_boundary
-async def warmup_server() -> str:
+async def warmup_server(ctx: Optional[Context] = None) -> str:
     """Preload the active profile models and table without running indexing."""
+    if ctx:
+        await ctx.report_progress(current=1, total=4)  # load start
+
     if not _begin_warmup():
         return "Warmup already running."
 
     try:
         loop = asyncio.get_running_loop()
         parts = await loop.run_in_executor(_executor, _run_warmup_sequence)
+        if ctx:
+            await ctx.report_progress(current=2, total=4)  # load complete
+
+        # Report progress for index check
+        if ctx:
+            await ctx.report_progress(current=3, total=4)  # index check
+
         _finish_warmup()
+        if ctx:
+            await ctx.report_progress(current=4, total=4)  # done
     except Exception as exc:
         _finish_warmup(exc)
         logger.exception("Manual warmup failed.")
@@ -1122,6 +1135,7 @@ def _sync_single_source(
 @mcp.tool
 @tool_error_boundary
 async def refresh_knowledge(
+    ctx: Optional[Context] = None,
     target_category: Annotated[
         CategoryOrAll, Field(description="Category to index.")
     ] = "all",
@@ -1146,6 +1160,9 @@ async def refresh_knowledge(
     Behavior: incremental by filename when `reset_db` is False; skips files
     already present in the DB. Returns a short per-source report.
     """
+    if ctx:
+        await ctx.report_progress(current=1, total=4)  # fetch
+
     _validate_category(target_category, allow_all=True, parameter_name="category")
 
     logger.info(
@@ -1163,10 +1180,34 @@ async def refresh_knowledge(
         table = get_table(create_new=False)
 
     report = []
-    loop = asyncio.get_running_loop()
+    results = await _sync_all_sources(table, target_category, reset_db, source_entries)
+    report.extend(results)
 
-    # Parallelize indexing across sources to saturate GPU/CPU
-    # Offload each source sync to the module-level thread executor.
+    if ctx:
+        await ctx.report_progress(current=2, total=4)  # chunk
+
+    _save_source_state(source_state)
+
+    # Rebuild FTS and TurboQuant indices
+    index_report = await _rebuild_fts_and_tq(table, ctx)
+    report.extend(index_report)
+
+    if ctx:
+        await ctx.report_progress(current=4, total=4)  # done
+
+    return "\n".join(report)
+
+
+async def _sync_all_sources(
+    table: Any,
+    target_category: str,
+    reset_db: bool,
+    source_entries: dict,
+) -> list[str]:
+    """
+    Parallelize indexing across sources to saturate GPU/CPU.
+    """
+    loop = asyncio.get_running_loop()
     tasks = []
     for source in SOURCES:
         if target_category == "all" or source["cat"] == target_category:
@@ -1181,11 +1222,17 @@ async def refresh_knowledge(
                 )
             )
 
-    if tasks:
-        results = await asyncio.gather(*tasks)
-        report.extend(results)
+    if not tasks:
+        return []
+    return list(await asyncio.gather(*tasks))
 
-    _save_source_state(source_state)
+
+async def _rebuild_fts_and_tq(table: Any, ctx: Optional[Context]) -> list[str]:
+    """
+    Rebuild FTS and TurboQuant indices after a knowledge refresh.
+    """
+    loop = asyncio.get_running_loop()
+    report = []
 
     # Rebuild FTS index to include all newly added/updated chunks.
     # Hybrid search depends on this index being up-to-date.
@@ -1199,10 +1246,14 @@ async def refresh_knowledge(
         logger.exception("Failed to rebuild FTS index after refresh.")
         report.append("ERROR rebuilding FTS index.")
 
+    if ctx:
+        await ctx.report_progress(current=3, total=4)  # index
+
     profile = _get_profile()
     if getattr(profile, "use_turboquant", False):
         try:
             # Building TurboQuant index from vectors is CPU-bound.
+            global _tq_index
             _tq_index = await loop.run_in_executor(
                 _executor, _build_tq_index_from_table
             )
@@ -1211,7 +1262,7 @@ async def refresh_knowledge(
             logger.exception("Failed to rebuild TurboQuant index after refresh.")
             report.append("ERROR rebuilding TurboQuant index.")
 
-    return "\n".join(report)
+    return report
 
 
 @mcp.tool
@@ -1223,8 +1274,8 @@ async def trigger_index_sync(
 
     def job_wrapper(cat: CategoryOrAll, reset: bool) -> str:
         # Since refresh_knowledge is now async, we run it in a new event loop
-        # inside this background thread.
-        res = asyncio.run(refresh_knowledge(cat, reset))
+        # inside this background thread. Pass None as the context.
+        res = asyncio.run(refresh_knowledge(None, cat, reset))
         if isinstance(res, str) and res.startswith("[ERROR]"):
             raise RuntimeError(res)
         return res
@@ -1499,7 +1550,13 @@ def _format_search_results(results: list[dict[str, Any]]) -> str:
 
 @mcp.tool
 @tool_error_boundary
-async def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> str:
+async def search_plesk_unified(
+    ctx: Optional[Context] = None,
+    query: Annotated[Optional[str], Field(description="Search query")] = None,
+    category: Annotated[
+        Optional[CategoryEnum], Field(description="Category to filter by")
+    ] = None,
+) -> str:
     """
     Search the unified knowledge base and return up to 5 formatted results.
 
@@ -1514,6 +1571,17 @@ async def search_plesk_unified(query: str, category: CategoryEnum | None = None)
     Results are returned as readable text blocks including title, path,
     filename and a relevance score between 0 and 1.
     """
+    # Backward compatibility for positional calls:
+    # search_plesk_unified("query", "category")
+    if isinstance(ctx, str):
+        if category is None:
+            category = cast("Optional[CategoryEnum]", query)
+        query = ctx
+        ctx = None  # type: ignore
+
+    if not query:
+        return "A search query is required."
+
     start_t = time.perf_counter()
     _validate_category(category)
 
@@ -1578,7 +1646,193 @@ async def search_plesk_unified(query: str, category: CategoryEnum | None = None)
         len(candidates),
     )
 
-    return _format_search_results(expanded_results)
+    formatted_results = _format_search_results(expanded_results)
+
+    if settings.plesk_enable_sampling and ctx and expanded_results:
+        answer = await _synthesize_answer(ctx, query, expanded_results)
+        if answer:
+            return (
+                f"### AI-Synthesized Answer\n\n{answer}\n\n---\n\n{formatted_results}"
+            )
+
+    return formatted_results
+
+
+async def _synthesize_answer(
+    ctx: Context, query: str, results: list[dict[str, Any]]
+) -> Optional[str]:
+    """
+    Synthesize a concise answer using the top search results via LLM sampling.
+    """
+    try:
+        top_3 = results[:3]
+        context_text = "\n\n".join(
+            [f"Source: {r['filename']}\n{r['text']}" for r in top_3]
+        )
+
+        prompt = (
+            "Synthesize a concise, accurate answer to the following question using the "
+            "provided Plesk documentation chunks.\n"
+            "If the information is not present, say so.\n\n"
+            f"Question: {query}\n\n"
+            f"Context:\n{context_text}"
+        )
+
+        # Request synthesis from the client via Context sampling
+        sample_result = await ctx.sample(
+            messages=[
+                SamplingMessage(
+                    role="user",
+                    content={"type": "text", "text": prompt},
+                )
+            ],
+            max_tokens=500,
+        )
+
+        if not (sample_result and sample_result.content):
+            return None
+
+        # FastMCP sample results usually have a 'content' field
+        # In mcp-python-sdk, it's often a CreateMessageResult.
+        if hasattr(sample_result.content, "text"):
+            return sample_result.content.text
+        elif (
+            isinstance(sample_result.content, dict)
+            and sample_result.content.get("type") == "text"
+        ):
+            return sample_result.content.get("text")
+        else:
+            # Generic fallback if it's a list or other structure
+            return str(sample_result.content)
+    except Exception as e:
+        logger.warning("Sampling failed: %s", e)
+        return None
+
+
+# --- Prompts ---
+
+
+@mcp.prompt(name="plesk-extension-dev-guide")
+def plesk_extension_dev_guide(extension_name: str, target_language: str) -> str:
+    """
+    Generate a starter guide for developing a new Plesk extension.
+    """
+    return f"""You are an expert Plesk Extension developer.
+Help me design and implement a new Plesk extension called "{extension_name}"
+using {target_language}.
+
+Please follow these steps:
+1. Use `search_plesk_unified(query="{extension_name} development guide",
+   category="guide")` to find relevant architectural patterns.
+2. Use `search_plesk_unified(query="{target_language} sdk hooks",
+   category="js-sdk" if "{target_language}".lower() == "javascript" else "php-stubs")`
+   to find specific implementation details.
+3. Provide a step-by-step roadmap including directory structure,
+   `meta.xml` configuration, and a basic code example.
+
+Goal: Create a robust, secure, and idiomatic Plesk extension."""
+
+
+@mcp.prompt(name="plesk-api-integration")
+def plesk_api_integration(api_operation: str) -> str:
+    """
+    Instructions and examples for integrating with a Plesk API operation.
+    """
+    return f"""You are a technical expert in Plesk API integrations.
+I need to implement the "{api_operation}" operation in my application.
+
+Please:
+1. Search for the "{api_operation}" specification using
+   `search_plesk_unified(query="{api_operation}", category="api")`.
+2. Explain whether this should use the XML-RPC API or the REST API.
+3. Provide a complete request example (XML or JSON) and describe the
+   expected response.
+4. Detail any specific permissions or security considerations for this
+   operation.
+
+Focus on accuracy and compliance with the Plesk Obsidian API standards."""
+
+
+@mcp.prompt(name="plesk-cli-reference")
+def plesk_cli_reference(command_name: str) -> str:
+    """
+    Get detailed reference information for a Plesk CLI command.
+    """
+    return f"""You are a Plesk Linux administrator and CLI expert.
+I need a comprehensive reference for the `{command_name}` command.
+
+Please:
+1. Retrieve the command details using
+   `search_plesk_unified(query="{command_name}", category="cli")`.
+2. Summarize the command's primary purpose.
+3. List the most important subcommands and options with brief explanations.
+4. Provide 2-3 practical examples of how to use this command in daily
+   administration or automation.
+
+Ensure the information is clear, concise, and technically accurate."""
+
+
+# --- Resources ---
+
+
+@mcp.resource("plesk://toc/api")
+def plesk_toc_api() -> str:
+    """Table of Contents for Plesk API documentation."""
+    return _handle_toc_resource("api")
+
+
+@mcp.resource("plesk://toc/cli")
+def plesk_toc_cli() -> str:
+    """Table of Contents for Plesk CLI documentation."""
+    return _handle_toc_resource("cli")
+
+
+@mcp.resource("plesk://toc/guide")
+def plesk_toc_guide() -> str:
+    """Table of Contents for Plesk Extensions Guide."""
+    return _handle_toc_resource("guide")
+
+
+@mcp.resource("plesk://toc/js-sdk")
+def plesk_toc_js_sdk() -> str:
+    """Table of Contents for Plesk JS SDK documentation."""
+    return _handle_toc_resource("js-sdk")
+
+
+@mcp.resource("plesk://toc/php-stubs")
+def plesk_toc_php_stubs() -> str:
+    """Table of Contents for Plesk PHP Stubs documentation."""
+    return _handle_toc_resource("php-stubs")
+
+
+def _handle_toc_resource(category: str) -> str:
+    """Helper to load and format TOC as a Markdown list."""
+    source = next((s for s in SOURCES if s["cat"] == category), None)
+    if not source:
+        return f"Category '{category}' not found."
+
+    toc_map = get_toc_map_for_source(source)
+    if not toc_map:
+        return f"No Table of Contents available for {category}."
+
+    lines = [f"# Plesk {category.upper()} Table of Contents\n"]
+
+    # Sort entries by breadcrumb (which includes the hierarchy)
+    # toc_map returns Dict[filename, Dict[title, breadcrumb]]
+    sorted_items = sorted(toc_map.items(), key=lambda x: x[1].get("breadcrumb", ""))
+
+    for filename, entry in sorted_items:
+        title = entry.get("title", "Untitled")
+        breadcrumb = entry.get("breadcrumb", title)
+        url = _build_doc_url(category, filename)
+
+        if url:
+            lines.append(f"- [{title}]({url})")
+            lines.append(f"  Path: {breadcrumb}")
+        else:
+            lines.append(f"- {breadcrumb}")
+
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

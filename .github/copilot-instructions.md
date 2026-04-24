@@ -278,4 +278,3 @@ print(f"Indexed {len(files)} files in php-stubs")
 - **Key Packages**: fastmcp (≥2.14.5), lancedb (≥0.29.1), sentence-transformers (≥5.2.2)
 - **Storage**: ~2GB models + ~1GB embeddings + variable KB size
 - **Virtual Environment**: `.venv/` folder, activated before running
-

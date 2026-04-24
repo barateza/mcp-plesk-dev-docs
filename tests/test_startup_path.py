@@ -190,7 +190,7 @@ async def test_maybe_refresh_changed_sources_calls_refresh(monkeypatch):
 
     called = {"count": 0}
 
-    async def fake_refresh(target_category, reset_db):
+    async def fake_refresh(ctx, target_category, reset_db):
         called["count"] += 1
         assert target_category == "all"
         assert reset_db is False

@@ -14,11 +14,19 @@ import logging
 import json
 import asyncio
 import re  # For parsing tool_code_for_ai
+import concurrent.futures  # Needed for MockConcurrentFuture
 
 
 # Mock lancedb.exceptions if not available
 class MockTableNotFoundError(Exception):
     pass
+
+
+# Helper to create a completed Future
+def make_completed_future(result_value):
+    f = concurrent.futures.Future()
+    f.set_result(result_value)
+    return f
 
 
 # Fixture for common mocks needed for server tools
@@ -34,9 +42,17 @@ def mock_server_dependencies():
     server._tq_index = None
     server._detected_device = None
 
-    # Removed patch("plesk_unified.server.get_embedding_model")
-    # from here to allow it to run
+    # Create a mock_executor instance outside the patch context manager
+    mock_server_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+
+    def mock_submit_side_effect(func, *args, **kwargs):
+        return make_completed_future(func(*args, **kwargs))
+
+    mock_server_executor.submit.side_effect = mock_submit_side_effect
+
     with (
+        # Patch server._executor with our specially configured mock
+        patch("plesk_unified.server._executor", new=mock_server_executor),
         patch("plesk_unified.server.get_table"),
         patch("plesk_unified.server.get_reranker"),
         patch("plesk_unified.server.get_tq_index"),
@@ -173,33 +189,36 @@ def test_refresh_knowledge_schema_exposes_category_enum_plus_all(
     assert len(enum_values) == 5
 
 
-def test_search_plesk_unified_rejects_invalid_category_string(
+@pytest.mark.asyncio
+async def test_search_plesk_unified_rejects_invalid_category_string(
     mock_server_dependencies,
 ):
     """
     Tests that search_plesk_unified returns an error string for an
     invalid category string, now that tool_error_boundary intercepts.
     """
-    result = search_plesk_unified(query="test", category="invalid-cat")
+    result = await search_plesk_unified(query="test", category="invalid-cat")
     assert result.startswith(
         "[ERROR] Invalid argument: Invalid category: 'invalid-cat'."
     )
 
 
-def test_search_plesk_unified_rejects_all_as_category(mock_server_dependencies):
+@pytest.mark.asyncio
+async def test_search_plesk_unified_rejects_all_as_category(mock_server_dependencies):
     """
     Tests that search_plesk_unified returns an error string when 'all'
     is passed as category, now that tool_error_boundary intercepts.
     """
-    result = search_plesk_unified(query="test", category="all")
+    result = await search_plesk_unified(query="test", category="all")
     assert result.startswith("[ERROR] Invalid argument: Invalid category: 'all'.")
 
 
-def test_refresh_knowledge_accepts_all_as_category(mock_server_dependencies):
+@pytest.mark.asyncio
+async def test_refresh_knowledge_accepts_all_as_category(mock_server_dependencies):
     """Tests that refresh_knowledge accepts 'all' as a category."""
     # This should not raise an error
     try:
-        result = refresh_knowledge(target_category="all")
+        result = await refresh_knowledge(target_category="all")
         assert (
             "FTS index rebuilt successfully." in result
         )  # Check for a known success string
@@ -207,21 +226,27 @@ def test_refresh_knowledge_accepts_all_as_category(mock_server_dependencies):
         pytest.fail(f"refresh_knowledge unexpectedly rejected 'all': {e}")
 
 
-def test_refresh_knowledge_accepts_valid_category_string(mock_server_dependencies):
+@pytest.mark.asyncio
+async def test_refresh_knowledge_accepts_valid_category_string(
+    mock_server_dependencies,
+):
     """Tests that refresh_knowledge accepts a valid category string."""
     try:
-        result = refresh_knowledge(target_category="guide")
+        result = await refresh_knowledge(target_category="guide")
         assert "FTS index rebuilt successfully." in result
     except ValueError as e:
         pytest.fail(f"refresh_knowledge unexpectedly rejected 'guide': {e}")
 
 
-def test_refresh_knowledge_rejects_invalid_category_string(mock_server_dependencies):
+@pytest.mark.asyncio
+async def test_refresh_knowledge_rejects_invalid_category_string(
+    mock_server_dependencies,
+):
     """
     Tests that refresh_knowledge returns an error string for an invalid category string,
     now that tool_error_boundary intercepts.
     """
-    result = refresh_knowledge(target_category="bogus")
+    result = await refresh_knowledge(target_category="bogus")
     assert result.startswith("[ERROR] Invalid argument: Invalid category: 'bogus'.")
 
 
@@ -234,7 +259,8 @@ def caplog_for_server(caplog):
     yield caplog
 
 
-def test_hardware_degradation_warning_logged_for_embedding_model(
+@pytest.mark.asyncio
+async def test_hardware_degradation_warning_logged_for_embedding_model(
     caplog_for_server, mock_server_dependencies
 ):
     """
@@ -302,7 +328,8 @@ def test_hardware_degradation_warning_logged_for_embedding_model(
 @patch(
     "plesk_unified.server._warmup_state", "idle"
 )  # Ensure warmup state is idle before test
-def test_warmup_server_reports_running_and_done(
+@pytest.mark.asyncio
+async def test_warmup_server_reports_running_and_done(
     mock_run_warmup_sequence, mock_server_dependencies
 ):
     """
@@ -310,15 +337,15 @@ def test_warmup_server_reports_running_and_done(
     and daemon_health reports correctly.
     """
     # Before warmup
-    status_before = json.loads(daemon_health())
+    status_before = json.loads(await daemon_health())
     assert status_before["warmup_state"] == "idle"
 
     # Start warmup - it should complete immediately due to mocking
-    warmup_server_result = warmup_server()
+    warmup_server_result = await warmup_server()
     assert "Mock Warmup complete." in warmup_server_result  # Check the mocked output
 
     # After warmup
-    status_after = json.loads(daemon_health())
+    status_after = json.loads(await daemon_health())
     assert status_after["warmup_state"] == "ready"
     assert status_after["warmup_error"] is None
 
@@ -329,7 +356,8 @@ def test_warmup_server_reports_running_and_done(
 @patch(
     "plesk_unified.server._warmup_state", "idle"
 )  # Ensure warmup state is idle before test
-def test_warmup_server_reports_failed_on_exception(
+@pytest.mark.asyncio
+async def test_warmup_server_reports_failed_on_exception(
     mock_run_warmup_sequence, mock_server_dependencies, caplog_for_server
 ):
     """
@@ -337,15 +365,15 @@ def test_warmup_server_reports_failed_on_exception(
     if an exception occurs during the warmup sequence.
     """
     # Before warmup
-    status_before = json.loads(daemon_health())
+    status_before = json.loads(await daemon_health())
     assert status_before["warmup_state"] == "idle"
 
     # Start warmup (will fail)
-    warmup_server_result = warmup_server()
+    warmup_server_result = await warmup_server()
     assert "[ERROR] Unexpected server error" in warmup_server_result
 
     # After failed warmup
-    status_after = json.loads(daemon_health())
+    status_after = json.loads(await daemon_health())
     assert status_after["warmup_state"] == "failed"
     assert status_after["warmup_error"] == "Warmup failed"
     # The caplog_for_server fixture is set to INFO,

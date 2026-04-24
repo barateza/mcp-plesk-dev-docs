@@ -1,8 +1,15 @@
 """Unit tests for search-pipeline helper functions in plesk_unified.server."""
 
 from unittest.mock import MagicMock
-
 import pytest
+import concurrent.futures
+
+
+# Helper to create a completed Future
+def make_completed_future(result_value):
+    f = concurrent.futures.Future()
+    f.set_result(result_value)
+    return f
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +194,8 @@ def test_category_doc_base_urls_do_not_contain_zip():
         assert ".zip" not in url, f"Base URL for '{cat}' still contains '.zip': {url}"
 
 
-def test_search_returns_fallback_when_top_relevance_is_low(monkeypatch):
+@pytest.mark.asyncio
+async def test_search_returns_fallback_when_top_relevance_is_low(monkeypatch):
     import plesk_unified.server as server
 
     class DummyProfile:
@@ -215,12 +223,18 @@ def test_search_returns_fallback_when_top_relevance_is_low(monkeypatch):
     monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
     monkeypatch.setattr(server, "get_reranker", lambda: None)
     monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
+        f(*args, **kwargs)
+    )
+    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
 
-    result = server.search_plesk_unified("query")
+    result = await server.search_plesk_unified("query")
     assert result == "I could not find a reliable answer."
 
 
-def test_search_returns_results_when_relevance_is_high(monkeypatch):
+@pytest.mark.asyncio
+async def test_search_returns_results_when_relevance_is_high(monkeypatch):
     import plesk_unified.server as server
 
     class DummyProfile:
@@ -248,6 +262,11 @@ def test_search_returns_results_when_relevance_is_high(monkeypatch):
     monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
     monkeypatch.setattr(server, "get_reranker", lambda: None)
     monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
+    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
+        f(*args, **kwargs)
+    )
+    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
 
-    result = server.search_plesk_unified("query")
+    result = await server.search_plesk_unified("query")
     assert "Strong Result" in result

@@ -1,5 +1,7 @@
 import json
 import logging
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # ruff: noqa: E402
 import os
@@ -10,6 +12,8 @@ import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+
+_executor = ThreadPoolExecutor(max_workers=4)
 
 from plesk_unified.log_handler import create_os_handlers
 from plesk_unified.settings import settings
@@ -79,6 +83,7 @@ try:
     from plesk_unified import chunking, html_utils, io_utils, platform_utils
     from plesk_unified.ai_client import AIClient
     from plesk_unified.error_handling import tool_error_boundary
+    from plesk_unified.indexing import JobRegistry
     from plesk_unified.model_config import get_active_profile, list_profiles
     from plesk_unified.tq_index import TurboQuantIndex
     from plesk_unified.types import CategoryEnum, CategoryOrAll
@@ -100,6 +105,17 @@ except (ImportError, ModuleNotFoundError) as e:
         # Fallback if error_handling is missing during dev
         def tool_error_boundary(fn):
             return fn
+
+    try:
+        from indexing import JobRegistry  # type: ignore
+    except ImportError:
+
+        class JobRegistry:  # type: ignore
+            def submit_job(self, *args, **kwargs):
+                return "mock-id"
+
+            def get_status(self, *args, **kwargs):
+                return {"status": "mock"}
 
     try:
         from model_config import get_active_profile, list_profiles  # type: ignore
@@ -125,6 +141,9 @@ except (ImportError, ModuleNotFoundError) as e:
 
 # Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
+
+# Job Registry for background tasks
+job_registry = JobRegistry()
 
 # --- Configuration ---
 KB_DIR = BASE_DIR / "knowledge_base"
@@ -723,8 +742,16 @@ def _maybe_refresh_changed_sources() -> None:
 
     try:
         logger.info("Running startup source change detection.")
-        report = refresh_knowledge(target_category="all", reset_db=False)
-        logger.info("Startup source refresh report:\n%s", report)
+        try:
+            asyncio.get_running_loop()
+            asyncio.create_task(
+                refresh_knowledge(target_category="all", reset_db=False)
+            )
+        except RuntimeError:
+            report = asyncio.run(
+                refresh_knowledge(target_category="all", reset_db=False)
+            )
+            logger.info("Startup source refresh report:\n%s", report)
     except Exception:
         logger.exception("Startup source refresh failed.")
 
@@ -740,13 +767,14 @@ def _table_health() -> tuple[bool, str | None]:
 
 @mcp.tool
 @tool_error_boundary
-def warmup_server() -> str:
+async def warmup_server() -> str:
     """Preload the active profile models and table without running indexing."""
     if not _begin_warmup():
         return "Warmup already running."
 
     try:
-        parts = _run_warmup_sequence()
+        loop = asyncio.get_running_loop()
+        parts = await loop.run_in_executor(_executor, _run_warmup_sequence)
         _finish_warmup()
     except Exception as exc:
         _finish_warmup(exc)
@@ -758,10 +786,11 @@ def warmup_server() -> str:
 
 @mcp.tool
 @tool_error_boundary
-def daemon_health() -> str:
+async def daemon_health() -> str:
     """Return daemon-centric readiness status for warmup and indexed search paths."""
+    loop = asyncio.get_running_loop()
     profile = _get_profile()
-    table_ready, table_error = _table_health()
+    table_ready, table_error = await loop.run_in_executor(_executor, _table_health)
     tq_path = (
         _get_tq_index_path() if getattr(profile, "use_turboquant", False) else None
     )
@@ -781,7 +810,7 @@ def daemon_health() -> str:
             "turboquant_expected": bool(getattr(profile, "use_turboquant", False)),
             "turboquant_loaded": _tq_index is not None,
             "turboquant_artifact_exists": (tq_path.exists() if tq_path else None),
-            "refresh_mode": "synchronous-only",
+            "refresh_mode": "asynchronous-ready",
         }
 
     return json.dumps(status, indent=2)
@@ -789,7 +818,7 @@ def daemon_health() -> str:
 
 @mcp.tool
 @tool_error_boundary
-def list_model_profiles() -> str:
+async def list_model_profiles() -> str:
     """
     List built-in model profiles and show the active profile.
 
@@ -1090,12 +1119,9 @@ def _sync_single_source(
     return f"Finished pass for {source['cat']}."
 
 
-import concurrent.futures
-
-
 @mcp.tool
 @tool_error_boundary
-def refresh_knowledge(
+async def refresh_knowledge(
     target_category: Annotated[
         CategoryOrAll, Field(description="Category to index.")
     ] = "all",
@@ -1137,32 +1163,37 @@ def refresh_knowledge(
         table = get_table(create_new=False)
 
     report = []
+    loop = asyncio.get_running_loop()
 
     # Parallelize indexing across sources to saturate GPU/CPU
-    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_source = {
-            executor.submit(
-                _sync_single_source, source, table, reset_db, source_entries
-            ): source
-            for source in SOURCES
-            if target_category == "all" or source["cat"] == target_category
-        }
-        for future in concurrent.futures.as_completed(future_to_source):
-            try:
-                report.append(future.result())
-            except Exception as exc:
-                source = future_to_source[future]
-                logger.exception(
-                    "Source %s generated an exception: %s", source["cat"], exc
+    # Offload each source sync to the module-level thread executor.
+    tasks = []
+    for source in SOURCES:
+        if target_category == "all" or source["cat"] == target_category:
+            tasks.append(
+                loop.run_in_executor(
+                    _executor,
+                    _sync_single_source,
+                    source,
+                    table,
+                    reset_db,
+                    source_entries,
                 )
-                report.append(f"ERROR indexing {source['cat']}: {exc}")
+            )
+
+    if tasks:
+        results = await asyncio.gather(*tasks)
+        report.extend(results)
 
     _save_source_state(source_state)
 
     # Rebuild FTS index to include all newly added/updated chunks.
     # Hybrid search depends on this index being up-to-date.
     try:
-        table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
+        # LanceDB FTS indexing is CPU-intensive.
+        await loop.run_in_executor(
+            _executor, table.create_fts_index, ["text", "filename"], True, True
+        )
         report.append("FTS index rebuilt successfully.")
     except Exception:
         logger.exception("Failed to rebuild FTS index after refresh.")
@@ -1171,7 +1202,10 @@ def refresh_knowledge(
     profile = _get_profile()
     if getattr(profile, "use_turboquant", False):
         try:
-            _tq_index = _build_tq_index_from_table()
+            # Building TurboQuant index from vectors is CPU-bound.
+            _tq_index = await loop.run_in_executor(
+                _executor, _build_tq_index_from_table
+            )
             report.append("TurboQuant index rebuilt and persisted.")
         except Exception:
             logger.exception("Failed to rebuild TurboQuant index after refresh.")
@@ -1182,7 +1216,37 @@ def refresh_knowledge(
 
 @mcp.tool
 @tool_error_boundary
-def requantize_knowledge() -> str:
+async def trigger_index_sync(
+    category: Annotated[CategoryOrAll, Field(description="Category to index.")] = "all",
+) -> dict:
+    """Trigger async re-indexing of Plesk documentation. Returns job_id immediately."""
+
+    def job_wrapper(cat: CategoryOrAll, reset: bool) -> str:
+        # Since refresh_knowledge is now async, we run it in a new event loop
+        # inside this background thread.
+        res = asyncio.run(refresh_knowledge(cat, reset))
+        if isinstance(res, str) and res.startswith("[ERROR]"):
+            raise RuntimeError(res)
+        return res
+
+    job_id = job_registry.submit_job(job_wrapper, category, False)
+    return {"job_id": job_id, "status": "queued"}
+
+
+@mcp.tool
+@tool_error_boundary
+async def check_sync_status(
+    job_id: Annotated[
+        str, Field(description="The job_id returned by trigger_index_sync.")
+    ],
+) -> dict:
+    """Check the status of a background indexing job by job_id."""
+    return job_registry.get_status(job_id)
+
+
+@mcp.tool
+@tool_error_boundary
+async def requantize_knowledge() -> str:
     """
     Rebuild the TurboQuant index from already-stored LanceDB vectors.
 
@@ -1196,8 +1260,9 @@ def requantize_knowledge() -> str:
 
     logger.info("Starting requantize_knowledge for profile %s", profile.name)
     global _tq_index
+    loop = asyncio.get_running_loop()
     try:
-        _tq_index = _build_tq_index_from_table()
+        _tq_index = await loop.run_in_executor(_executor, _build_tq_index_from_table)
         return f"TurboQuant index rebuilt successfully for profile '{profile.name}'."
     except Exception as e:
         logger.exception("Manual requantization failed.")
@@ -1434,7 +1499,7 @@ def _format_search_results(results: list[dict[str, Any]]) -> str:
 
 @mcp.tool
 @tool_error_boundary
-def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> str:
+async def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> str:
     """
     Search the unified knowledge base and return up to 5 formatted results.
 
@@ -1456,14 +1521,20 @@ def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> st
     safe_query = (query[:100] + "...") if len(query) > 100 else query
     logger.info("Search request: q='%s' category='%s'", safe_query, category)
 
+    loop = asyncio.get_running_loop()
     reranker = get_reranker()
     n_candidates = settings.plesk_rerank_candidates
 
-    candidates = _get_search_candidates(query, category, n_candidates)
+    # Hybrid Search (Vector + FTS) - CPU-bound inference/search
+    candidates = await loop.run_in_executor(
+        _executor, _get_search_candidates, query, category, n_candidates
+    )
 
-    # Apply cross-encoder reranker for precise relevance scoring.
+    # Apply cross-encoder reranker for precise relevance scoring - CPU-bound inference
     if reranker is not None and candidates:
-        candidates = _rerank_and_score(query, candidates, reranker)
+        candidates = await loop.run_in_executor(
+            _executor, _rerank_and_score, query, candidates, reranker
+        )
     else:
         candidates.sort(key=lambda x: x["_relevance"], reverse=True)
 
@@ -1484,8 +1555,10 @@ def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> st
         )
         return error_msg
 
-    # Task D: Expand context by fetching neighbors for top results
-    expanded_results = _expand_context_with_neighbors(results, get_table())
+    # Task D: Expand context by fetching neighbors for top results - IO-bound
+    expanded_results = await loop.run_in_executor(
+        _executor, _expand_context_with_neighbors, results, get_table()
+    )
 
     duration_ms = (time.perf_counter() - start_t) * 1000
     logger.info(

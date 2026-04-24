@@ -56,6 +56,16 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
+## Session Initialization
+
+**When starting a work session**, you MUST execute the following to ensure the workspace and issue tracker are perfectly synced across environments (e.g., macOS and WSL):
+
+1. **Pull remote code**: `git pull --rebase`
+2. **Pull remote issues**: `bd dolt pull`
+3. **Prime environment**: `bd prime`
+
+This "Dual-Sync" rule prevents split-brain state between different computers.
+
 ## Session Completion
 
 **When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.

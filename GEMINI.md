@@ -58,6 +58,11 @@ done
 - **FTS Validation:** Hybrid search is a core feature. After any indexing operation, you must verify that the Full-Text Search (FTS) index has been rebuilt and is returning keyword-exact results.
 - **Verification over Inference:** Never assume a logic change improved metrics. Always rerun the `control` suite and inspect the database directly to confirm metadata injection.
 
+### Dual-Sync Initialization
+1. **Always Sync First:** You MUST run `git pull --rebase` and `bd dolt pull` as your first actions in a new session or after a long break.
+2. **Prevent Split-Brain:** This ensures that changes from other machines (e.g., WSL vs macOS) are synchronized before you begin modifying files.
+3. **Verify State:** Use `git status` and `bd ready` to confirm you are on the latest state of both code and issues.
+
 ### Hard Quality Restriction
 1. **No Speculative Pushing:** You are strictly forbidden from executing `git push` or `bd close` until you have executed `scripts/benchmark_profiles.py` with the `--fail-on-gate` flag.
 2. **Evidence-Based Completion:** You must include the `MRR@5` and `Hit Rate` results in your final session summary.

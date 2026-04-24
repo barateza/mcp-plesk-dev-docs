@@ -69,10 +69,10 @@ async def test_warmup_server_reports_progress(mock_server_dependencies):
     await warmup_server(ctx=ctx)
 
     assert ctx.report_progress.call_count == 4
-    ctx.report_progress.assert_any_call(current=1, total=4)
-    ctx.report_progress.assert_any_call(current=2, total=4)
-    ctx.report_progress.assert_any_call(current=3, total=4)
-    ctx.report_progress.assert_any_call(current=4, total=4)
+    ctx.report_progress.assert_any_call(1, 4)
+    ctx.report_progress.assert_any_call(2, 4)
+    ctx.report_progress.assert_any_call(3, 4)
+    ctx.report_progress.assert_any_call(4, 4)
 
 
 @pytest.mark.asyncio
@@ -83,10 +83,10 @@ async def test_refresh_knowledge_reports_progress(mock_server_dependencies):
     await refresh_knowledge(ctx=ctx, target_category="all")
 
     assert ctx.report_progress.call_count == 4
-    ctx.report_progress.assert_any_call(current=1, total=4)
-    ctx.report_progress.assert_any_call(current=2, total=4)
-    ctx.report_progress.assert_any_call(current=3, total=4)
-    ctx.report_progress.assert_any_call(current=4, total=4)
+    ctx.report_progress.assert_any_call(1, 4)
+    ctx.report_progress.assert_any_call(2, 4)
+    ctx.report_progress.assert_any_call(3, 4)
+    ctx.report_progress.assert_any_call(4, 4)
 
 
 @pytest.mark.asyncio

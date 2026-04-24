@@ -9,6 +9,7 @@ import pickle
 import sys
 import threading
 import time
+import inspect
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -79,6 +80,28 @@ import numpy as np
 from fastmcp import Context, FastMCP
 from mcp.types import SamplingMessage
 from pydantic import Field
+
+
+async def _report_progress(
+    ctx: Optional[Context], current: int, total: int = 4
+) -> None:
+    """
+    Resiliently report progress to MCP client,
+    handling sync/async and missing methods.
+    """
+    if not ctx or not hasattr(ctx, "report_progress"):
+        return
+
+    try:
+        # Check if the method is an async coroutine or a sync function
+        if inspect.iscoroutinefunction(ctx.report_progress):
+            await ctx.report_progress(current, total)
+        else:
+            ctx.report_progress(current, total)
+    except Exception as e:
+        # Progress reporting should never crash the main operation
+        logger.debug("Failed to report progress: %s", e)
+
 
 try:
     from plesk_unified import chunking, html_utils, io_utils, platform_utils
@@ -770,8 +793,7 @@ def _table_health() -> tuple[bool, str | None]:
 @tool_error_boundary
 async def warmup_server(ctx: Optional[Context] = None) -> str:
     """Preload the active profile models and table without running indexing."""
-    if ctx:
-        await ctx.report_progress(current=1, total=4)  # load start
+    await _report_progress(ctx, 1, 4)  # load start
 
     if not _begin_warmup():
         return "Warmup already running."
@@ -779,16 +801,13 @@ async def warmup_server(ctx: Optional[Context] = None) -> str:
     try:
         loop = asyncio.get_running_loop()
         parts = await loop.run_in_executor(_executor, _run_warmup_sequence)
-        if ctx:
-            await ctx.report_progress(current=2, total=4)  # load complete
+        await _report_progress(ctx, 2, 4)  # load complete
 
         # Report progress for index check
-        if ctx:
-            await ctx.report_progress(current=3, total=4)  # index check
+        await _report_progress(ctx, 3, 4)  # index check
 
         _finish_warmup()
-        if ctx:
-            await ctx.report_progress(current=4, total=4)  # done
+        await _report_progress(ctx, 4, 4)  # done
     except Exception as exc:
         _finish_warmup(exc)
         logger.exception("Manual warmup failed.")
@@ -1063,9 +1082,18 @@ def _sync_single_source(
     prev_meta = source_entries.get(source["cat"], {})
 
     # Force re-index if reset_db is true, source files changed,
-    # or chunking.CHUNK_VERSION bumped
+    # chunking.CHUNK_VERSION bumped, or table is empty
+    table_is_empty = False
+    try:
+        if table.count_rows() == 0:
+            table_is_empty = True
+    except Exception:
+        # If count_rows fails, assume we need a sync
+        table_is_empty = True
+
     source_changed = (
         reset_db
+        or table_is_empty
         or prev_meta.get("fingerprint") != fingerprint
         or prev_meta.get("chunk_version") != chunking.CHUNK_VERSION
     )
@@ -1160,8 +1188,7 @@ async def refresh_knowledge(
     Behavior: incremental by filename when `reset_db` is False; skips files
     already present in the DB. Returns a short per-source report.
     """
-    if ctx:
-        await ctx.report_progress(current=1, total=4)  # fetch
+    await _report_progress(ctx, 1, 4)  # fetch
 
     _validate_category(target_category, allow_all=True, parameter_name="category")
 
@@ -1183,8 +1210,7 @@ async def refresh_knowledge(
     results = await _sync_all_sources(table, target_category, reset_db, source_entries)
     report.extend(results)
 
-    if ctx:
-        await ctx.report_progress(current=2, total=4)  # chunk
+    await _report_progress(ctx, 2, 4)  # chunk
 
     _save_source_state(source_state)
 
@@ -1192,8 +1218,7 @@ async def refresh_knowledge(
     index_report = await _rebuild_fts_and_tq(table, ctx)
     report.extend(index_report)
 
-    if ctx:
-        await ctx.report_progress(current=4, total=4)  # done
+    await _report_progress(ctx, 4, 4)  # done
 
     return "\n".join(report)
 
@@ -1246,8 +1271,7 @@ async def _rebuild_fts_and_tq(table: Any, ctx: Optional[Context]) -> list[str]:
         logger.exception("Failed to rebuild FTS index after refresh.")
         report.append("ERROR rebuilding FTS index.")
 
-    if ctx:
-        await ctx.report_progress(current=3, total=4)  # index
+    await _report_progress(ctx, 3, 4)  # index
 
     profile = _get_profile()
     if getattr(profile, "use_turboquant", False):
@@ -1268,7 +1292,11 @@ async def _rebuild_fts_and_tq(table: Any, ctx: Optional[Context]) -> list[str]:
 @mcp.tool
 @tool_error_boundary
 async def trigger_index_sync(
+    ctx: Optional[Context] = None,
     category: Annotated[CategoryOrAll, Field(description="Category to index.")] = "all",
+    reset_db: Annotated[
+        bool, Field(description="Force a full re-index by wiping the database first.")
+    ] = False,
 ) -> dict:
     """Trigger async re-indexing of Plesk documentation. Returns job_id immediately."""
 
@@ -1280,7 +1308,7 @@ async def trigger_index_sync(
             raise RuntimeError(res)
         return res
 
-    job_id = job_registry.submit_job(job_wrapper, category, False)
+    job_id = job_registry.submit_job(job_wrapper, category, reset_db)
     return {"job_id": job_id, "status": "queued"}
 
 

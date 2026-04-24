@@ -1262,10 +1262,12 @@ async def _rebuild_fts_and_tq(table: Any, ctx: Optional[Context]) -> list[str]:
     # Rebuild FTS index to include all newly added/updated chunks.
     # Hybrid search depends on this index being up-to-date.
     try:
+
+        def _rebuild():
+            table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
+
         # LanceDB FTS indexing is CPU-intensive.
-        await loop.run_in_executor(
-            _executor, table.create_fts_index, ["text", "filename"], True, True
-        )
+        await loop.run_in_executor(_executor, _rebuild)
         report.append("FTS index rebuilt successfully.")
     except Exception:
         logger.exception("Failed to rebuild FTS index after refresh.")

@@ -17,8 +17,10 @@ You can also override individual components without changing the profile:
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
+
+from plesk_unified.platform_utils import get_optimal_device, get_platform_info
+from plesk_unified.settings import settings
 
 logger = logging.getLogger("plesk_unified")
 
@@ -107,7 +109,7 @@ def get_active_profile() -> ModelProfile:
             2. PLESK_MODEL_PROFILE                        (named profile)
             3. Compiled-in default ("full-tq")
     """
-    profile_name = os.environ.get("PLESK_MODEL_PROFILE", DEFAULT_PROFILE)
+    profile_name = settings.plesk_model_profile
     profile_name = profile_name.lower().strip()
 
     if profile_name not in _PROFILES:
@@ -122,16 +124,17 @@ def get_active_profile() -> ModelProfile:
     base = _PROFILES[profile_name]
 
     # Apply per-component overrides on top of the profile
-    embed_model = os.environ.get("PLESK_EMBED_MODEL", base.embed_model).strip()
-    reranker_model_env = os.environ.get(
-        "PLESK_RERANKER_MODEL", base.reranker_model or ""
-    )
-    reranker_model = reranker_model_env.strip() or None
+    embed_model = (settings.plesk_embed_model or base.embed_model).strip()
 
-    reranker_enabled_env = os.environ.get("PLESK_RERANKER_ENABLED", "").strip().lower()
-    if reranker_enabled_env in ("false", "0", "no"):
+    # Handle reranker_model specifically to allow empty string as "none"
+    if settings.plesk_reranker_model is not None:
+        reranker_model = settings.plesk_reranker_model.strip() or None
+    else:
+        reranker_model = base.reranker_model
+
+    if settings.plesk_reranker_enabled is False:
         reranker_enabled = False
-    elif reranker_enabled_env in ("true", "1", "yes"):
+    elif settings.plesk_reranker_enabled is True:
         reranker_enabled = True
     else:
         reranker_enabled = base.reranker_enabled
@@ -140,9 +143,8 @@ def get_active_profile() -> ModelProfile:
     # also set PLESK_EMBED_DIM or we fall back to the profile default with a warning.
     embed_dim = base.embed_dim
     if embed_model != base.embed_model:
-        env_dim = os.environ.get("PLESK_EMBED_DIM", "").strip()
-        if env_dim.isdigit():
-            embed_dim = int(env_dim)
+        if settings.plesk_embed_dim:
+            embed_dim = settings.plesk_embed_dim
         else:
             logger.warning(
                 "PLESK_EMBED_MODEL overridden to %r but PLESK_EMBED_DIM not set. "
@@ -164,6 +166,21 @@ def get_active_profile() -> ModelProfile:
         tq_bits=base.tq_bits,
         tq_top_k=base.tq_top_k,
     )
+
+    # VRAM Auto-tuning check
+    device = get_optimal_device()
+    if device == "cuda":
+        info = get_platform_info()
+        free_vram = info.get("vram_free_mb")
+        if free_vram and active.approx_ram_mb > free_vram:
+            logger.warning(
+                "VRAM Auto-Tune: Profile '%s' requires ~%d MB but only %d MB is free. "
+                "Consider switching to a lighter profile (e.g., 'medium' or 'light') "
+                "to avoid Out-Of-Memory (OOM) errors.",
+                active.name,
+                active.approx_ram_mb,
+                free_vram,
+            )
 
     logger.info(
         "Active model profile: %s | embed=%s (dim=%d) | reranker=%s "

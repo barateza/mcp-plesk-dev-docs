@@ -8,9 +8,11 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 
 from plesk_unified.log_handler import create_os_handlers
+from plesk_unified.settings import settings
 
 # --- LOGGING SETUP ---
 # Must be done before importing heavy libraries.
@@ -18,16 +20,9 @@ from plesk_unified.log_handler import create_os_handlers
 BASE_DIR = Path(__file__).parent.parent
 LOG_DIR = BASE_DIR / "storage" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
-try:
-    from dotenv import load_dotenv
 
-    load_dotenv()
-except ImportError:
-    pass  # python-dotenv is optional; env vars can be set directly
-
-LOG_FILE = os.environ.get("LOG_FILE", str(LOG_DIR / "plesk_unified.log"))
-# Convert string level (e.g. "INFO") to integer
-LOG_LEVEL_NAME = os.environ.get("LOG_LEVEL", "INFO").upper()
+LOG_FILE = settings.effective_log_file
+LOG_LEVEL_NAME = settings.log_level.upper()
 LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
 
 # Create logger
@@ -58,7 +53,7 @@ if not logger.handlers:
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("git").setLevel(logging.WARNING)
 
-_log_handler_mode = os.environ.get("LOG_HANDLER", "os").lower().strip()
+_log_handler_mode = settings.log_handler
 logger.info(
     "Logging initialized. Level: %s, Handler mode: %s, File: %s",
     LOG_LEVEL_NAME,
@@ -70,10 +65,10 @@ STARTUP_AT = time.perf_counter()
 
 
 # --- SILENCE THE NOISE ---
-os.environ["TQDM_DISABLE"] = "1"
-os.environ["TRANSFORMERS_VERBOSITY"] = "error"
+os.environ["TQDM_DISABLE"] = "1" if settings.tqdm_disable else "0"
+os.environ["TRANSFORMERS_VERBOSITY"] = settings.transformers_verbosity
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Annotated, Any, Dict, Optional, Tuple
 
 import lancedb  # type: ignore
 import numpy as np
@@ -83,8 +78,10 @@ from pydantic import Field
 try:
     from plesk_unified import chunking, html_utils, io_utils, platform_utils
     from plesk_unified.ai_client import AIClient
+    from plesk_unified.error_handling import tool_error_boundary
     from plesk_unified.model_config import get_active_profile, list_profiles
     from plesk_unified.tq_index import TurboQuantIndex
+    from plesk_unified.types import CategoryEnum, CategoryOrAll
 except (ImportError, ModuleNotFoundError) as e:
     # Only fallback if 'plesk_unified' itself is the missing module.
     # This prevents swallowing errors when a dependency of plesk_unified is missing.
@@ -98,11 +95,33 @@ except (ImportError, ModuleNotFoundError) as e:
     from ai_client import AIClient  # type: ignore
 
     try:
+        from error_handling import tool_error_boundary  # type: ignore
+    except ImportError:
+        # Fallback if error_handling is missing during dev
+        def tool_error_boundary(fn):
+            return fn
+
+    try:
         from model_config import get_active_profile, list_profiles  # type: ignore
     except Exception:
         get_active_profile = None  # type: ignore
         list_profiles = None  # type: ignore
     from tq_index import TurboQuantIndex  # type: ignore
+
+    try:
+        # Try to import from the local directory if package is not installed
+        from types import CategoryEnum, CategoryOrAll  # type: ignore
+    except ImportError:
+        # This can happen if 'types' refers to the built-in module
+        # In a real scenario, the package structure should be respected
+        class CategoryEnum(str, Enum):  # type: ignore
+            GUIDE = "guide"
+            CLI = "cli"
+            API = "api"
+            PHP_STUBS = "php-stubs"
+            JS_SDK = "js-sdk"
+
+        CategoryOrAll = Any  # type: ignore
 
 # Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
@@ -116,13 +135,14 @@ KB_DIR.mkdir(exist_ok=True)
 # Note: CHUNK_VERSION has moved to chunking.py to ensure it stays in sync
 # with the hashing logic.
 
-VALID_CATEGORIES: frozenset[str] = frozenset(
-    {"guide", "cli", "api", "php-stubs", "js-sdk"}
-)
+VALID_CATEGORIES: frozenset[str] = frozenset(c.value for c in CategoryEnum)
 
 
 def _validate_category(
-    category: str | None, *, allow_all: bool = False, parameter_name: str = "category"
+    category: str | CategoryEnum | None,
+    *,
+    allow_all: bool = False,
+    parameter_name: str = "category",
 ) -> None:
     if category is None:
         return
@@ -241,6 +261,7 @@ def _detect_device() -> str:
     if _detected_device is not None:
         return _detected_device
 
+    platform_utils.log_platform_info()
     _detected_device = platform_utils.get_optimal_device()
     logger.info("Selected compute device: %s", _detected_device.upper())
     return _detected_device
@@ -258,20 +279,44 @@ def get_embedding_model() -> Any:
     device = _detect_device()
     logger.info("Initializing embedding model %s on %s...", profile.embed_model, device)
     init_started = time.perf_counter()
+
+    reg = get_registry().get("huggingface")
+
     try:
-        reg = get_registry().get("huggingface")
+        # Attempt 1: Optimal device
         try:
             _embedding_model = reg.create(name=profile.embed_model, device=device)
         except TypeError:
+            # Fallback for older lancedb versions
             logger.debug("Device argument rejected, retrying without device kwarg.")
             _embedding_model = reg.create(name=profile.embed_model)
+
         logger.info(
             "Embedding model initialized successfully in %.2fs.",
             time.perf_counter() - init_started,
         )
-    except Exception:
-        logger.critical("Embedding model could not be initialized.", exc_info=True)
-        raise
+    except Exception as e:
+        # If we failed and were using a hardware accelerator, fallback to CPU
+        if device in ("cuda", "mps"):
+            platform_utils.log_hardware_degradation(device, e, "cpu")
+            try:
+                _embedding_model = reg.create(name=profile.embed_model, device="cpu")
+                logger.info("Embedding model initialized on CPU successfully.")
+            except Exception as e2:
+                logger.critical(
+                    "Embedding model failed to initialize even on CPU: %s",
+                    e2,
+                    exc_info=True,
+                )
+                raise
+        else:
+            logger.critical(
+                "Embedding model could not be initialized on %s: %s",
+                device,
+                e,
+                exc_info=True,
+            )
+            raise
 
     return _embedding_model
 
@@ -326,15 +371,25 @@ def get_reranker() -> Any:
         from sentence_transformers import CrossEncoder  # type: ignore
 
         device = _detect_device()
-        _reranker = CrossEncoder(profile.reranker_model, device=device)
+        try:
+            _reranker = CrossEncoder(profile.reranker_model, device=device)
+        except Exception as e:
+            if device in ("cuda", "mps"):
+                platform_utils.log_hardware_degradation(device, e, "cpu")
+                # Fallback to CPU
+                _reranker = CrossEncoder(profile.reranker_model, device="cpu")
+            else:
+                raise
+
         logger.info(
             "Reranker initialized on %s in %.2fs.",
-            device,
+            getattr(_reranker, "device", device),
             time.perf_counter() - init_started,
         )
-    except Exception:
+    except Exception as e:
         logger.warning(
-            "Reranker initialization failed. Proceeding without reranking.",
+            "Reranker initialization failed (%s). Proceeding without reranking.",
+            str(e),
             exc_info=True,
         )
         return None
@@ -397,11 +452,24 @@ def _load_tq_index() -> TurboQuantIndex | None:
         return None
 
     profile = _get_profile()
-    tq_index = TurboQuantIndex(
-        dim=profile.embed_dim,
-        bits=profile.tq_bits,
-        device=_detect_device(),
-    )
+    device = _detect_device()
+    try:
+        tq_index = TurboQuantIndex(
+            dim=profile.embed_dim,
+            bits=profile.tq_bits,
+            device=device,
+        )
+    except Exception as e:
+        if device in ("cuda", "mps"):
+            platform_utils.log_hardware_degradation(device, e, "cpu")
+            tq_index = TurboQuantIndex(
+                dim=profile.embed_dim,
+                bits=profile.tq_bits,
+                device="cpu",
+            )
+        else:
+            raise
+
     with path.open("rb") as fh:
         data = pickle.load(fh)
     tq_index.compressed_db = data.get("compressed_db")
@@ -415,11 +483,23 @@ def _build_tq_index_from_table() -> TurboQuantIndex:
     table = get_table(create_new=False)
     all_docs = table.search().limit(100000).to_list()
 
-    tq_index = TurboQuantIndex(
-        dim=profile.embed_dim,
-        bits=profile.tq_bits,
-        device=_detect_device(),
-    )
+    device = _detect_device()
+    try:
+        tq_index = TurboQuantIndex(
+            dim=profile.embed_dim,
+            bits=profile.tq_bits,
+            device=device,
+        )
+    except Exception as e:
+        if device in ("cuda", "mps"):
+            platform_utils.log_hardware_degradation(device, e, "cpu")
+            tq_index = TurboQuantIndex(
+                dim=profile.embed_dim,
+                bits=profile.tq_bits,
+                device="cpu",
+            )
+        else:
+            raise
 
     if all_docs:
         corpus_vecs = np.asarray([doc["vector"] for doc in all_docs], dtype=np.float32)
@@ -449,18 +529,6 @@ def get_tq_index() -> TurboQuantIndex:
 def _log_server_ready(message: str) -> None:
     logger.info(message)
     logger.info("Server module initialized in %.2fs.", time.perf_counter() - STARTUP_AT)
-
-
-def _env_flag(name: str) -> bool:
-    value = os.environ.get(name, "").strip().lower()
-    return value in {"1", "true", "yes", "on"}
-
-
-def _env_flag_with_default(name: str, default: bool) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _load_source_state() -> dict[str, Any]:
@@ -630,7 +698,7 @@ def _background_warmup_worker() -> None:
 
 
 def _maybe_start_background_warmup() -> None:
-    if not _env_flag("PLESK_DAEMON_AUTO_WARMUP"):
+    if not settings.plesk_daemon_auto_warmup:
         return
 
     global _warmup_thread
@@ -649,7 +717,7 @@ def _maybe_start_background_warmup() -> None:
 
 def _maybe_refresh_changed_sources() -> None:
     """At startup, refresh only categories whose source fingerprint changed."""
-    if not _env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", True):
+    if not settings.plesk_auto_refresh_on_startup:
         logger.info("Startup source refresh disabled by env var.")
         return
 
@@ -671,6 +739,7 @@ def _table_health() -> tuple[bool, str | None]:
 
 
 @mcp.tool
+@tool_error_boundary
 def warmup_server() -> str:
     """Preload the active profile models and table without running indexing."""
     if not _begin_warmup():
@@ -682,12 +751,13 @@ def warmup_server() -> str:
     except Exception as exc:
         _finish_warmup(exc)
         logger.exception("Manual warmup failed.")
-        return f"Warmup failed: {exc}"
+        raise
 
     return "\n".join(parts)
 
 
 @mcp.tool
+@tool_error_boundary
 def daemon_health() -> str:
     """Return daemon-centric readiness status for warmup and indexed search paths."""
     profile = _get_profile()
@@ -700,7 +770,7 @@ def daemon_health() -> str:
         status = {
             "profile": profile.name,
             "device": _detect_device(),
-            "auto_warmup_enabled": _env_flag("PLESK_DAEMON_AUTO_WARMUP"),
+            "auto_warmup_enabled": settings.plesk_daemon_auto_warmup,
             "warmup_state": _warmup_state,
             "warmup_error": _warmup_error,
             "warmup_thread_alive": (
@@ -718,6 +788,7 @@ def daemon_health() -> str:
 
 
 @mcp.tool
+@tool_error_boundary
 def list_model_profiles() -> str:
     """
     List built-in model profiles and show the active profile.
@@ -890,8 +961,7 @@ def process_source_files(source, table, existing_files, existing_hashes) -> set[
     BATCH_SIZE_CHUNKS = 1000
 
     # REQ-3: summary generation if enabled
-    llm_summaries = os.environ.get("PLESK_INDEX_SUMMARIES") == "1"
-    ai_client = AIClient() if llm_summaries else None
+    ai_client = AIClient() if settings.plesk_index_summaries else None
 
     for f in files:
         if f.name.startswith("_") or f.name == "toc.json":
@@ -1024,21 +1094,20 @@ import concurrent.futures
 
 
 @mcp.tool
+@tool_error_boundary
 def refresh_knowledge(
-    target_category: str = Field(
-        "all",
-        description=(
-            "Category to index. Choose one: 'guide', 'cli', 'api', 'php-stubs', "
-            "'js-sdk' or 'all'."
+    target_category: Annotated[
+        CategoryOrAll, Field(description="Category to index.")
+    ] = "all",
+    reset_db: Annotated[
+        bool,
+        Field(
+            description=(
+                "Set to True ONLY for the first run to wipe the database. "
+                "Default is False (resume)."
+            )
         ),
-    ),
-    reset_db: bool = Field(
-        False,
-        description=(
-            "Set to True ONLY for the first run to wipe the database. "
-            "Default is False (resume)."
-        ),
-    ),
+    ] = False,
 ):
     """
     Index Plesk documentation into LanceDB.
@@ -1112,6 +1181,7 @@ def refresh_knowledge(
 
 
 @mcp.tool
+@tool_error_boundary
 def requantize_knowledge() -> str:
     """
     Rebuild the TurboQuant index from already-stored LanceDB vectors.
@@ -1188,7 +1258,7 @@ def _rrf_merge(
 
 
 def _get_search_candidates(
-    query: str, category: str | None, n_candidates: int
+    query: str, category: CategoryEnum | str | None, n_candidates: int
 ) -> list[dict[str, Any]]:
     """Retrieve candidate pool using Hybrid Search (Vector + FTS)."""
     profile = _get_profile()
@@ -1252,16 +1322,14 @@ def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:
     if not results:
         return "I could not find a reliable answer."
 
-    profile_name = os.environ.get("PLESK_MODEL_PROFILE", "full-tq")
+    profile = _get_profile()
     default_threshold = 0.55
-    if profile_name == "light":
+    if profile.name == "light":
         default_threshold = 0.50
-    elif profile_name == "medium":
+    elif profile.name == "medium":
         default_threshold = 0.60
 
-    min_relevance = float(
-        os.environ.get("PLESK_MIN_RELEVANCE_THRESHOLD", str(default_threshold))
-    )
+    min_relevance = settings.plesk_min_relevance_threshold or default_threshold
 
     if results[0].get("_relevance", 0.0) < min_relevance:
         logger.info(
@@ -1269,7 +1337,7 @@ def _apply_relevance_gate(results: list[dict[str, Any]]) -> str | None:
             "Returning fallback.",
             results[0].get("_relevance", 0.0),
             min_relevance,
-            profile_name,
+            profile.name,
         )
         return "I could not find a reliable answer."
     return None
@@ -1337,25 +1405,36 @@ def _expand_context_with_neighbors(results: list[dict], table: Any) -> list[dict
 
 
 def _format_search_results(results: list[dict[str, Any]]) -> str:
-    """Convert result dicts into formatted string for MCP."""
+    """Convert result dicts into rich Markdown result cards for MCP."""
     formatted_results = []
     for r in results:
         relevance = r.get("_relevance", 0.0)
         doc_url = _build_doc_url(r.get("category", ""), r.get("filename", ""))
-        url_line = f"URL: {doc_url}\n" if doc_url else ""
+
+        # Build header with category badge and title
+        header = f"### [{r['category'].upper()}] {r['title']}"
+
+        # Build metadata line
+        meta_parts = []
+        if r.get("filename"):
+            meta_parts.append(f"**File:** `{r['filename']}`")
+        if r.get("breadcrumb"):
+            meta_parts.append(f"**Path:** {r['breadcrumb']}")
+        meta_parts.append(f"**Score:** {relevance:.4f}")
+        meta_line = " | ".join(meta_parts)
+
+        # URL section
+        url_section = f"\n**Documentation:** {doc_url}\n" if doc_url else ""
+
         formatted_results.append(
-            f"=== {r['category'].upper()} | {r['title']} ===\n"
-            f"Path: {r.get('breadcrumb', '')}\n"
-            f"File: {r.get('filename', '')}\n"
-            f"{url_line}"
-            f"Relevance: {relevance:.4f}\n\n"
-            f"{r.get('text', '')}\n"
+            f"{header}\n{meta_line}\n{url_section}\n{r.get('text', '')}\n\n---\n"
         )
     return "\n".join(formatted_results)
 
 
 @mcp.tool
-def search_plesk_unified(query: str, category: str | None = None) -> str:
+@tool_error_boundary
+def search_plesk_unified(query: str, category: CategoryEnum | None = None) -> str:
     """
     Search the unified knowledge base and return up to 5 formatted results.
 
@@ -1370,6 +1449,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     Results are returned as readable text blocks including title, path,
     filename and a relevance score between 0 and 1.
     """
+    start_t = time.perf_counter()
     _validate_category(category)
 
     # Truncate query for logging to avoid leaking sensitive data
@@ -1377,7 +1457,7 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
     logger.info("Search request: q='%s' category='%s'", safe_query, category)
 
     reranker = get_reranker()
-    n_candidates = int(os.environ.get("PLESK_RERANK_CANDIDATES", "50"))
+    n_candidates = settings.plesk_rerank_candidates
 
     candidates = _get_search_candidates(query, category, n_candidates)
 
@@ -1392,10 +1472,32 @@ def search_plesk_unified(query: str, category: str | None = None) -> str:
 
     error_msg = _apply_relevance_gate(results)
     if error_msg:
+        duration_ms = (time.perf_counter() - start_t) * 1000
+        logger.info(
+            "Search Telemetry (Filtered): query=%r category=%r candidates=%d "
+            "top_relevance=%.4f duration_ms=%.2f",
+            safe_query,
+            category,
+            len(candidates),
+            results[0].get("_relevance", 0.0) if results else 0.0,
+            duration_ms,
+        )
         return error_msg
 
     # Task D: Expand context by fetching neighbors for top results
     expanded_results = _expand_context_with_neighbors(results, get_table())
+
+    duration_ms = (time.perf_counter() - start_t) * 1000
+    logger.info(
+        "Search Telemetry: query=%r category=%r candidates=%d "
+        "top_relevance=%.4f duration_ms=%.2f results=%d",
+        safe_query,
+        category,
+        len(candidates),
+        expanded_results[0].get("_relevance", 0.0) if expanded_results else 0.0,
+        duration_ms,
+        len(expanded_results),
+    )
 
     logger.info(
         "Search returning %d results (from %d candidates).",

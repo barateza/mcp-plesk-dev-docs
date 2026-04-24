@@ -18,11 +18,15 @@ def reload_config(env: dict):
     Returns the module so tests can call get_active_profile() on it.
     """
     import plesk_unified.model_config as mc  # noqa: F401
+    import plesk_unified.settings as ps
 
     for k in list(os.environ):
         if k.startswith("PLESK_"):
             del os.environ[k]
     os.environ.update(env)
+    os.environ["PLESK_ENV_FILE"] = ""  # Suppress .env loading
+
+    importlib.reload(ps)
     importlib.reload(mc)
     # Re-import after reload so we get the fresh module object
     import plesk_unified.model_config as mc2

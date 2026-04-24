@@ -1,0 +1,45 @@
+name: Benchmark Regression Gate
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'plesk_unified/**'
+      - 'scripts/benchmark_profiles.py'
+      - 'benchmarks/**'
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: Quality Gate (Light Profile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+          pip install psutil  # Required for RSS metrics in benchmark script
+
+      - name: Index knowledge base (light)
+        run: |
+          # Create storage dir
+          mkdir -p storage/lancedb
+          # Run indexing for light profile
+          PLESK_MODEL_PROFILE=light python -c "from plesk_unified.server import refresh_knowledge; print(refresh_knowledge(target_category='all', reset_db=True))"
+
+      - name: Run quality benchmark
+        run: |
+          # We use the 'light' profile for CI to stay within GitHub Actions memory limits
+          PLESK_MODEL_PROFILE=light python scripts/benchmark_profiles.py \
+            --profile light \
+            --suite control \
+            --baseline-file benchmarks/baselines/light.json \
+            --fail-on-gate

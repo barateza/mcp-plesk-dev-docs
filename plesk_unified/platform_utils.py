@@ -65,6 +65,12 @@ def get_platform_info() -> dict:
             info["gpu_count"] = torch.cuda.device_count()
             if torch.cuda.device_count() > 0:
                 info["gpu_name"] = str(torch.cuda.get_device_name(0))
+                try:
+                    free_vram, total_vram = torch.cuda.mem_get_info()
+                    info["vram_free_mb"] = free_vram // (1024**2)
+                    info["vram_total_mb"] = total_vram // (1024**2)
+                except Exception:
+                    pass
 
     except ImportError:
         info["torch_available"] = False
@@ -108,6 +114,22 @@ def get_optimal_device() -> str:
             pass
 
     return "cpu"
+
+
+def log_hardware_degradation(
+    failed_device: str, reason: Exception | str, fallback: str = "cpu"
+) -> None:
+    """
+    Log a WARNING when a hardware accelerator (CUDA/MPS) fails and falls back to CPU.
+    T05 (M1) Implementation.
+    """
+    logger.warning(
+        "Hardware acceleration failure: %s initialization failed (%s). "
+        "Falling back to %s. Performance may be degraded.",
+        failed_device.upper(),
+        str(reason),
+        fallback.upper(),
+    )
 
 
 def get_device_config() -> dict:

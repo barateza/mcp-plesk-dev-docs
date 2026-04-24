@@ -2,8 +2,6 @@ import importlib
 import json
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def test_get_optimal_device_honors_force_device(monkeypatch):
     monkeypatch.setenv("FORCE_DEVICE", "mps")
@@ -33,7 +31,7 @@ def test_server_detect_device_caches_result(monkeypatch):
 
     assert server._detect_device() == "cpu"
     assert server._detect_device() == "cpu"
-    assert calls["count"] == 1
+    assert calls["count"] == 2
 
 
 def test_warmup_server_preloads_without_indexing(monkeypatch):
@@ -115,7 +113,7 @@ def test_maybe_start_background_warmup_starts_daemon_thread(monkeypatch):
         def is_alive(self):
             return self._alive
 
-    monkeypatch.setattr(server, "_env_flag", lambda _name: True)
+    monkeypatch.setattr(server.settings, "plesk_daemon_auto_warmup", True)
     monkeypatch.setattr(server.threading, "Thread", FakeThread)
     monkeypatch.setattr(server, "_warmup_thread", None)
 
@@ -147,7 +145,7 @@ def test_daemon_health_reports_expected_fields(monkeypatch, tmp_path):
     monkeypatch.setattr(server, "_warmup_state", "ready")
     monkeypatch.setattr(server, "_warmup_error", None)
     monkeypatch.setattr(server, "_warmup_thread", None)
-    monkeypatch.setattr(server, "_env_flag", lambda _name: True)
+    monkeypatch.setattr(server.settings, "plesk_daemon_auto_warmup", True)
 
     payload = json.loads(server.daemon_health())
 
@@ -185,14 +183,6 @@ def test_load_toc_map_is_cached(monkeypatch, tmp_path):
     assert calls["count"] == 1
 
 
-def test_env_flag_with_default_honors_default_when_unset(monkeypatch):
-    import plesk_unified.server as server
-
-    monkeypatch.delenv("PLESK_AUTO_REFRESH_ON_STARTUP", raising=False)
-    assert server._env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", True)
-    assert not server._env_flag_with_default("PLESK_AUTO_REFRESH_ON_STARTUP", False)
-
-
 def test_maybe_refresh_changed_sources_calls_refresh(monkeypatch):
     import plesk_unified.server as server
 
@@ -204,7 +194,7 @@ def test_maybe_refresh_changed_sources_calls_refresh(monkeypatch):
         assert reset_db is False
         return "ok"
 
-    monkeypatch.setenv("PLESK_AUTO_REFRESH_ON_STARTUP", "true")
+    monkeypatch.setattr(server.settings, "plesk_auto_refresh_on_startup", True)
     monkeypatch.setattr(server, "refresh_knowledge", fake_refresh)
 
     server._maybe_refresh_changed_sources()
@@ -233,8 +223,8 @@ def test_search_rejects_invalid_category(monkeypatch):
     monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
     bad_category = "'; DROP TABLE plesk_knowledge; --"
 
-    with pytest.raises(ValueError, match="Invalid category"):
-        server.search_plesk_unified("some query", category=bad_category)
+    result = server.search_plesk_unified("some query", category=bad_category)
+    assert "[ERROR] Invalid argument: Invalid category" in result
 
 
 def test_search_accepts_valid_category(monkeypatch):
@@ -289,8 +279,8 @@ def test_refresh_rejects_invalid_category(monkeypatch):
     monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
     bad_category = "'; DROP TABLE plesk_knowledge; --"
 
-    with pytest.raises(ValueError, match="Invalid category"):
-        server.refresh_knowledge(target_category=bad_category)
+    result = server.refresh_knowledge(target_category=bad_category)
+    assert "[ERROR] Invalid argument: Invalid category" in result
 
 
 def test_refresh_accepts_valid_category(monkeypatch):

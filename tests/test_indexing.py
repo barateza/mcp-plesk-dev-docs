@@ -48,7 +48,7 @@ def mock_server_dependencies_for_indexing():
             "plesk_unified.server.get_table"
         ) as mock_get_table,  # Needed by refresh_knowledge
         patch(
-            "plesk_unified.server._build_tq_index_from_table", new_callable=AsyncMock
+            "plesk_unified.server._build_tq_index_from_table", new_callable=MagicMock
         ),  # Needed by refresh_knowledge
     ):
         # Configure mock_refresh_knowledge to simulate completion quickly by default

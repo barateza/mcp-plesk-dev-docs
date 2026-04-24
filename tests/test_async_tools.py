@@ -1,7 +1,7 @@
 import pytest
 import inspect
 import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from plesk_unified import server
 import concurrent.futures  # Needed for MockConcurrentFuture
 
@@ -28,19 +28,19 @@ def mock_all_ml_and_io_calls():
     with (
         # Patch server._executor with our specially configured mock
         patch("plesk_unified.server._executor", new=mock_server_executor),
-        # Mock embedding model
+        # Mock embedding model (sync getter)
         patch(
-            "plesk_unified.server.get_embedding_model", new_callable=AsyncMock
+            "plesk_unified.server.get_embedding_model", new_callable=MagicMock
         ) as mock_embed_model,
         # Mock LanceDB
         patch("plesk_unified.server.get_table") as mock_get_table,
-        # Mock reranker
+        # Mock reranker (sync getter)
         patch(
-            "plesk_unified.server.get_reranker", new_callable=AsyncMock
+            "plesk_unified.server.get_reranker", new_callable=MagicMock
         ) as mock_reranker,
-        # Mock TurboQuant
+        # Mock TurboQuant (sync getter)
         patch(
-            "plesk_unified.server.get_tq_index", new_callable=AsyncMock
+            "plesk_unified.server.get_tq_index", new_callable=MagicMock
         ) as mock_tq_index,
         # Mock external I/O utilities
         patch("plesk_unified.server.io_utils.ensure_source_exists", return_value=True),

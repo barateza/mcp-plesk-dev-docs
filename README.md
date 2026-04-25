@@ -203,18 +203,17 @@ uv pip install -e .
 ### Warm up & Index
 
 ```bash
-uv run plesk-unified-mcp --help # Download models
-uv run python -m plesk_unified.server refresh_knowledge # Initial index
+uv run python -m plesk_unified.server.main refresh_knowledge # Initial index
 ```
 
 ### Running
 
 ```bash
 # Standard mode
-uv run plesk-unified-mcp
+uv run python -m plesk_unified.server.main
 
 # Responsive daemon mode (background warmup)
-PLESK_DAEMON_AUTO_WARMUP=true uv run plesk-unified-mcp
+PLESK_DAEMON_AUTO_WARMUP=true uv run python -m plesk_unified.server.main
 ```
 
 ---
@@ -239,7 +238,7 @@ LOG_HANDLER=os                     # os | file | both
 | Platform | Handler | View Command |
 |----------|---------|--------------|
 | **macOS** | Apple Unified Logging | `log stream --predicate 'eventMessage CONTAINS "plesk_unified"'` |
-| **Linux** | systemd journal | `journalctl -t plesk-unified-mcp --follow` |
+| **Linux** | systemd journal | `journalctl -t plesk-unified --follow` |
 | **Windows** | Windows Event Log | Event Viewer → Application → Source: PleskUnifiedMCP |
 
 ---

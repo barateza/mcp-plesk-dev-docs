@@ -979,66 +979,102 @@ def build_and_chunk_docs(
     return records
 
 
-def _process_single_file(
-    f, source, toc_map, table, existing_files, ai_client
+from plesk_unified.summary_cache import SummaryCache
+
+
+async def _get_summary(
+    f: Path,
+    text: str,
+    ai_client: Optional[AIClient],
+    semaphore: asyncio.Semaphore,
+    cache: Optional[SummaryCache],
+) -> Optional[str]:
+    """Retrieves summary from cache or AI API."""
+    if not settings.plesk_index_summaries or not text:
+        return None
+
+    summary = cache.get(f) if cache else None
+    if summary:
+        logger.info("Using cached summary for %s", f.name)
+        return summary
+
+    if ai_client:
+        async with semaphore:
+            summary = await ai_client.generate_description_async(text)
+            if summary == "Description unavailable.":
+                logger.warning("Summary unavailable for %s", f.name)
+                return None
+            if cache:
+                cache.set(f, summary)
+            return summary
+    return None
+
+
+async def _process_single_file(
+    f,
+    source,
+    toc_map,
+    table,
+    existing_files,
+    ai_client,
+    semaphore,
+    cache: Optional[SummaryCache] = None,
 ) -> list[dict] | list[str]:
-    """Process a single file and return records or list of existing hashes."""
-    # Selective reindexing logic.
+    """Process a single file asynchronously and return records or existing hashes."""
     if f.name in existing_files:
-        rows = (
-            table.search()
-            .where(f"filename = '{f.name}' AND category = '{source['cat']}'")
-            .select(["chunk_hash"])
-            .limit(1000)
-            .to_list()
-        )
-        return [row["chunk_hash"] for row in rows]
+
+        def _fetch_hashes():
+            rows = (
+                table.search()
+                .where(f"filename = '{f.name}' AND category = '{source['cat']}'")
+                .select(["chunk_hash"])
+                .limit(1000)
+                .to_list()
+            )
+            return [row["chunk_hash"] for row in rows]
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(_executor, _fetch_hashes)
 
     meta = toc_map.get(f.name) if toc_map else None
-    if source["type"] == "html":
-        title, breadcrumb, text, endpoint = html_utils.parse_html_file(f, meta)
-    else:
-        title, breadcrumb, text, endpoint = parse_code(f)
 
-    summary = None
-    if ai_client and text:
-        summary = ai_client.generate_description(text)
-        if summary == "Description unavailable.":
-            summary = None
+    def _parse():
+        if source["type"] == "html":
+            return html_utils.parse_html_file(f, meta)
+        return parse_code(f)
 
-    return build_and_chunk_docs(
-        source, f, title, breadcrumb, text, endpoint=endpoint, summary=summary
-    )
+    loop = asyncio.get_running_loop()
+    title, breadcrumb, text, endpoint = await loop.run_in_executor(_executor, _parse)
+
+    summary = await _get_summary(f, text, ai_client, semaphore, cache)
+
+    def _chunk():
+        return build_and_chunk_docs(
+            source, f, title, breadcrumb, text, endpoint=endpoint, summary=summary
+        )
+
+    return await loop.run_in_executor(_executor, _chunk)
 
 
-def process_source_files(source, table, existing_files, existing_hashes) -> set[str]:
-    """Processes source files using chunk-level fingerprinting to skip re-embedding."""
-    toc_map = get_toc_map_for_source(source)
-    files = io_utils.collect_files_for_source(source)
-    logger.info("Found %d files for source %s", len(files), source["cat"])
+async def _persist_docs(table, docs):
+    """IO-bound task to persist a batch of documents."""
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(_executor, lambda: chunking.persist_batch(table, docs))
 
+
+async def _handle_indexing_results(results, existing_hashes, table, source_cat):
+    """Processes results from parallel file processing and persists batches."""
     pending_docs = []
     active_hashes = set()
     BATCH_SIZE_CHUNKS = 1000
 
-    # REQ-3: summary generation if enabled
-    ai_client = AIClient() if settings.plesk_index_summaries else None
-
-    for f in files:
-        if f.name.startswith("_") or f.name == "toc.json":
-            continue
-
-        result = _process_single_file(
-            f, source, toc_map, table, existing_files, ai_client
-        )
+    for result in results:
         if not result:
             continue
 
         if isinstance(result[0], str):
-            # We got back a list of hashes (existing file)
             active_hashes.update(result)
         else:
-            # We got back document records
             for r in result:
                 h = r["chunk_hash"]
                 active_hashes.add(h)
@@ -1046,49 +1082,107 @@ def process_source_files(source, table, existing_files, existing_hashes) -> set[
                     pending_docs.append(r)
 
         if len(pending_docs) >= BATCH_SIZE_CHUNKS:
-            logger.info(
-                "Embedding/Saving batch of %d new chunks for %s...",
-                len(pending_docs),
-                source["cat"],
-            )
-            chunking.persist_batch(table, pending_docs)
+            logger.info("Embedding/Saving batch of %d chunks...", len(pending_docs))
+            await _persist_docs(table, list(pending_docs))
             pending_docs = []
 
     if pending_docs:
-        logger.info(
-            "Embedding/Saving final batch of %d new chunks for %s...",
-            len(pending_docs),
-            source["cat"],
-        )
-        chunking.persist_batch(table, pending_docs)
+        logger.info("Embedding/Saving final batch of %d chunks...", len(pending_docs))
+        await _persist_docs(table, list(pending_docs))
 
     return active_hashes
 
 
-def _sync_single_source(
+async def process_source_files(
+    source, table, existing_files, existing_hashes
+) -> set[str]:
+    """Processes source files in parallel using chunk-level fingerprinting."""
+    toc_map = get_toc_map_for_source(source)
+    files = io_utils.collect_files_for_source(source)
+    logger.info("Found %d files for source %s", len(files), source["cat"])
+
+    semaphore = asyncio.Semaphore(10)
+    ai_client = (
+        AIClient(api_key=settings.openrouter_api_key)
+        if settings.plesk_index_summaries
+        else None
+    )
+    cache = SummaryCache() if settings.plesk_index_summaries else None
+
+    tasks = []
+    for f in files:
+        if f.name.startswith("_") or f.name == "toc.json":
+            continue
+        tasks.append(
+            _process_single_file(
+                f, source, toc_map, table, existing_files, ai_client, semaphore, cache
+            )
+        )
+
+    results = await asyncio.gather(*tasks)
+    if ai_client:
+        await ai_client.close()
+    if cache:
+        cache.save()
+
+    return await _handle_indexing_results(
+        results, existing_hashes, table, source["cat"]
+    )
+
+
+async def _get_existing_hashes(table, source_cat):
+    """Fetches existing chunk hashes for a category."""
+
+    def _get_hashes():
+        rows = (
+            table.search()
+            .where(f"category = '{source_cat}'")
+            .select(["chunk_hash"])
+            .limit(100000)
+            .to_list()
+        )
+        return {r["chunk_hash"] for r in rows if r.get("chunk_hash")}
+
+    return await asyncio.get_running_loop().run_in_executor(_executor, _get_hashes)
+
+
+async def _delete_stale_chunks(table, source_cat, stale_hashes):
+    """Deletes hashes no longer present in source."""
+
+    def _delete():
+        for i in range(0, len(stale_hashes), 500):
+            batch = stale_hashes[i : i + 500]
+            hash_list_str = ", ".join([f"'{h}'" for h in batch])
+            table.delete(
+                f"category = '{source_cat}' AND chunk_hash IN ({hash_list_str})"
+            )
+
+    logger.info("Deleting %d stale chunks for %s...", len(stale_hashes), source_cat)
+    await asyncio.get_running_loop().run_in_executor(_executor, _delete)
+
+
+async def _sync_single_source(
     source: Dict[str, Any],
     table: Any,
     reset_db: bool,
     source_entries: Dict[str, Any],
 ) -> str:
-    """Sync a single category source with the database."""
+    """Sync a single category source with the database (Asynchronous)."""
     logger.info("Processing source: %s", source["cat"])
     if not io_utils.ensure_source_exists(source):
-        msg = f"SKIPPED {source['cat']} (Source check failed)"
-        logger.error(msg)
-        return msg
+        logger.error("SKIPPED %s (Source check failed)", source["cat"])
+        return f"SKIPPED {source['cat']} (Source check failed)"
 
-    fingerprint, file_count = io_utils.compute_source_fingerprint(source)
+    loop = asyncio.get_running_loop()
+    fingerprint, file_count = await loop.run_in_executor(
+        _executor, lambda: io_utils.compute_source_fingerprint(source)
+    )
     prev_meta = source_entries.get(source["cat"], {})
 
-    # Force re-index if reset_db is true, source files changed,
-    # chunking.CHUNK_VERSION bumped, or table is empty
     table_is_empty = False
     try:
-        if table.count_rows() == 0:
-            table_is_empty = True
+        table_is_empty = await loop.run_in_executor(_executor, table.count_rows) == 0
     except Exception:
-        # If count_rows fails, assume we need a sync
         table_is_empty = True
 
     source_changed = (
@@ -1099,48 +1193,27 @@ def _sync_single_source(
     )
 
     if not source_changed:
-        msg = f"SKIPPED {source['cat']} (No source changes detected)"
-        logger.info(msg)
-        return msg
+        logger.info("SKIPPED %s (No source changes detected)", source["cat"])
+        return f"SKIPPED {source['cat']} (No source changes detected)"
 
     try:
-        existing_hashes = set()
-        # Fetch existing chunk hashes for this category to skip re-embedding.
-        rows = (
-            table.search()
-            .where(f"category = '{source['cat']}'")
-            .select(["chunk_hash"])
-            .limit(100000)
-            .to_list()
-        )
-        existing_hashes = {r["chunk_hash"] for r in rows if r.get("chunk_hash")}
-
+        existing_hashes = await _get_existing_hashes(table, source["cat"])
         existing_files = set()
-        # Selective reindexing: only skip files if both content AND chunk version match
         if not reset_db and prev_meta.get("chunk_version") == chunking.CHUNK_VERSION:
-            existing_files = _existing_filenames_for_category(table, source["cat"])
 
-        # Returns the set of all chunk hashes that should exist for this source
-        active_hashes = process_source_files(
+            def _get_files():
+                return _existing_filenames_for_category(table, source["cat"])
+
+            existing_files = await loop.run_in_executor(_executor, _get_files)
+
+        active_hashes = await process_source_files(
             source, table, existing_files, existing_hashes
         )
 
         if not reset_db:
-            # Delete stale chunks (hashes that were in DB but are no longer in source)
-            stale_hashes = list(existing_hashes - active_hashes)
-            if stale_hashes:
-                logger.info(
-                    "Deleting %d stale chunks for %s...",
-                    len(stale_hashes),
-                    source["cat"],
-                )
-                for i in range(0, len(stale_hashes), 500):
-                    batch = stale_hashes[i : i + 500]
-                    hash_list_str = ", ".join([f"'{h}'" for h in batch])
-                    table.delete(
-                        f"category = '{source['cat']}' "
-                        f"AND chunk_hash IN ({hash_list_str})"
-                    )
+            stale = list(existing_hashes - active_hashes)
+            if stale:
+                await _delete_stale_chunks(table, source["cat"], stale)
 
         source_entries[source["cat"]] = {
             "fingerprint": fingerprint,
@@ -1232,14 +1305,11 @@ async def _sync_all_sources(
     """
     Parallelize indexing across sources to saturate GPU/CPU.
     """
-    loop = asyncio.get_running_loop()
     tasks = []
     for source in SOURCES:
         if target_category == "all" or source["cat"] == target_category:
             tasks.append(
-                loop.run_in_executor(
-                    _executor,
-                    _sync_single_source,
+                _sync_single_source(
                     source,
                     table,
                     reset_db,

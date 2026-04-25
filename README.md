@@ -12,9 +12,9 @@
 
 ## Why this exists
 
-Plesk documentation is spread across five separate sources: an admin guide, a REST API reference, a CLI reference, a PHP SDK, and a JS SDK. Answering a single support question often means searching all of them manually, cross-referencing results, and still missing the relevant section.
+Plesk documentation is spread across five separate sources: an admin guide, a REST API reference, a CLI reference, a PHP SDK, and a JS SDK. Answering a single extension development question often means searching all of them manually, cross-referencing results, and still missing the relevant section.
 
-This server ingests all five sources, embeds them with a multilingual model, and exposes a single `search_plesk_unified` MCP tool. You ask a question in plain English; it returns the most relevant documentation chunks, reranked by a cross-encoder. Built for use in daily Plesk support work, where resolution time matters.
+This server ingests all five sources, embeds them with a multilingual model, and exposes a single `search_plesk_unified` MCP tool. You ask a question in plain English; it returns the most relevant documentation chunks, reranked by a cross-encoder. Built for use in daily Plesk extension development, where resolution time matters.
 
 ---
 
@@ -22,16 +22,18 @@ This server ingests all five sources, embeds them with a multilingual model, and
 
 Query sent to the MCP tool:
 
-```
+```python
 search_plesk_unified("How do I define default configuration settings for my extension?")
 ```
 
 Results returned:
 
-```text
+````markdown
 ### AI-Synthesized Answer
 
-To define default configuration settings for a Plesk extension, you should implement a hook class at `plib/hooks/ConfigDefaults.php` that extends `pm_Hook_ConfigDefaults`. In this class, you must implement the `getDefaults()` method which returns an associative array of your settings. For example:
+To define default configuration settings for a Plesk extension, you should implement a hook class within the scope of your extension. The class should be located at `plib/hooks/ConfigDefaults.php` and extend `pm_Hook_ConfigDefaults`. In this class, you must implement the `getDefaults()` method which returns an associative array of your default settings.
+
+For example:
 
 ```php
 class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
@@ -48,13 +50,21 @@ class Modules_CustomConfig_ConfigDefaults extends pm_Hook_ConfigDefaults
 
 ---
 
-### [GUIDE] Custom Settings
-**File:** `77178.htm` | **Path:** Plesk Features Available for Extensions > Retrieve Data from Plesk > Custom Settings | **Score:** 0.9341
-**Documentation:** https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm
+### [PHP-STUBS] pm_Hook_ConfigDefaults
+**File:** `ConfigDefaults.php` | **Path:** pm_Hook_ConfigDefaults | **Score:** 0.9692
 
-## Custom Settings
-Plesk SDK API provides the ability to customize the behavior of extensions editing the `panel.ini` configuration file...
+```php
+abstract class pm_Hook_ConfigDefaults
+{
+    /**
+     * Get default settings for extension.
+     *
+     * @return array
+     */
+    abstract public function getDefaults();
+}
 ```
+````
 
 ---
 
@@ -70,7 +80,7 @@ flowchart TD
         direction TB
         Main["Bootstrap · server/main.py"]
         Life["Lifecycle Hooks · server/lifecycle.py"]
-        Tools["MCP Tools · server.py"]
+        Tools["MCP Tools · server/mcp_app.py"]
 
         Main --> Life --> Tools
     end

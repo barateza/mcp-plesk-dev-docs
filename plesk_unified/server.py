@@ -4,74 +4,16 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 # ruff: noqa: E402
-import os
 import pickle
-import sys
 import threading
 import time
-import inspect
 from datetime import datetime, timezone
-from enum import Enum
 from pathlib import Path
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
-from plesk_unified.log_handler import create_os_handlers
-from plesk_unified.settings import settings
-
-# --- LOGGING SETUP ---
-# Must be done before importing heavy libraries.
-# This ensures we capture their initialization warnings if needed.
-BASE_DIR = Path(__file__).parent.parent
-LOG_DIR = BASE_DIR / "storage" / "logs"
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-LOG_FILE = settings.effective_log_file
-LOG_LEVEL_NAME = settings.log_level.upper()
-LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.INFO)
-
 # Create logger
 logger = logging.getLogger("plesk_unified")
-logger.setLevel(LOG_LEVEL)
-
-# Formatter
-formatter = logging.Formatter(
-    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-)
-
-# 1. OS-native / file handler(s) — chosen by LOG_HANDLER env var
-# Possible values: "os" (default), "file", "both"
-os_handlers = create_os_handlers(LOG_LEVEL, formatter, LOG_FILE)
-
-# 2. Stream Handler (stderr) - CRITICAL for MCP protocol
-stream_handler = logging.StreamHandler(sys.stderr)
-stream_handler.setFormatter(formatter)
-stream_handler.setLevel(LOG_LEVEL)
-
-# Avoid adding duplicate handlers if reloaded
-if not logger.handlers:
-    for _h in os_handlers:
-        logger.addHandler(_h)
-    logger.addHandler(stream_handler)
-
-# Silence noisy third-party libraries unless they error
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("git").setLevel(logging.WARNING)
-
-_log_handler_mode = settings.log_handler
-logger.info(
-    "Logging initialized. Level: %s, Handler mode: %s, File: %s",
-    LOG_LEVEL_NAME,
-    _log_handler_mode,
-    LOG_FILE,
-)
-
-STARTUP_AT = time.perf_counter()
-
-
-# --- SILENCE THE NOISE ---
-os.environ["TQDM_DISABLE"] = "1" if settings.tqdm_disable else "0"
-os.environ["TRANSFORMERS_VERBOSITY"] = settings.transformers_verbosity
 
 from typing import Annotated, Any, Dict, Optional, Tuple, cast
 
@@ -80,6 +22,15 @@ import numpy as np
 from fastmcp import Context, FastMCP
 from mcp.types import SamplingMessage
 from pydantic import Field
+
+from plesk_unified.settings import settings
+from plesk_unified import chunking, html_utils, io_utils, platform_utils
+from plesk_unified.ai_client import AIClient
+from plesk_unified.error_handling import tool_error_boundary
+from plesk_unified.indexing import JobRegistry
+from plesk_unified.model_config import get_active_profile, list_profiles
+from plesk_unified.tq_index import TurboQuantIndex
+from plesk_unified.types import CategoryEnum, CategoryOrAll
 
 
 async def _report_progress(
@@ -93,6 +44,8 @@ async def _report_progress(
         return
 
     try:
+        import inspect
+
         # Check if the method is an async coroutine or a sync function
         if inspect.iscoroutinefunction(ctx.report_progress):
             await ctx.report_progress(current, total)
@@ -103,66 +56,6 @@ async def _report_progress(
         logger.debug("Failed to report progress: %s", e)
 
 
-try:
-    from plesk_unified import chunking, html_utils, io_utils, platform_utils
-    from plesk_unified.ai_client import AIClient
-    from plesk_unified.error_handling import tool_error_boundary
-    from plesk_unified.indexing import JobRegistry
-    from plesk_unified.model_config import get_active_profile, list_profiles
-    from plesk_unified.tq_index import TurboQuantIndex
-    from plesk_unified.types import CategoryEnum, CategoryOrAll
-except (ImportError, ModuleNotFoundError) as e:
-    # Only fallback if 'plesk_unified' itself is the missing module.
-    # This prevents swallowing errors when a dependency of plesk_unified is missing.
-    if hasattr(e, "name") and e.name is not None and "plesk_unified" not in e.name:
-        raise
-
-    import chunking
-    import html_utils
-    import io_utils
-    import platform_utils
-    from ai_client import AIClient  # type: ignore
-
-    try:
-        from error_handling import tool_error_boundary  # type: ignore
-    except ImportError:
-        # Fallback if error_handling is missing during dev
-        def tool_error_boundary(fn):
-            return fn
-
-    try:
-        from indexing import JobRegistry  # type: ignore
-    except ImportError:
-
-        class JobRegistry:  # type: ignore
-            def submit_job(self, *args, **kwargs):
-                return "mock-id"
-
-            def get_status(self, *args, **kwargs):
-                return {"status": "mock"}
-
-    try:
-        from model_config import get_active_profile, list_profiles  # type: ignore
-    except Exception:
-        get_active_profile = None  # type: ignore
-        list_profiles = None  # type: ignore
-    from tq_index import TurboQuantIndex  # type: ignore
-
-    try:
-        # Try to import from the local directory if package is not installed
-        from types import CategoryEnum, CategoryOrAll  # type: ignore
-    except ImportError:
-        # This can happen if 'types' refers to the built-in module
-        # In a real scenario, the package structure should be respected
-        class CategoryEnum(str, Enum):  # type: ignore
-            GUIDE = "guide"
-            CLI = "cli"
-            API = "api"
-            PHP_STUBS = "php-stubs"
-            JS_SDK = "js-sdk"
-
-        CategoryOrAll = Any  # type: ignore
-
 # Initialize MCP — fast, no heavy work here
 mcp = FastMCP("mcp-plesk-unified")
 
@@ -170,10 +63,8 @@ mcp = FastMCP("mcp-plesk-unified")
 job_registry = JobRegistry()
 
 # --- Configuration ---
+BASE_DIR = Path(__file__).parent.parent
 KB_DIR = BASE_DIR / "knowledge_base"
-
-KB_DIR.mkdir(exist_ok=True)
-(BASE_DIR / "storage").mkdir(exist_ok=True)
 
 # Note: CHUNK_VERSION has moved to chunking.py to ensure it stays in sync
 # with the hashing logic.
@@ -569,11 +460,6 @@ def get_tq_index() -> TurboQuantIndex:
     return _tq_index
 
 
-def _log_server_ready(message: str) -> None:
-    logger.info(message)
-    logger.info("Server module initialized in %.2fs.", time.perf_counter() - STARTUP_AT)
-
-
 def _load_source_state() -> dict[str, Any]:
     if not SOURCE_STATE_PATH.exists():
         return {"version": 1, "sources": {}}
@@ -756,28 +642,6 @@ def _maybe_start_background_warmup() -> None:
         _warmup_thread.start()
 
     logger.info("Background daemon warmup started.")
-
-
-def _maybe_refresh_changed_sources() -> None:
-    """At startup, refresh only categories whose source fingerprint changed."""
-    if not settings.plesk_auto_refresh_on_startup:
-        logger.info("Startup source refresh disabled by env var.")
-        return
-
-    try:
-        logger.info("Running startup source change detection.")
-        try:
-            asyncio.get_running_loop()
-            asyncio.create_task(
-                refresh_knowledge(None, target_category="all", reset_db=False)
-            )
-        except RuntimeError:
-            report = asyncio.run(
-                refresh_knowledge(None, target_category="all", reset_db=False)
-            )
-            logger.info("Startup source refresh report:\n%s", report)
-    except Exception:
-        logger.exception("Startup source refresh failed.")
 
 
 def _table_health() -> tuple[bool, str | None]:
@@ -1933,26 +1797,3 @@ def _handle_toc_resource(category: str) -> str:
             lines.append(f"- {breadcrumb}")
 
     return "\n".join(lines)
-
-
-if __name__ == "__main__":
-    _log_server_ready("Starting Plesk Unified MCP Server...")
-    _maybe_refresh_changed_sources()
-    _maybe_start_background_warmup()
-    try:
-        mcp.run()
-    except Exception:
-        logger.critical("Server crashed", exc_info=True)
-        raise
-
-
-def main() -> None:
-    """Console entrypoint for the MCP server (used by package scripts/devtools)."""
-    _log_server_ready("Starting Plesk Unified MCP Server (entrypoint)...")
-    _maybe_refresh_changed_sources()
-    _maybe_start_background_warmup()
-    try:
-        mcp.run()
-    except Exception:
-        logger.critical("Server crashed (entrypoint)", exc_info=True)
-        raise

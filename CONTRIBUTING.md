@@ -110,6 +110,46 @@ harassment-free environment for everyone.
 
 3. **Respond to review comments** promptly and professionally.
 
+## Benchmarking and Quality Gates
+
+Before submitting changes that affect retrieval logic, chunking, or embedding, you MUST run the retrieval quality benchmark to ensure no regressions.
+
+### Running benchmarks
+
+```bash
+# Standard benchmark on the 'medium' profile
+uv run python scripts/benchmark_profiles.py --profile medium
+
+# Run with RAGAS evaluation (requires OPENROUTER_API_KEY)
+uv run python scripts/benchmark_profiles.py --profile medium --ragas
+
+# Verify that changes meet the quality gates
+uv run python scripts/benchmark_profiles.py --profile medium --fail-on-gate
+```
+
+If your changes improve metrics, you should capture a new baseline:
+
+```bash
+uv run python scripts/benchmark_profiles.py --profile medium --capture-baseline --baseline-file benchmarks/baselines/control-medium.json
+```
+
+### Retrieval integrity
+
+- **FTS Validation:** Hybrid search is a core feature. After any indexing operation, verify that the Full-Text Search (FTS) index has been rebuilt and is returning keyword-exact results.
+- **Verification over Inference:** Never assume a logic change improved metrics. Always rerun the `control` suite and inspect the database directly to confirm metadata injection.
+
+## Project Architecture
+
+The project has moved to a modular structure under `plesk_unified/server/`:
+
+- `bootstrap.py`: Environment configuration and logging setup.
+- `lifecycle.py`: Startup/shutdown hooks and background task management.
+- `main.py`: Entry point for the MCP server.
+
+When adding new tools, prompts, or resources:
+- Tool definitions should still reside in `plesk_unified/server.py` for now, but complex logic should be moved to `application/services/`.
+- Ensure new prompts are documented in `docs/mcp-components.md`.
+
 ## Pull request checklist
 
 Before submitting a PR, ensure:
@@ -118,6 +158,7 @@ Before submitting a PR, ensure:
 - [ ] Changes include proper documentation.
 - [ ] You add no unnecessary dependencies.
 - [ ] You regenerate the vector database if content parsing changed.
+- [ ] **Benchmarks pass quality gates** (`--fail-on-gate`).
 - [ ] You resolve merge conflicts with the main branch.
 - [ ] Commit messages are clear and conventional.
 

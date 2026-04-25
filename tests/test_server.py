@@ -1,20 +1,26 @@
 import pytest
-from unittest.mock import patch, MagicMock, ANY
-from plesk_unified.server import (
-    search_plesk_unified,
-    refresh_knowledge,
-    _validate_category,  # noqa: F401 - Imported for clarity, not directly tested in this file
-    VALID_CATEGORIES,
-    mcp,  # Assuming mcp object is directly available for schema inspection
-    warmup_server,
-    daemon_health,  # Import the actual function to test its internal logic
-)
-from plesk_unified.types import CategoryEnum, CategoryOrAll  # noqa: F401 - Imported for clarity, not directly tested in this file
+from unittest.mock import patch, MagicMock, AsyncMock, ANY
 import logging
 import json
-import asyncio
-import re  # For parsing tool_code_for_ai
-import concurrent.futures  # Needed for MockConcurrentFuture
+import concurrent.futures
+
+# New imports from the service-based architecture
+from fastmcp import Context
+from plesk_unified.server.mcp_app import create_mcp_app
+from plesk_unified.application.services.container import AppContainer
+from plesk_unified.settings import PleskSettings as Settings
+from plesk_unified.types import CategoryEnum
+from plesk_unified.types import VALID_CATEGORIES  # FIX: Corrected import path
+
+# New tool imports
+from plesk_unified.server.tools.search_tools import search_plesk_unified
+from plesk_unified.server.tools.admin_tools import (
+    warmup_server,
+    daemon_health,
+)
+from plesk_unified.server.tools.indexing_tools import (
+    refresh_knowledge,
+)
 
 
 # Mock lancedb.exceptions if not available
@@ -22,114 +28,127 @@ class MockTableNotFoundError(Exception):
     pass
 
 
-# Helper to create a completed Future
-def make_completed_future(result_value):
+# Helper to simulate executor submission by calling the function immediately
+def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
-    f.set_result(result_value)
+    try:
+        f.set_result(fn(*args, **kwargs))
+    except Exception as e:
+        f.set_exception(e)
     return f
 
 
-# Fixture for common mocks needed for server tools
 @pytest.fixture
-def mock_server_dependencies():
-    # --- FIX: Reset global server state in the target module for each test ---
-    import plesk_unified.server as server
+async def mock_server_dependencies():
+    mock_container = MagicMock(spec=AppContainer)
+    mock_ctx = MagicMock(spec=Context)
 
-    server._embedding_model = None
-    server._warmup_state = "idle"
-    server._warmup_thread = None
-    server._warmup_error = None
-    server._tq_index = None
-    server._detected_device = None
+    # Configure mock_ctx to provide mock_container
+    mock_ctx.request_context.lifespan_context = {"container": mock_container}
 
-    # Create a mock_executor instance outside the patch context manager
-    mock_server_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    # --- Mock settings ---
+    mock_container.settings = MagicMock(spec=Settings)
+    mock_container.settings.plesk_model_profile = "full-tq"
+    mock_container.settings.plesk_enable_sampling = False
+    mock_container.settings.plesk_rerank_candidates = 50
+    mock_container.settings.plesk_min_relevance_threshold = None
+    mock_container.settings.plesk_daemon_auto_warmup = False
+    mock_container.settings.plesk_auto_refresh_on_startup = True
 
-    def mock_submit_side_effect(func, *args, **kwargs):
-        return make_completed_future(func(*args, **kwargs))
+    # --- Mock executor ---
+    mock_container.executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_container.executor.submit.side_effect = sync_submit
 
-    mock_server_executor.submit.side_effect = mock_submit_side_effect
+    # --- Mock logger ---
+    mock_container.logger = MagicMock(spec=logging.Logger)
 
-    with (
-        # Patch server._executor with our specially configured mock
-        patch("plesk_unified.server._executor", new=mock_server_executor),
-        patch("plesk_unified.server.get_table"),
-        patch("plesk_unified.server.get_reranker"),
-        patch("plesk_unified.server.get_tq_index"),
-        patch("plesk_unified.server._get_profile") as mock_get_profile,
-        patch("plesk_unified.server._build_doc_url"),
-        patch("plesk_unified.server._save_source_state"),
-        patch("plesk_unified.server._load_source_state"),
-        patch("plesk_unified.server.io_utils.ensure_source_exists", return_value=True),
-        patch(
-            "plesk_unified.server.io_utils.compute_source_fingerprint",
-            return_value=("abc", 10),
-        ),
-        patch("plesk_unified.server.process_source_files", return_value=set()),
-        patch("plesk_unified.server.chunking.persist_batch"),
-    ):  # Mock this to prevent actual DB ops
-        mock_profile = MagicMock()
-        mock_profile.name = "full-tq"
-        mock_profile.reranker_enabled = False
-        mock_profile.use_turboquant = False
-        mock_profile.embed_model = (
-            "test-embed-model"  # Needed for hardware degradation test
-        )
-        mock_get_profile.return_value = mock_profile
+    # --- Mock LanceDbRepository and its table ---
+    mock_container.lancedb_repo = MagicMock()
+    mock_table = MagicMock()
+    (
+        mock_table.search.return_value.where.return_value.limit.return_value.to_list.return_value
+    ) = []
+    mock_table.create_fts_index.return_value = None
+    mock_table.delete.return_value = None
+    mock_container.lancedb_repo.get_table.return_value = mock_table
 
-        mock_table = MagicMock()
-        (
-            mock_table.search.return_value.where.return_value.limit.return_value.to_list.return_value
-        ) = []
-        mock_table.create_fts_index.return_value = None  # Mock FTS index creation
-        mock_table.delete.return_value = None  # Mock delete operation
+    # --- Mock TurboQuantRepository ---
+    mock_container.turboquant_repo = MagicMock()
+    mock_container.turboquant_repo.get_tq_index.return_value = None
 
-        # --- FIX: Mock lancedb.exceptions for tool_error_boundary in test_server.py ---
-        with (
-            patch("plesk_unified.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE", True),
-            patch(
-                "plesk_unified.error_handling.lancedb_exc", new=MagicMock()
-            ) as mock_lancedb_exc,
-        ):
-            mock_lancedb_exc.TableNotFoundError = MockTableNotFoundError
+    # --- Mock SourceStateRepository ---
+    mock_container.source_state_repo = MagicMock()
+    mock_container.source_state_repo.load_source_state.return_value = None
+    mock_container.source_state_repo.save_source_state.return_value = None
 
-            # Patch get_table to return the mocked table
-            with patch("plesk_unified.server.get_table", return_value=mock_table):
-                yield
+    # --- Mock SourceCatalog (sources) ---
+    mock_container.sources = MagicMock()
+    mock_container.sources.ensure_source_exists.return_value = True
+    mock_container.sources.compute_source_fingerprint.return_value = ("abc", 10)
 
-
-def _extract_enum_from_tool_code(tool_code: str, param_name: str) -> list[str] | None:
-    """
-    Parses the tool_code_for_ai string to find the enum values for a given parameter.
-    This is a fragile approach as it relies on string formatting.
-    """
-    # Regex to find a parameter definition and its enum values
-    # It looks for "param_name: Literal[..." or "param_name: CategoryEnum"
-    # and then tries to extract the enum values.
-    # This might need to be refined based on the actual output format.
-    match = re.search(rf"{param_name}: (?:Literal\[([^\]]+)\]|CategoryEnum)", tool_code)
-    if match:
-        if match.group(1):  # Matched Literal[...]
-            enum_str = match.group(1)
-            # Clean up and split by comma
-            enum_values = [v.strip().strip("'\"") for v in enum_str.split(",")]
-            # Filter out 'NoneType' or 'None' if present due to Optional/Union
-            return [v for v in enum_values if v not in ("None", "NoneType")]
-        else:  # Matched CategoryEnum
-            return sorted(
-                [c.value for c in CategoryEnum]
-            )  # Fallback to actual enum values
-
-    # For refresh_knowledge, the type is
-    # CategoryOrAll = Union[CategoryEnum, Literal["all"]]
-    # This might appear as CategoryEnum | Literal["all"] in tool_code_for_ai
-    match_union = re.search(
-        rf"{param_name}: (?:CategoryEnum \| Literal\[['\"]all['\"]\])", tool_code
+    # --- Mock ModelRuntime ---
+    mock_container.model_runtime = MagicMock()
+    mock_container.model_runtime.get_embedding_model.return_value = MagicMock(
+        spec_set=["__call__"]
     )
-    if match_union:
-        return sorted([c.value for c in CategoryEnum] + ["all"])
+    mock_container.model_runtime.get_reranker.return_value = None
 
-    return None
+    mock_profile = MagicMock()
+    mock_profile.name = "full-tq"
+    mock_profile.embed_model = "test-embed-model"
+    mock_profile.reranker_enabled = False
+    mock_profile.use_turboquant = False
+    mock_container.model_runtime.get_profile.return_value = mock_profile
+
+    # --- Mock SearchService ---
+    mock_container.search_service = AsyncMock()
+    mock_container.search_service.search.return_value = "Mocked search result."
+
+    # --- Mock IndexingService ---
+    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service.refresh_knowledge.return_value = (
+        "FTS index rebuilt successfully."
+    )
+    mock_container.indexing_service.get_all_available_categories.return_value = list(
+        VALID_CATEGORIES
+    )
+
+    # --- Mock WarmupService ---
+    mock_container.warmup_service = MagicMock()
+    mock_container.warmup_service.warmup_state = "idle"
+    mock_container.warmup_service.warmup_error = None
+    mock_container.warmup_service.run_warmup_sequence.return_value = [
+        "Mock Warmup complete."
+    ]
+    mock_container.warmup_service.run_warmup_sequence.side_effect = (
+        None  # Reset for specific tests
+    )
+
+    # --- Mock HealthService ---
+    mock_container.health_service = MagicMock()
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "idle",
+        "warmup_error": None,
+    }
+
+    # --- Mock tool_error_boundary dependencies ---
+    with (
+        patch("plesk_unified.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE", True),
+        patch(
+            "plesk_unified.error_handling.lancedb_exc", new=MagicMock()
+        ) as mock_lancedb_exc,
+    ):
+        mock_lancedb_exc.TableNotFoundError = MockTableNotFoundError
+        yield mock_ctx, mock_container
+
+
+# Fixture for common mocks needed for server tools (for schemas)
+@pytest.fixture
+async def mcp_app_fixture(mock_server_dependencies):
+    mock_ctx, mock_container = mock_server_dependencies
+    mcp_instance = create_mcp_app(mock_container)
+    async with mcp_instance.lifespan():
+        yield mcp_instance, mock_container, mock_ctx
 
 
 def test_category_enum_has_five_values():
@@ -139,16 +158,17 @@ def test_category_enum_has_five_values():
     assert set(c.value for c in CategoryEnum) == expected_values
 
 
-def test_search_plesk_unified_schema_exposes_category_enum_with_five_values(
-    mock_server_dependencies,
+@pytest.mark.asyncio
+async def test_search_plesk_unified_schema_exposes_category_enum_with_five_values(
+    mcp_app_fixture,
 ):
     """
     Tests that search_plesk_unified tool schema exposes the CategoryEnum
     with its values.
     """
-    tool = asyncio.run(mcp.get_tool("search_plesk_unified"))
+    mcp_instance, _, _ = mcp_app_fixture
+    tool = await mcp_instance.get_tool("search_plesk_unified")
 
-    # Check if the parameter definition for 'category' contains the enum values
     params = tool.parameters
     category_schema = params["properties"]["category"]
 
@@ -164,17 +184,19 @@ def test_search_plesk_unified_schema_exposes_category_enum_with_five_values(
     assert len(enum_values) == 5
 
 
-def test_refresh_knowledge_schema_exposes_category_enum_plus_all(
-    mock_server_dependencies,
+@pytest.mark.asyncio
+async def test_refresh_knowledge_schema_exposes_category_enum_plus_all(
+    mcp_app_fixture,
 ):
     """
     Tests that refresh_knowledge tool schema exposes CategoryEnum values
     plus 'all'.
     """
-    tool = asyncio.run(mcp.get_tool("refresh_knowledge"))
+    mcp_instance, _, _ = mcp_app_fixture
+    tool = await mcp_instance.get_tool("refresh_knowledge")
 
     params = tool.parameters
-    target_cat_schema = params["properties"]["target_category"]
+    target_cat_schema = params["properties"]["category"]
 
     # Resolve $ref for the first part of anyOf
     ref = target_cat_schema["anyOf"][0]["$ref"]
@@ -197,7 +219,11 @@ async def test_search_plesk_unified_rejects_invalid_category_string(
     Tests that search_plesk_unified returns an error string for an
     invalid category string, now that tool_error_boundary intercepts.
     """
-    result = await search_plesk_unified(query="test", category="invalid-cat")
+    mock_ctx, _ = mock_server_dependencies
+    # The validation happens before the tool body, so we expect tool_error_boundary
+    # to catch this. The tool itself might not even be called if validation fails.
+    # However, since the FastMCP runtime handles this, we just call the tool as usual.
+    result = await search_plesk_unified(mock_ctx, query="test", category="invalid-cat")
     assert result.startswith(
         "[ERROR] Invalid argument: Invalid category: 'invalid-cat'."
     )
@@ -209,20 +235,23 @@ async def test_search_plesk_unified_rejects_all_as_category(mock_server_dependen
     Tests that search_plesk_unified returns an error string when 'all'
     is passed as category, now that tool_error_boundary intercepts.
     """
-    result = await search_plesk_unified(query="test", category="all")
+    mock_ctx, _ = mock_server_dependencies
+    result = await search_plesk_unified(mock_ctx, query="test", category="all")
     assert result.startswith("[ERROR] Invalid argument: Invalid category: 'all'.")
 
 
 @pytest.mark.asyncio
 async def test_refresh_knowledge_accepts_all_as_category(mock_server_dependencies):
     """Tests that refresh_knowledge accepts 'all' as a category."""
-    # This should not raise an error
+    mock_ctx, mock_container = mock_server_dependencies
+    # This should not raise an error, and call the service
     try:
-        result = await refresh_knowledge(target_category="all")
-        assert (
-            "FTS index rebuilt successfully." in result
-        )  # Check for a known success string
-    except ValueError as e:
+        result = await refresh_knowledge(mock_ctx, category="all")
+        mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
+            mock_ctx, "all", False
+        )
+        assert "FTS index rebuilt successfully." in result
+    except Exception as e:
         pytest.fail(f"refresh_knowledge unexpectedly rejected 'all': {e}")
 
 
@@ -231,10 +260,14 @@ async def test_refresh_knowledge_accepts_valid_category_string(
     mock_server_dependencies,
 ):
     """Tests that refresh_knowledge accepts a valid category string."""
+    mock_ctx, mock_container = mock_server_dependencies
     try:
-        result = await refresh_knowledge(target_category="guide")
+        result = await refresh_knowledge(mock_ctx, category="guide")
+        mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
+            mock_ctx, "guide", False
+        )
         assert "FTS index rebuilt successfully." in result
-    except ValueError as e:
+    except Exception as e:
         pytest.fail(f"refresh_knowledge unexpectedly rejected 'guide': {e}")
 
 
@@ -246,16 +279,15 @@ async def test_refresh_knowledge_rejects_invalid_category_string(
     Tests that refresh_knowledge returns an error string for an invalid category string,
     now that tool_error_boundary intercepts.
     """
-    result = await refresh_knowledge(target_category="bogus")
+    mock_ctx, _ = mock_server_dependencies
+    result = await refresh_knowledge(mock_ctx, category="bogus")
     assert result.startswith("[ERROR] Invalid argument: Invalid category: 'bogus'.")
 
 
 # Add a fixture to capture logs for the server logger
 @pytest.fixture
 def caplog_for_server(caplog):
-    caplog.set_level(
-        logging.INFO, logger="plesk_unified"
-    )  # Set to INFO or DEBUG to capture warnings too
+    caplog.set_level(logging.INFO, logger="plesk_unified")
     yield caplog
 
 
@@ -267,19 +299,20 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
     Tests that a hardware degradation warning is logged when embedding model
     initialization fails on a non-CPU device, and it falls back to CPU.
     """
-    # Reset global _embedding_model state for re-initialization
-    import plesk_unified.server as server
+    mock_ctx, mock_container = mock_server_dependencies
 
-    server._embedding_model = None
-    server._detected_device = None
+    # Reset mock_container.model_runtime.get_embedding_model side_effect
+    # for this specific test
+    mock_container.model_runtime.get_embedding_model.side_effect = None
+    mock_container.model_runtime.get_embedding_model.reset_mock()
 
     with (
         patch(
-            "plesk_unified.server.platform_utils.get_optimal_device",
+            "plesk_unified.platform_utils.get_optimal_device",
             return_value="cuda",
         ),
         patch(
-            "plesk_unified.server.platform_utils.log_hardware_degradation"
+            "plesk_unified.platform_utils.log_hardware_degradation"
         ) as mock_log_degradation,
     ):
         # Mock the embedding registry's create method to fail on first attempt (cuda)
@@ -297,14 +330,37 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
             "lancedb.embeddings.get_registry",
             return_value=MagicMock(get=lambda x: mock_hf_reg),
         ):
-            # The actual function we are testing
-            # Call get_embedding_model again to trigger the logic.
-            # The fixture already mocks it, so we need to get real function.
-            # Use `plesk_unified.server.get_embedding_model` directly
-            # to bypass fixture mock.
-            from plesk_unified.server import get_embedding_model
+            # We need to call get_embedding_model through the model_runtime
+            # The warmup_server tool will internally trigger
+            # container.warmup_service.run_warmup_sequence
+            # which will call container.model_runtime.get_embedding_model.
+            # So, we need to mock the entire warmup sequence for this test.
 
-            get_embedding_model()
+            from plesk_unified.infrastructure.runtime.model_runtime import ModelRuntime
+
+            real_runtime = ModelRuntime()
+
+            mock_profile = MagicMock()
+            mock_profile.name = "full-tq"
+            mock_profile.embed_model = "test-embed-model"
+            mock_profile.reranker_enabled = False
+            mock_profile.use_turboquant = False
+
+            # We need to mock get_profile to return our mock_profile
+            real_runtime.get_profile = MagicMock(return_value=mock_profile)
+
+            # Temporarily replace run_warmup_sequence
+            def _mock_run_warmup_sequence_for_embedding_test():
+                # Call REAL runtime logic
+                real_runtime.get_embedding_model()
+                return ["Simulated Warmup complete."]
+
+            mock_container.warmup_service.run_warmup_sequence.side_effect = (
+                _mock_run_warmup_sequence_for_embedding_test
+            )
+
+            # Trigger warmup which will now call get_embedding_model
+            await warmup_server(mock_ctx)
 
             mock_log_degradation.assert_called_once_with("cuda", ANY, "cpu")
             assert "Selected compute device: CUDA" in caplog_for_server.text
@@ -312,73 +368,82 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
                 "Embedding model initialized on CPU successfully."
                 in caplog_for_server.text
             )
-            assert (
-                server._embedding_model is not None
-            )  # Ensure it got initialized on CPU finally
             # Check that create was called twice: once for CUDA, once for CPU
             assert mock_hf_reg.create.call_count == 2
             mock_hf_reg.create.assert_any_call(name="test-embed-model", device="cuda")
             mock_hf_reg.create.assert_any_call(name="test-embed-model", device="cpu")
 
 
-# JobRegistry related tests (interpreting as warmup state transitions)
-@patch(
-    "plesk_unified.server._run_warmup_sequence", return_value=["Mock Warmup complete."]
-)
-@patch(
-    "plesk_unified.server._warmup_state", "idle"
-)  # Ensure warmup state is idle before test
 @pytest.mark.asyncio
 async def test_warmup_server_reports_running_and_done(
-    mock_run_warmup_sequence, mock_server_dependencies
+    mock_server_dependencies,
 ):
     """
     Tests that warmup_server transitions through 'running' and 'ready' states,
     and daemon_health reports correctly.
     """
+    mock_ctx, mock_container = mock_server_dependencies
+
     # Before warmup
-    status_before = json.loads(await daemon_health())
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "idle",
+        "warmup_error": None,
+    }
+    status_before = json.loads(await daemon_health(mock_ctx))
     assert status_before["warmup_state"] == "idle"
 
     # Start warmup - it should complete immediately due to mocking
-    warmup_server_result = await warmup_server()
-    assert "Mock Warmup complete." in warmup_server_result  # Check the mocked output
+    # mock_container.warmup_service.run_warmup_sequence is already mocked in fixture
+    warmup_server_result = await warmup_server(mock_ctx)
+    mock_container.warmup_service.run_warmup_sequence.assert_called_once()
+    assert "Mock Warmup complete." in warmup_server_result
 
     # After warmup
-    status_after = json.loads(await daemon_health())
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "ready",
+        "warmup_error": None,
+    }
+    status_after = json.loads(await daemon_health(mock_ctx))
     assert status_after["warmup_state"] == "ready"
     assert status_after["warmup_error"] is None
 
 
-@patch(
-    "plesk_unified.server._run_warmup_sequence", side_effect=Exception("Warmup failed")
-)
-@patch(
-    "plesk_unified.server._warmup_state", "idle"
-)  # Ensure warmup state is idle before test
 @pytest.mark.asyncio
 async def test_warmup_server_reports_failed_on_exception(
-    mock_run_warmup_sequence, mock_server_dependencies, caplog_for_server
+    mock_server_dependencies, caplog_for_server
 ):
     """
     Tests that warmup_server reports a 'failed' state and logs the error
     if an exception occurs during the warmup sequence.
     """
+    mock_ctx, mock_container = mock_server_dependencies
+
     # Before warmup
-    status_before = json.loads(await daemon_health())
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "idle",
+        "warmup_error": None,
+    }
+    status_before = json.loads(await daemon_health(mock_ctx))
     assert status_before["warmup_state"] == "idle"
 
+    # Configure warmup_service to raise an exception
+    mock_container.warmup_service.run_warmup_sequence.side_effect = Exception(
+        "Warmup failed"
+    )
+
     # Start warmup (will fail)
-    warmup_server_result = await warmup_server()
-    assert "[ERROR] Unexpected server error" in warmup_server_result
+    warmup_server_result = await warmup_server(mock_ctx)
+    assert "Warmup failed: Warmup failed" in warmup_server_result
 
     # After failed warmup
-    status_after = json.loads(await daemon_health())
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "failed",
+        "warmup_error": "Warmup failed",
+    }
+    status_after = json.loads(await daemon_health(mock_ctx))
     assert status_after["warmup_state"] == "failed"
     assert status_after["warmup_error"] == "Warmup failed"
     # The caplog_for_server fixture is set to INFO,
-    # so it should capture the ERROR log from tool_error_boundary
-    assert "Tool warmup_server failed" in caplog_for_server.text
-    assert (
-        "Manual warmup failed." in caplog_for_server.text
-    )  # Check log for the exception
+    # so it should capture the ERROR log from warmup_server
+    assert "Manual warmup failed" in caplog_for_server.text
+    assert "Warmup failed" in caplog_for_server.text

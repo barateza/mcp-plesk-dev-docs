@@ -51,12 +51,21 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from plesk_unified.server.mcp_app import AppContainer
+
+# New imports for AppContainer architecture
+import asyncio
+from plesk_unified.settings import PleskSettings
+from plesk_unified.platform_utils import get_optimal_device
+from plesk_unified.types import CategoryEnum
+from unittest.mock import AsyncMock  # For dummy ctx and mocks for TQ index
 
 from plesk_unified.ai_client import AIClient
 from plesk_unified.benchmark_engines import (
@@ -106,10 +115,15 @@ def _rss_mb() -> float:
     return 0.0
 
 
-def _hit_rank(result_texts: list[str], relevant: list[str]) -> int | None:
-    """Return 1-based rank of first hit, or None if no hit in top-k."""
-    for rank, text in enumerate(result_texts, start=1):
-        lower = text.lower()
+def _hit_rank(results: list[dict[str, Any]], relevant: list[str]) -> int | None:
+    """Return 1-based rank of first hit, or None if no hit in top-k.
+    Accepts list of dicts.
+    """
+    for rank, result in enumerate(results, start=1):
+        # Assumed dict which should have 'text' key
+        text_to_check = result.get("text", "")
+
+        lower = text_to_check.lower()
         if any(kw.lower() in lower for kw in relevant):
             return rank
     return None
@@ -159,58 +173,20 @@ def evaluate_ragas_metrics(
     return metrics
 
 
-def _load_server_for_profile(profile_name: str):
-    """Reload the server module after selecting the active profile."""
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    actual_profile_env = "full" if profile_name == "full-tq" else profile_name
-    os.environ["PLESK_MODEL_PROFILE"] = actual_profile_env
+# Refactored to load AppContainer
+def _load_container_for_profile(profile_name: str) -> AppContainer:
+    """Load an AppContainer instance configured for the given profile."""
+    # Ensure settings are reloaded with the new profile environment variable
+    os.environ["PLESK_MODEL_PROFILE"] = profile_name
 
-    import importlib
+    from plesk_unified.server.bootstrap import create_app
 
-    import plesk_unified.legacy_server as srv
+    # Create fresh settings for this profile
+    new_settings = PleskSettings()
 
-    importlib.reload(srv)
-    return srv
-
-
-def _search_candidates(
-    srv: Any,
-    query: str,
-    category: str | None,
-    candidate_limit: int,
-    profile_name: str,
-    tq_index: TurboQuantIndex | None,
-) -> list[dict[str, Any]]:
-    """Return candidate documents using the active retrieval path."""
-    # Use the server's internal hybrid retrieval logic
-    # (which handles FTS, Vector, and RRF).
-    # This ensures benchmarks evaluate the actual production search path.
-    if hasattr(srv, "_get_search_candidates"):
-        return srv._get_search_candidates(query, category, candidate_limit)
-
-    # Fallback for older server versions or different profiles
-    if profile_name == "full-tq" and tq_index is not None:
-        query_vec = np.asarray(
-            srv.get_embedding_model().compute_query_embeddings(query)[0],
-            dtype=np.float32,
-        )
-        tq_results = tq_index.search(
-            query_vec,
-            top_k=candidate_limit,
-            category=category,
-        )
-        results = []
-        for meta, score in tq_results:
-            enriched = dict(meta)
-            enriched["_score_tq"] = score
-            results.append(enriched)
-        return results
-
-    table = srv.get_table()
-    search_op = table.search(query)
-    if category:
-        search_op = search_op.where(f"category = '{category}'")
-    return search_op.limit(candidate_limit).to_list()
+    # Create the app container using the bootstrap logic
+    container = create_app(Path(os.getcwd()), new_settings)
+    return container
 
 
 # ---------------------------------------------------------------------------
@@ -232,55 +208,38 @@ def _get_selected_engine(
     return engine_name, pilot_config, "manual-engine"
 
 
+# Refactored _perform_retrieval
 def _perform_retrieval(
-    srv: Any,
+    container: AppContainer,
     query_str: str,
-    category: str | None,
-    candidate_limit: int,
-    profile_name: str,
-    tq_index: TurboQuantIndex | None,
+    category: CategoryEnum | None,
+    candidate_limit: int,  # This is the initial retrieval limit (top_k)
     final_k: int,
     selected_engine: str,
     selected_pilot_config: StructurePilotConfig | None,
 ) -> list[dict[str, Any]]:
-    """Execute search and reranking steps."""
-    # Use the production search path for baseline engine
-    if selected_engine == "baseline" and hasattr(srv, "_get_search_candidates"):
-        # We use a custom search that returns raw dicts for benchmarking metrics
-        candidates = srv._get_search_candidates(query_str, category, candidate_limit)
-        reranker = srv.get_reranker()
-        if reranker and candidates:
-            candidates = srv._rerank_and_score(query_str, candidates, reranker)
-        else:
-            candidates.sort(key=lambda x: x.get("_relevance", 0.0), reverse=True)
-        return candidates[:final_k]
+    """Execute search and reranking steps using SearchService."""
 
-    # Fallback/Pilot engine path
-    results = _search_candidates(
-        srv,
-        query_str,
-        category,
-        candidate_limit,
-        profile_name,
-        tq_index,
+    # SearchService.search_raw performs hybrid search and applies reranking.
+    # It returns dict objects.
+    initial_results: list[dict[str, Any]] = asyncio.run(
+        container.search_service.search_raw(
+            query=query_str,
+            category=category.value if category else None,
+        )
     )
 
-    reranker = srv.get_reranker()
-    if reranker and results:
-        texts_raw = [r.get("text", "") for r in results]
-        scores = reranker.predict([(query_str, t) for t in texts_raw])
-        ranked = sorted(
-            zip(scores, results, strict=True), key=lambda x: x[0], reverse=True
-        )
-        results = [r for _, r in ranked[:final_k]]
-
-    if selected_engine == "pageindex-pilot" and results:
-        results = rerank_with_structure(
+    # PageIndex pilot is applied AFTER initial search and reranking.
+    if selected_engine == "pageindex-pilot" and initial_results:
+        reranked_dicts = rerank_with_structure(
             query_str,
-            results,
+            initial_results,
             config=selected_pilot_config or DEFAULT_PILOT_CONFIG,
         )[:final_k]
-    return results
+        return reranked_dicts
+
+    # If not pageindex-pilot, just return the initial results, truncated to final_k
+    return initial_results[:final_k]
 
 
 def run_benchmark(
@@ -296,26 +255,32 @@ def run_benchmark(
     ragas_model: str | None = None,
 ) -> dict[str, Any]:
     """
-    Run the full query set against the currently loaded server module.
+    Run the full query set against the currently loaded AppContainer.
     """
-    srv = _load_server_for_profile(profile_name)
+    container = _load_container_for_profile(profile_name)
     rss_before = _rss_mb()
 
-    # Force model initialisation
-    _ = srv.get_embedding_model()
-    _ = srv.get_reranker()
+    # Force model initialisation - now through container services
+    _ = container.model_runtime.get_embedding_model()
+    _ = container.model_runtime.get_reranker()
 
     if refresh:
         print(f"  Refreshing knowledge base for profile '{profile_name}'...")
-        report = srv.refresh_knowledge(target_category="all", reset_db=True)
+        dummy_ctx = AsyncMock()  # Create a dummy ctx for refresh_knowledge
+        report = asyncio.run(
+            container.indexing_service.refresh_knowledge(
+                dummy_ctx, "all", reset_db=True
+            )
+        )
         print(f"  Refresh complete:\n{report}")
 
     rss_after = _rss_mb()
     model_rss = rss_after - rss_before
 
-    tq_index: TurboQuantIndex | None = None
-    if profile_name == "full-tq":
-        tq_index = _init_tq_index(srv)
+    if container.model_runtime.get_profile().use_turboquant:
+        # Initialize TQ index. This should ideally be handled by the WarmupService,
+        # but for benchmarking, we might want to ensure it's fresh.
+        _init_tq_index_new(container)
 
     ai_client = AIClient() if ragas else None
 
@@ -327,9 +292,12 @@ def run_benchmark(
     for q in queries:
         t0 = time.perf_counter()
         bucket = q.get("bucket") or bucket_query(q["query"])
-        category = q.get("category") or q.get("bucket")
-        if category == "mixed":
-            category = None
+        category_str = q.get("category")
+        category: Optional[CategoryEnum] = None
+        if category_str and category_str != "mixed":
+            category = CategoryEnum(
+                category_str
+            )  # Convert to Enum or leave as str for search
 
         bm = bucket_metrics_raw.setdefault(
             bucket, {"hits": [], "rrs": [], "latencies": []}
@@ -339,24 +307,21 @@ def run_benchmark(
             q["query"], bucket, routing_policy, engine_name, pilot_config
         )
 
-        reranker = srv.get_reranker()
-        limit = top_k if (reranker or sel_engine == "pageindex-pilot") else final_k
-
-        results = _perform_retrieval(
-            srv,
+        final_search_results = _perform_retrieval(
+            container,
             q["query"],
             category,
-            limit,
-            profile_name,
-            tq_index,
+            top_k,
             final_k,
             sel_engine,
             sel_pilot,
         )
 
         latency = time.perf_counter() - t0
-        result_texts = [r.get("text", "") for r in results]
-        rank = _hit_rank(result_texts, q["relevant"])
+
+        # Extract content for _hit_rank and RAGAS evaluation
+        # _hit_rank expects a list of SearchResult or dict from pageindex-pilot
+        rank = _hit_rank(final_search_results, q["relevant"])
 
         # Record metrics
         hit_val = 1 if rank is not None else 0
@@ -370,7 +335,11 @@ def run_benchmark(
 
         current_ragas = {}
         if ragas and ai_client:
-            retrieved_context = "\n---\n".join(result_texts)
+            # Reconstruct retrieved_context from dicts
+            retrieved_context = "\n".join(
+                r.get("text", "") for r in final_search_results
+            )
+
             # Fix faithfulness: generate a real LLM answer based on retrieved context
             # rather than using the ground truth as the "answer" field.
             gen_answer = ai_client.generate_answer(q["query"], retrieved_context)
@@ -438,15 +407,18 @@ def run_benchmark(
     return res
 
 
-def _init_tq_index(srv: Any) -> TurboQuantIndex:
-    """Initialise TQ index for the full-tq profile."""
+# Refactored _init_tq_index
+def _init_tq_index_new(container: AppContainer) -> TurboQuantIndex:
+    """Initialise TQ index for the full-tq profile using AppContainer services."""
     tq_bits = int(os.getenv("TQ_BITS", "4"))
     tq_index = TurboQuantIndex(
-        dim=1024,
+        dim=container.settings.embedding_model_dimensions,
         bits=tq_bits,
-        device=srv._detect_device(),
+        device=get_optimal_device(),  # Use platform_utils
     )
-    all_docs = srv.get_table().search().limit(100000).to_list()
+    # Get all documents from LanceDB for the current profile's table
+    # This might be very large, consider sampling or a more efficient way
+    all_docs = container.lancedb_repo.get_table().search().limit(100000).to_list()
     if all_docs:
         corpus_vecs = np.array([doc["vector"] for doc in all_docs], dtype=np.float32)
         tq_index.add(corpus_vecs, all_docs)
@@ -756,12 +728,9 @@ def _handle_baseline_and_gates(
         write_baseline(baseline_path, all_results)
         print(f"\nBaseline captured to {baseline_path}")
 
-    if args.fail_on_gate and not baseline_path:
-        raise SystemExit(
-            "--fail-on-gate requires --baseline-file or --capture-baseline"
-        )
-
-    if baseline_path and not args.capture_baseline:
+    if (
+        baseline_path and not args.capture_baseline
+    ):  # Only load if not capturing new baseline
         baseline_runs = load_baseline(baseline_path)
         gate_config = load_gate_config(args.gate_config)
         gate_report = evaluate_quality_gates(all_results, baseline_runs, gate_config)

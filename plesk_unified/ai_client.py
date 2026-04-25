@@ -32,8 +32,7 @@ class AIClient:
         if not self.api_key:
             logger.warning("OPENROUTER_API_KEY is not set. AI calls will fail.")
         else:
-            masked_key = f"{self.api_key[:6]}...{self.api_key[-4:]}"
-            logger.info(f"AIClient initialized with API key: {masked_key}")
+            logger.info("AIClient initialized with an API key.")
         self._async_client: Optional[httpx.AsyncClient] = None
 
     async def get_async_client(self) -> httpx.AsyncClient:

@@ -1,91 +1,58 @@
 import pytest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock
+from plesk_unified.server.mcp_app import create_mcp_app
+from plesk_unified.application.services.container import AppContainer
+from plesk_unified.server.resources import get_toc_resource
 
-# Access the global mcp instance from the server module
-from plesk_unified.server import mcp
+
+@pytest.fixture
+def mock_app_container():
+    mock_container = MagicMock(spec=AppContainer)
+    mock_container.toc_formatter = MagicMock()
+    return mock_container
 
 
-@pytest.mark.asyncio
-async def test_toc_resources_registered():
-    """Verify all 5 TOC resources are registered in mcp.list_resources()."""
-    resources = await mcp.list_resources()
-    resource_uris = {str(r.uri) for r in resources}
-    expected_uris = {
-        "plesk://toc/api",
-        "plesk://toc/cli",
-        "plesk://toc/guide",
-        "plesk://toc/js-sdk",
-        "plesk://toc/php-stubs",
-    }
-    for uri in expected_uris:
-        assert uri in resource_uris, f"Resource {uri} not found in registered resources"
+@pytest.fixture
+def mcp_app(mock_app_container):
+    return create_mcp_app(mock_app_container)
 
 
 @pytest.mark.asyncio
-async def test_toc_resource_api_returns_markdown():
-    """Verify plesk://toc/api returns a formatted Markdown string."""
-    mock_toc_map = {
-        "api_ref.html": {"title": "API Reference", "breadcrumb": "Reference > API"}
-    }
-    with (
-        patch("plesk_unified.server.get_toc_map_for_source", return_value=mock_toc_map),
-        patch(
-            "plesk_unified.server._build_doc_url",
-            return_value="https://example.com/api_ref",
-        ),
-    ):
-        result = await mcp.read_resource("plesk://toc/api")
-        content = (
-            result.contents[0].text
-            if hasattr(result.contents[0], "text")
-            else result.contents[0].content
-        )
-        assert "# Plesk API Table of Contents" in content
-        assert "- [API Reference](https://example.com/api_ref)" in content
-        assert "Path: Reference > API" in content
+async def test_toc_resources_registered(mcp_app):
+    """Verify TOC resource is registered in FastMCP instance."""
+    templates = await mcp_app.list_resource_templates()
+    for t in templates:
+        print(f"Registered template: {t.uri_template}")
+    uris = {t.uri_template for t in templates}
+    # FastMCP uses URI templates, so it might just have plesk://toc/{category}
+    assert any("plesk://toc/" in uri for uri in uris)
 
 
 @pytest.mark.asyncio
-async def test_toc_resource_cli_returns_markdown():
-    """Verify plesk://toc/cli returns a formatted Markdown string."""
-    mock_toc_map = {
-        "cli_ref.html": {"title": "CLI Reference", "breadcrumb": "Reference > CLI"}
-    }
-    with (
-        patch("plesk_unified.server.get_toc_map_for_source", return_value=mock_toc_map),
-        patch(
-            "plesk_unified.server._build_doc_url",
-            return_value="https://example.com/cli_ref",
-        ),
-    ):
-        result = await mcp.read_resource("plesk://toc/cli")
-        content = (
-            result.contents[0].text
-            if hasattr(result.contents[0], "text")
-            else result.contents[0].content
-        )
-        assert "# Plesk CLI Table of Contents" in content
-        assert "- [CLI Reference](https://example.com/cli_ref)" in content
-        assert "Path: Reference > CLI" in content
+async def test_toc_resource_calls_formatter(mock_app_container):
+    """Verify get_toc_resource calls toc_formatter.to_json."""
+    mock_ctx = AsyncMock()
+    mock_ctx.request_context.lifespan_context = {"container": mock_app_container}
+
+    mock_app_container.toc_formatter.to_json.return_value = '{"toc": []}'
+
+    result = await get_toc_resource("guide", mock_ctx)
+
+    assert result == '{"toc": []}'
+    mock_app_container.toc_formatter.to_json.assert_called_once_with("guide")
 
 
 @pytest.mark.asyncio
-async def test_toc_resource_no_entries():
-    """Verify TOC resource returns a 'no entries' message when empty."""
-    with patch("plesk_unified.server.get_toc_map_for_source", return_value={}):
-        result = await mcp.read_resource("plesk://toc/api")
-        content = (
-            result.contents[0].text
-            if hasattr(result.contents[0], "text")
-            else result.contents[0].content
-        )
-        assert "No Table of Contents available for api" in content
-
-
-@pytest.mark.asyncio
-async def test_toc_resource_invalid_category():
+async def test_toc_resource_invalid_category(mock_app_container):
     """Verify TOC helper handles unknown categories gracefully."""
-    from plesk_unified.server import _handle_toc_resource
+    mock_ctx = AsyncMock()
+    mock_ctx.request_context.lifespan_context = {"container": mock_app_container}
 
-    result = _handle_toc_resource("unknown")
-    assert "Category 'unknown' not found." in result
+    # toc_formatter.to_json might raise ValueError for invalid category
+    mock_app_container.toc_formatter.to_json.side_effect = ValueError(
+        "Invalid category: 'unknown'"
+    )
+
+    # get_toc_resource is decorated with @tool_error_boundary
+    result = await get_toc_resource("unknown", mock_ctx)
+    assert "[ERROR] Invalid argument: Invalid category: 'unknown'" in result

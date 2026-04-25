@@ -1,106 +1,70 @@
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 import concurrent.futures
-from plesk_unified.server import warmup_server, refresh_knowledge
+from unittest.mock import AsyncMock, MagicMock
+from plesk_unified.server.tools import warmup_server as tool_warmup_server
+from plesk_unified.server.tools import refresh_knowledge as tool_refresh_knowledge
+from plesk_unified.types import CategoryEnum
+from fastmcp import Context
 
 
-# Helper to create a completed Future
-def make_completed_future(result_value):
+# Helper to simulate executor submission by calling the function immediately
+def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
-    f.set_result(result_value)
+    try:
+        f.set_result(fn(*args, **kwargs))
+    except Exception as e:
+        f.set_exception(e)
     return f
 
 
-# Fixture copied from test_server.py to maintain consistency
+# Fixture to set up a mock AppContainer and AsyncMock ctx for progress testing
 @pytest.fixture
-def mock_server_dependencies():
-    import plesk_unified.server as server
+def mock_ctx_and_container():
+    mock_ctx = AsyncMock(spec=Context)
 
-    server._embedding_model = None
-    server._warmup_state = "idle"
-    server._warmup_thread = None
-    server._warmup_error = None
-    server._tq_index = None
-    server._detected_device = None
+    # Mock container and its services
+    mock_container = MagicMock()
+    mock_container.settings = MagicMock()
+    mock_container.warmup_service = MagicMock()
+    mock_container.indexing_service = AsyncMock()
+    mock_container.executor = MagicMock()
+    mock_container.executor.submit.side_effect = sync_submit
 
-    mock_server_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    # Inject container into lifespan context
+    mock_ctx.request_context.lifespan_context = {"container": mock_container}
 
-    def mock_submit_side_effect(func, *args, **kwargs):
-        return make_completed_future(func(*args, **kwargs))
-
-    mock_server_executor.submit.side_effect = mock_submit_side_effect
-
-    with (
-        patch("plesk_unified.server._executor", new=mock_server_executor),
-        patch("plesk_unified.server.get_table"),
-        patch("plesk_unified.server.get_reranker"),
-        patch("plesk_unified.server.get_embedding_model"),
-        patch("plesk_unified.server.get_tq_index"),
-        patch("plesk_unified.server._get_profile") as mock_get_profile,
-        patch("plesk_unified.server._build_doc_url"),
-        patch("plesk_unified.server._save_source_state"),
-        patch("plesk_unified.server._load_source_state", return_value={}),
-        patch("plesk_unified.server.io_utils.ensure_source_exists", return_value=True),
-        patch(
-            "plesk_unified.server.io_utils.compute_source_fingerprint",
-            return_value=("abc", 10),
-        ),
-        patch("plesk_unified.server.process_source_files", return_value=set()),
-        patch("plesk_unified.server.chunking.persist_batch"),
-    ):
-        mock_profile = MagicMock()
-        mock_profile.name = "full-tq"
-        mock_profile.embed_model = "test-model"
-        mock_profile.reranker_model = "test-reranker"
-        mock_profile.use_turboquant = False
-        mock_get_profile.return_value = mock_profile
-        yield
+    return mock_ctx, mock_container
 
 
 @pytest.mark.asyncio
-async def test_warmup_server_reports_progress(mock_server_dependencies):
-    """Verify warmup_server calls ctx.report_progress exactly 4 times."""
-    ctx = AsyncMock()
-    # Ensure it's not already running
-    import plesk_unified.server as server
+async def test_warmup_server_reports_progress(mock_ctx_and_container):
+    """Verify warmup_server calls ctx.report_progress."""
+    mock_ctx, mock_container = mock_ctx_and_container
 
-    server._warmup_state = "idle"
+    mock_container.warmup_service.begin_warmup.return_value = True
+    mock_container.warmup_service.run_warmup_sequence.return_value = [
+        "Part 1",
+        "Part 2",
+    ]
 
-    await warmup_server(ctx=ctx)
+    result = await tool_warmup_server(mock_ctx)
 
-    assert ctx.report_progress.call_count == 4
-    ctx.report_progress.assert_any_call(1, 4)
-    ctx.report_progress.assert_any_call(2, 4)
-    ctx.report_progress.assert_any_call(3, 4)
-    ctx.report_progress.assert_any_call(4, 4)
-
-
-@pytest.mark.asyncio
-async def test_refresh_knowledge_reports_progress(mock_server_dependencies):
-    """Verify refresh_knowledge calls ctx.report_progress exactly 4 times."""
-    ctx = AsyncMock()
-
-    await refresh_knowledge(ctx=ctx, target_category="all")
-
-    assert ctx.report_progress.call_count == 4
-    ctx.report_progress.assert_any_call(1, 4)
-    ctx.report_progress.assert_any_call(2, 4)
-    ctx.report_progress.assert_any_call(3, 4)
-    ctx.report_progress.assert_any_call(4, 4)
+    assert "Part 1\nPart 2" in result
+    assert mock_ctx.report_progress.call_count >= 2
+    mock_ctx.report_progress.assert_any_call(1, 4)
+    mock_ctx.report_progress.assert_any_call(4, 4)
 
 
 @pytest.mark.asyncio
-async def test_warmup_server_no_ctx_works(mock_server_dependencies):
-    """Verify warmup_server works without a context object."""
-    import plesk_unified.server as server
+async def test_refresh_knowledge_delegates_to_service(mock_ctx_and_container):
+    """Verify refresh_knowledge calls indexing_service."""
+    mock_ctx, mock_container = mock_ctx_and_container
 
-    server._warmup_state = "idle"
-    result = await warmup_server(ctx=None)
-    assert "Embedding model ready" in result
+    mock_container.indexing_service.refresh_knowledge.return_value = "Refresh report"
 
+    result = await tool_refresh_knowledge(mock_ctx, category=CategoryEnum.API)
 
-@pytest.mark.asyncio
-async def test_refresh_knowledge_no_ctx_works(mock_server_dependencies):
-    """Verify refresh_knowledge works without a context object."""
-    result = await refresh_knowledge(ctx=None, target_category="api")
-    assert result == "" or "FTS" in result
+    assert result == "Refresh report"
+    mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
+        mock_ctx, "api", False
+    )

@@ -28,6 +28,7 @@ from plesk_unified.infrastructure.repositories.summary_cache_repository import (
 from plesk_unified.application.services.search_service import SearchService
 from plesk_unified.application.services.indexing_service import IndexingService
 from plesk_unified.infrastructure.parsers.processor_registry import ProcessorRegistry
+from plesk_unified.indexing import JobRegistry
 
 
 def setup_directories(base_dir: Path):
@@ -137,6 +138,8 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         executor=executor,
     )
 
+    job_service = JobRegistry()
+
     return AppContainer(
         settings=settings,
         logger=logger,
@@ -155,4 +158,5 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         search_service=search_service,
         indexing_service=indexing_service,
         processor_registry=processor_registry,
+        job_service=job_service,
     )

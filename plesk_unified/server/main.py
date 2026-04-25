@@ -22,14 +22,13 @@ def run_server():
 
     # 2. Lifecycle hooks
     log_server_ready(start_time)
-    maybe_refresh_changed_sources()
-    maybe_start_background_warmup()
+    maybe_refresh_changed_sources(app)
+    maybe_start_background_warmup(app)
 
     # 3. Transport (MCP)
-    from plesk_unified.legacy_server import mcp
+    from plesk_unified.server.mcp_app import create_mcp_app
 
-    # In a later task, we will pass 'app' to the tool handlers.
-    # For now, it's enough that we've centralized its construction.
+    mcp = create_mcp_app(app)
 
     try:
         mcp.run()

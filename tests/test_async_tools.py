@@ -1,134 +1,178 @@
 import pytest
 import inspect
 import asyncio
-from unittest.mock import patch, MagicMock
-from plesk_unified import server
-import concurrent.futures  # Needed for MockConcurrentFuture
+from unittest.mock import MagicMock, AsyncMock
+import concurrent.futures
+
+# New imports from the service-based architecture
+from fastmcp import Context
+from plesk_unified.application.services.container import AppContainer
+from plesk_unified.settings import PleskSettings as Settings
+import plesk_unified.chunking
+
+# New tool imports
+from plesk_unified.server.tools.search_tools import search_plesk_unified
+from plesk_unified.server.tools.admin_tools import (
+    warmup_server,
+    daemon_health,
+    list_model_profiles,
+)
+from plesk_unified.server.tools.indexing_tools import (
+    refresh_knowledge,
+    trigger_index_sync,
+    check_sync_status,
+    requantize_knowledge,
+)
 
 
-# Helper to create a completed Future
-def make_completed_future(result_value):
+# Helper to simulate executor submission by calling the function immediately
+def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
-    f.set_result(result_value)
+    try:
+        f.set_result(fn(*args, **kwargs))
+    except Exception as e:
+        f.set_exception(e)
     return f
 
 
 @pytest.fixture(autouse=True)
-def mock_all_ml_and_io_calls():
+async def mock_all_ml_and_io_calls():
     """
     Mock all ML model calls and I/O operations for fast, isolated tests.
+    This fixture provides a mock Context and AppContainer.
     """
-    mock_server_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_container = MagicMock(spec=AppContainer)
+    mock_ctx = AsyncMock(spec=Context)
 
-    def mock_submit_side_effect(func, *args, **kwargs):
-        return make_completed_future(func(*args, **kwargs))
+    # Configure mock_ctx to provide mock_container
+    mock_ctx.request_context.lifespan_context = {"container": mock_container}
 
-    mock_server_executor.submit.side_effect = mock_submit_side_effect
+    # --- Mock settings ---
+    mock_container.settings = MagicMock(spec=Settings)
+    mock_container.settings.plesk_model_profile = "test_profile"
+    mock_container.settings.plesk_enable_sampling = (
+        True  # Assume sampling is enabled for search
+    )
+    mock_container.settings.plesk_rerank_candidates = 50
+    mock_container.settings.plesk_min_relevance_threshold = None
 
-    with (
-        # Patch server._executor with our specially configured mock
-        patch("plesk_unified.server._executor", new=mock_server_executor),
-        # Mock embedding model (sync getter)
-        patch(
-            "plesk_unified.server.get_embedding_model", new_callable=MagicMock
-        ) as mock_embed_model,
-        # Mock LanceDB
-        patch("plesk_unified.server.get_table") as mock_get_table,
-        # Mock reranker (sync getter)
-        patch(
-            "plesk_unified.server.get_reranker", new_callable=MagicMock
-        ) as mock_reranker,
-        # Mock TurboQuant (sync getter)
-        patch(
-            "plesk_unified.server.get_tq_index", new_callable=MagicMock
-        ) as mock_tq_index,
-        # Mock external I/O utilities
-        patch("plesk_unified.server.io_utils.ensure_source_exists", return_value=True),
-        patch(
-            "plesk_unified.server.io_utils.compute_source_fingerprint",
-            return_value=("mock_fingerprint", 1),
-        ),
-        patch("plesk_unified.server.io_utils.load_toc_map", return_value={}),
-        patch(
-            "plesk_unified.server.io_utils.collect_files_for_source", return_value=[]
-        ),
-        patch(
-            "plesk_unified.server.platform_utils.get_optimal_device", return_value="cpu"
-        ),
-        # Mock _get_profile which is called by many functions
-        patch("plesk_unified.server._get_profile") as mock_get_profile,
-        # Mock source state saving/loading to ensure "SKIPPED" for refresh_knowledge
-        patch(
-            "plesk_unified.server._load_source_state",
-            return_value={
-                "version": 1,
-                "sources": {
-                    "cli": {
-                        # Matching fingerprint and chunk_version for "cli" category
-                        "fingerprint": "mock_fingerprint",
-                        "chunk_version": server.chunking.CHUNK_VERSION,
-                        # Use actual CHUNK_VERSION
-                        "file_count": 1,
-                        "indexed_at": "2023-01-01T00:00:00Z",
-                    }
-                },
-            },
-        ),
-        patch("plesk_unified.server._save_source_state"),
-        # Mock AIClient for summary generation
-        patch("plesk_unified.server.AIClient", new_callable=MagicMock),
-    ):
-        # Configure mock_embed_model to return a mock vector
-        mock_embed_model.return_value.compute_query_embeddings.return_value = [
-            [0.1] * 384
-        ]
+    # --- Mock executor ---
+    mock_container.executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_container.executor.submit.side_effect = sync_submit
 
-        # Configure mock_get_table
-        mock_table = MagicMock()
-        search_mock = (
-            mock_table.search.return_value.where.return_value.limit.return_value
-        )
-        search_mock.to_list.return_value = []
-        mock_table.create_fts_index.return_value = None
-        mock_table.delete.return_value = None
-        mock_get_table.return_value = mock_table
+    # --- Mock logger ---
+    mock_container.logger = MagicMock()
 
-        # Configure mock_get_profile
-        mock_profile = MagicMock()
-        mock_profile.name = "test_profile"
-        mock_profile.embed_model = "test_model"
-        mock_profile.reranker_enabled = False  # Disable reranker by default
-        mock_profile.use_turboquant = False  # Disable tq by default
-        mock_get_profile.return_value = mock_profile
+    # --- Mock LanceDbRepository and its table ---
+    mock_container.lancedb_repo = MagicMock()
+    mock_table = MagicMock()
+    search_mock = mock_table.search.return_value.where.return_value.limit.return_value
+    search_mock.to_list.return_value = []  # Default: no search results
+    mock_table.create_fts_index.return_value = None
+    mock_table.delete.return_value = None
+    mock_container.lancedb_repo.get_table.return_value = mock_table
 
-        # Clear any cached model instances
-        server._embedding_model = None
-        server._reranker = None
-        server._tq_index = None
-        server._active_profile = None
-        server._detected_device = None
-        server._warmup_state = "idle"
-        server._warmup_error = None
-        server._warmup_thread = None
+    # --- Mock TurboQuantRepository ---
+    mock_container.turboquant_repo = MagicMock()
+    mock_container.turboquant_repo.get_tq_index.return_value = None
 
-        yield {
-            "mock_embed_model": mock_embed_model,
-            "mock_get_table": mock_get_table,
-            "mock_reranker": mock_reranker,
-            "mock_tq_index": mock_tq_index,
-        }
+    # --- Mock SourceStateRepository ---
+    mock_container.source_state_repo = MagicMock()
+    mock_container.source_state_repo.load.return_value = {
+        "version": 1,
+        "sources": {
+            "cli": {
+                # Matching fingerprint and chunk_version for "cli" category
+                "fingerprint": "mock_fingerprint",
+                "chunk_version": plesk_unified.chunking.CHUNK_VERSION,
+                "file_count": 1,
+                "indexed_at": "2023-01-01T00:00:00Z",
+            }
+        },
+    }
+    mock_container.source_state_repo.save.return_value = None
+
+    # --- Mock SourceCatalog (sources) ---
+    mock_container.sources = MagicMock()
+    mock_container.sources.ensure_source_exists.return_value = True
+    mock_container.sources.compute_source_fingerprint.return_value = (
+        "mock_fingerprint",
+        1,
+    )
+    mock_container.sources.by_category.return_value = MagicMock()
+    mock_container.sources.by_category.return_value.zip_url = (
+        "http://example.com/zip/cli.zip"
+    )
+    mock_container.sources.by_category.return_value.build_doc_url.return_value = (
+        "http://example.com/cli/file.html"
+    )
+
+    # --- Mock ModelRuntime ---
+    mock_container.model_runtime = MagicMock()
+    mock_profile = MagicMock()
+    mock_profile.name = "test_profile"
+    mock_profile.embed_model = "test_model"
+    mock_profile.reranker_enabled = False
+    mock_profile.use_turboquant = False
+    mock_container.model_runtime.get_profile.return_value = mock_profile
+    mock_container.model_runtime.get_embedding_model.return_value = MagicMock()
+    model_mock = mock_container.model_runtime.get_embedding_model.return_value
+    model_mock.compute_query_embeddings.return_value = [[0.1] * 384]
+    mock_container.model_runtime.get_reranker.return_value = (
+        MagicMock()
+    )  # Assume reranker is always present
+
+    # --- Mock SearchService ---
+    mock_container.search_service = AsyncMock()
+    mock_container.search_service.search.return_value = (
+        "Search result from mocked service."
+    )
+
+    # --- Mock IndexingService ---
+    mock_container.indexing_service = AsyncMock()
+    # refresh_knowledge result for "cli" should return SKIPPED
+    mock_container.indexing_service.refresh_knowledge.return_value = "SKIPPED cli"
+
+    # --- Mock WarmupService ---
+    mock_container.warmup_service = MagicMock()
+    mock_container.warmup_service.warmup_state = "idle"
+    mock_container.warmup_service.warmup_error = None
+    mock_container.warmup_service.run_warmup_sequence.return_value = [
+        "Mock Warmup complete."
+    ]
+
+    # --- Mock HealthService ---
+    mock_container.health_service = MagicMock()
+    mock_container.health_service.get_health_report.return_value = {
+        "warmup_state": "idle",
+        "warmup_error": None,
+    }
+
+    # --- Mock JobService (holds JobRegistry) ---
+    mock_job_registry = MagicMock()  # JobRegistry for concurrent tasks
+    mock_job_registry.submit_job.side_effect = lambda f, *args, **kwargs: "mock_job_id"
+    mock_job_registry.get_status.return_value = {
+        "status": "completed"
+    }  # Default completed
+    mock_container.job_service = MagicMock()
+    mock_container.job_service.job_registry = mock_job_registry
+
+    # Mock AIClient for summary generation
+    mock_container.ai_client = MagicMock()
+
+    yield mock_ctx
 
 
 # List of tool handlers to inspect
 TOOL_HANDLERS = [
-    server.warmup_server,
-    server.daemon_health,
-    server.list_model_profiles,
-    server.refresh_knowledge,
-    server.trigger_index_sync,
-    server.check_sync_status,
-    server.requantize_knowledge,
-    server.search_plesk_unified,
+    warmup_server,
+    daemon_health,
+    list_model_profiles,
+    refresh_knowledge,
+    trigger_index_sync,
+    check_sync_status,
+    requantize_knowledge,
+    search_plesk_unified,
 ]
 
 
@@ -144,18 +188,24 @@ async def test_all_tool_handlers_are_async_functions():
 
 @pytest.mark.asyncio
 async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
-    mock_all_ml_and_io_calls,
+    mock_all_ml_and_io_calls: AsyncMock,  # Type hint for clarity
 ):
     """
     Test that 3 concurrent calls to search_plesk_unified and refresh_knowledge
     via asyncio.gather complete without deadlock.
     """
+    mock_ctx = mock_all_ml_and_io_calls
+    # Ensure SearchService mock is configured to return some data for search
+    mock_ctx.request_context.lifespan_context[
+        "container"
+    ].search_service.search.return_value = "Search result from mocked service."
+    # Indexing service already configured to return "SKIPPED cli"
 
     async def mock_search_task():
-        return await server.search_plesk_unified(query="test query")
+        return await search_plesk_unified(mock_ctx, query="test query")
 
     async def mock_refresh_task():
-        return await server.refresh_knowledge(target_category="cli")
+        return await refresh_knowledge(mock_ctx, category="cli")
 
     tasks = [
         mock_search_task(),
@@ -170,10 +220,19 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
         assert isinstance(results[1], str)
         assert isinstance(results[2], str)
 
-        assert "I could not find a reliable answer." in results[0]
-        assert "SKIPPED cli" in results[1]
+        assert "Search result from mocked service." in results[0]
+        assert (
+            "SKIPPED cli" in results[1]
+        )  # From mock_container.indexing_service.refresh_knowledge.return_value
+        assert "Search result from mocked service." in results[2]
 
-        assert mock_all_ml_and_io_calls["mock_get_table"].called
+        # Verify that underlying services were called
+        mock_ctx.request_context.lifespan_context[
+            "container"
+        ].search_service.search.assert_called()
+        mock_ctx.request_context.lifespan_context[
+            "container"
+        ].indexing_service.refresh_knowledge.assert_called_with(mock_ctx, "cli", False)
 
     except Exception as e:
         pytest.fail(f"Concurrent calls failed or deadlocked: {e}")

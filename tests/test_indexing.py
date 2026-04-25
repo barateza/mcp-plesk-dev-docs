@@ -2,10 +2,21 @@ import pytest
 import time
 import asyncio
 import threading
-from unittest.mock import MagicMock, patch, AsyncMock
-from plesk_unified.indexing import JobRegistry
-from plesk_unified.server import trigger_index_sync
+from unittest.mock import MagicMock, AsyncMock
 import concurrent.futures
+
+# New imports from the service-based architecture
+from fastmcp import Context
+from plesk_unified.application.services.container import AppContainer
+from plesk_unified.settings import PleskSettings as Settings
+
+# New tool imports
+from plesk_unified.server.tools.indexing_tools import (
+    trigger_index_sync,
+)
+from plesk_unified.indexing import (
+    JobRegistry,
+)  # Assuming this is still the core JobRegistry
 
 
 # Helper to create a completed Future
@@ -21,51 +32,64 @@ def job_registry_instance():
     return JobRegistry()
 
 
-@pytest.fixture(autouse=True)
-def mock_server_dependencies_for_indexing():
-    """
-    Mock dependencies needed for trigger_index_sync and check_sync_status.
-    Specifically, we want to mock `refresh_knowledge` which is called by `job_wrapper`.
-    """
-    mock_server_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+@pytest.fixture
+async def mock_indexing_dependencies(job_registry_instance):
+    mock_container = MagicMock(spec=AppContainer)
+    mock_ctx = MagicMock(spec=Context)
 
-    def mock_submit_side_effect(func, *args, **kwargs):
-        return make_completed_future(func(*args, **kwargs))
+    # Configure mock_ctx to provide mock_container
+    mock_ctx.request_context.lifespan_context = {"container": mock_container}
 
-    mock_server_executor.submit.side_effect = mock_submit_side_effect
+    # --- Mock settings ---
+    mock_container.settings = MagicMock(spec=Settings)
+    mock_container.settings.plesk_model_profile = "full-tq"
 
-    with (
-        patch("plesk_unified.server._executor", new=mock_server_executor),
-        patch(
-            "plesk_unified.server.refresh_knowledge", new_callable=AsyncMock
-        ) as mock_refresh_knowledge,
-        patch(
-            "plesk_unified.server._get_profile"
-        ) as mock_get_profile,  # Needed by refresh_knowledge
-        patch("plesk_unified.server._load_source_state", return_value={"sources": {}}),
-        patch("plesk_unified.server._save_source_state"),
-        patch(
-            "plesk_unified.server.get_table"
-        ) as mock_get_table,  # Needed by refresh_knowledge
-        patch(
-            "plesk_unified.server._build_tq_index_from_table", new_callable=MagicMock
-        ),  # Needed by refresh_knowledge
-    ):
-        # Configure mock_refresh_knowledge to simulate completion quickly by default
-        mock_refresh_knowledge.return_value = "Mock refresh completed successfully."
+    # --- Mock executor ---
+    mock_container.executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_container.executor.submit.side_effect = make_completed_future
 
-        # Configure mock_get_profile
-        mock_profile = MagicMock()
-        mock_profile.name = "test_profile"
-        mock_profile.use_turboquant = False
-        mock_get_profile.return_value = mock_profile
+    # --- Mock logger ---
+    mock_container.logger = MagicMock()
 
-        # Configure mock_get_table
-        mock_table = MagicMock()
-        mock_table.create_fts_index.return_value = None
-        mock_get_table.return_value = mock_table
+    # --- Mock LanceDbRepository and its table ---
+    mock_container.lancedb_repo = MagicMock()
+    mock_table = MagicMock()
+    mock_table.create_fts_index.return_value = None
+    mock_container.lancedb_repo.get_table.return_value = mock_table
 
-        yield mock_refresh_knowledge
+    # --- Mock SourceStateRepository ---
+    mock_container.source_state_repo = MagicMock()
+    mock_container.source_state_repo.load.return_value = {"sources": {}}
+    mock_container.source_state_repo.save.return_value = None
+
+    # --- Mock SourceCatalog (sources) ---
+    mock_container.sources = MagicMock()
+    mock_container.sources.ensure_source_exists.return_value = True
+    mock_container.sources.compute_source_fingerprint.return_value = ("abc", 10)
+
+    # --- Mock ModelRuntime ---
+    mock_container.model_runtime = MagicMock()
+    mock_profile = MagicMock()
+    mock_profile.name = "full-tq"
+    mock_profile.use_turboquant = False
+    mock_container.model_runtime.get_profile.return_value = mock_profile
+
+    # --- Mock IndexingService ---
+    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service.refresh_knowledge.return_value = (
+        "Mock refresh completed successfully."
+    )
+    mock_container.indexing_service.process_source_files.return_value = (
+        set()
+    )  # For trigger_index_sync
+    mock_container.indexing_service.persist_batch.return_value = None
+    mock_container.indexing_service.create_fts_index.return_value = None
+    mock_container.indexing_service.delete_source.return_value = None
+
+    # --- Mock JobService to be the JobRegistry instance ---
+    mock_container.job_service = job_registry_instance
+
+    yield mock_ctx, mock_container, job_registry_instance
 
 
 @pytest.mark.asyncio
@@ -167,37 +191,34 @@ async def test_job_transitions_queued_to_failed(job_registry_instance):
 
 @pytest.mark.asyncio
 async def test_10_concurrent_submits_are_thread_safe(
-    job_registry_instance, mock_server_dependencies_for_indexing
+    mock_indexing_dependencies,
 ):
     """
     Tests that 10 concurrent job submissions via trigger_index_sync
     are thread-safe and all complete successfully.
     """
+    mock_ctx, mock_container, job_registry_instance = mock_indexing_dependencies
     num_jobs = 10
-    # Patch global registry to use our instance
-    with patch("plesk_unified.server.job_registry", job_registry_instance):
 
-        async def submit_and_check():
-            result = await trigger_index_sync(category="cli")
-            job_id = result["job_id"]
+    async def submit_and_check():
+        result = await trigger_index_sync(mock_ctx, category="cli")
+        job_id = result["job_id"]
 
-            # Poll for completion
-            status = {"status": "queued"}
-            for _ in range(500):
-                status = job_registry_instance.get_status(job_id)
-                if status["status"] == "completed":
-                    break
-                if status["status"] == "failed":
-                    pytest.fail(
-                        f"Job {job_id} failed unexpectedly: {status.get('error')}"
-                    )
-                await asyncio.sleep(0.01)
+        # Poll for completion
+        status = {"status": "queued"}
+        for _ in range(500):
+            status = job_registry_instance.get_status(job_id)
+            if status["status"] == "completed":
+                break
+            if status["status"] == "failed":
+                pytest.fail(f"Job {job_id} failed unexpectedly: {status.get('error')}")
+            await asyncio.sleep(0.01)
 
-            assert status["status"] == "completed"
-            return job_id, status
+        assert status["status"] == "completed"
+        return job_id, status
 
-        tasks = [submit_and_check() for _ in range(num_jobs)]
-        completed_jobs_info = await asyncio.gather(*tasks)
+    tasks = [submit_and_check() for _ in range(num_jobs)]
+    completed_jobs_info = await asyncio.gather(*tasks)
 
     assert len(completed_jobs_info) == num_jobs
     all_job_ids = [job_id for job_id, _ in completed_jobs_info]

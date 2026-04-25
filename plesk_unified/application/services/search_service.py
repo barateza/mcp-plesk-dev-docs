@@ -261,6 +261,27 @@ class SearchService:
             logger.warning("Sampling failed: %s", e)
             return None
 
+    async def search_raw(
+        self, query: str, category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Run the search pipeline and return raw result dictionaries."""
+        safe_query = query or ""
+
+        # 1. Retrieve candidates
+        candidates = self._get_search_candidates(safe_query, category, n_candidates=15)
+
+        # 2. Rerank
+        reranker = self.model_runtime.get_reranker()
+        results = self._rerank_and_score(safe_query, candidates, reranker)
+
+        # 3. Deduplicate
+        results = self._deduplicate_by_filename(results, max_per_file=1)
+
+        # 4. Expand context
+        expanded_results = self._expand_context_with_neighbors(results)
+
+        return expanded_results
+
     async def search(self, ctx: Any, query: str, category: Optional[str] = None) -> str:
         """The main search pipeline entrypoint."""
         safe_query = query or ""

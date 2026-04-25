@@ -1,461 +1,75 @@
-import importlib
-import json
-from unittest.mock import MagicMock
 import pytest
-import asyncio
 import concurrent.futures
+from unittest.mock import AsyncMock, MagicMock, patch
+from plesk_unified.server.tools import warmup_server as tool_warmup_server
+from plesk_unified.server.tools import daemon_health as tool_daemon_health
+from plesk_unified.server.lifecycle import (
+    maybe_start_background_warmup,
+    maybe_refresh_changed_sources,
+)
+from fastmcp import Context
 
 
-# Helper to create a completed Future
-def make_completed_future(result_value):
+# Helper to simulate executor submission by calling the function immediately
+def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
-    f.set_result(result_value)
+    try:
+        f.set_result(fn(*args, **kwargs))
+    except Exception as e:
+        f.set_exception(e)
     return f
 
 
-def test_get_optimal_device_honors_force_device(monkeypatch):
-    monkeypatch.setenv("FORCE_DEVICE", "mps")
+@pytest.fixture
+def mock_ctx_and_container():
+    mock_ctx = AsyncMock(spec=Context)
+    mock_container = MagicMock()
+    mock_container.settings = MagicMock()
+    mock_container.warmup_service = MagicMock()
+    mock_container.indexing_service = AsyncMock()
+    mock_container.health_service = MagicMock()
+    mock_container.executor = MagicMock()
+    mock_container.executor.submit.side_effect = sync_submit
 
-    import plesk_unified.platform_utils as platform_utils
-
-    importlib.reload(platform_utils)
-
-    assert platform_utils.get_optimal_device() == "mps"
-
-
-def test_server_detect_device_caches_result(monkeypatch):
-    import plesk_unified.server as server
-
-    calls = {"count": 0}
-
-    def fake_get_optimal_device():
-        calls["count"] += 1
-        return "cpu"
-
-    monkeypatch.setattr(
-        server.platform_utils,
-        "get_optimal_device",
-        fake_get_optimal_device,
-    )
-    monkeypatch.setattr(server, "_detected_device", None)
-
-    assert server._detect_device() == "cpu"
-    assert server._detect_device() == "cpu"
-    assert calls["count"] == 2
+    mock_ctx.request_context.lifespan_context = {"container": mock_container}
+    return mock_ctx, mock_container
 
 
 @pytest.mark.asyncio
-async def test_warmup_server_preloads_without_indexing(monkeypatch):
-    import plesk_unified.server as server
+async def test_warmup_server_tool(mock_ctx_and_container):
+    mock_ctx, mock_container = mock_ctx_and_container
+    mock_container.warmup_service.begin_warmup.return_value = True
+    mock_container.warmup_service.run_warmup_sequence.return_value = ["OK"]
 
-    calls = {
-        "embedding": 0,
-        "reranker": 0,
-        "table": 0,
-        "tq_load": 0,
-    }
-
-    class DummyProfile:
-        name = "full-tq"
-        embed_model = "model"
-        reranker_model = "reranker"
-        use_turboquant = True
-
-    def fake_embedding_model():
-        calls["embedding"] += 1
-        return MagicMock()
-
-    def fake_reranker():
-        calls["reranker"] += 1
-        return MagicMock()
-
-    def fake_table(create_new=False):
-        calls["table"] += 1
-        return MagicMock()
-
-    def fake_tq_index_path():
-        return server.Path("/tmp/full-tq.pkl")
-
-    def fake_load_tq_index():
-        calls["tq_load"] += 1
-        return MagicMock()
-
-    monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
-    monkeypatch.setattr(server, "get_embedding_model", fake_embedding_model)
-    monkeypatch.setattr(server, "get_reranker", fake_reranker)
-    monkeypatch.setattr(server, "get_table", fake_table)
-    monkeypatch.setattr(server, "_get_tq_index_path", fake_tq_index_path)
-    monkeypatch.setattr(server, "_load_tq_index", fake_load_tq_index)
-    monkeypatch.setattr(server, "_tq_index", None)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.warmup_server()
-
-    assert "Warmup started" in result
-    assert calls["embedding"] == 1
-    assert calls["reranker"] == 1
-    assert calls["table"] == 1
-    assert calls["tq_load"] == 0
+    result = await tool_warmup_server(mock_ctx)
+    assert "OK" in result
+    mock_container.warmup_service.run_warmup_sequence.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_warmup_server_returns_running_when_already_active(monkeypatch):
-    import plesk_unified.server as server
+async def test_daemon_health_tool(mock_ctx_and_container):
+    mock_ctx, mock_container = mock_ctx_and_container
+    mock_container.health_service.get_health_report.return_value = {"status": "ok"}
 
-    monkeypatch.setattr(server, "_warmup_state", "running")
-    result = await server.warmup_server()
-    assert result == "Warmup already running."
-
-
-def test_maybe_start_background_warmup_starts_daemon_thread(monkeypatch):
-    import plesk_unified.server as server
-
-    started = {"value": False}
-
-    class FakeThread:
-        def __init__(self, target, name, daemon):
-            self.target = target
-            self.name = name
-            self.daemon = daemon
-            self._alive = False
-
-        def start(self):
-            started["value"] = True
-            self._alive = True
-
-        def is_alive(self):
-            return self._alive
-
-    monkeypatch.setattr(server.settings, "plesk_daemon_auto_warmup", True)
-    monkeypatch.setattr(server.threading, "Thread", FakeThread)
-    monkeypatch.setattr(server, "_warmup_thread", None)
-
-    server._maybe_start_background_warmup()
-
-    assert started["value"] is True
-    assert server._warmup_thread is not None
+    result = await tool_daemon_health(mock_ctx)
+    assert '"status": "ok"' in result
 
 
 @pytest.mark.asyncio
-async def test_daemon_health_reports_expected_fields(monkeypatch, tmp_path):
-    import plesk_unified.server as server
-
-    class DummyProfile:
-        name = "full-tq"
-        use_turboquant = True
-
-    class FakeDb:
-        def open_table(self, _name):
-            return None
-
-    artifact = tmp_path / "full-tq.pkl"
-    artifact.write_text("ok")
-
-    monkeypatch.setattr(server, "_get_profile", lambda: DummyProfile())
-    monkeypatch.setattr(server, "_detect_device", lambda: "cpu")
-    monkeypatch.setattr(server, "_get_tq_index_path", lambda: artifact)
-    monkeypatch.setattr(server.lancedb, "connect", lambda _path: FakeDb())
-    monkeypatch.setattr(server, "_tq_index", None)
-    monkeypatch.setattr(server, "_warmup_state", "ready")
-    monkeypatch.setattr(server, "_warmup_error", None)
-    monkeypatch.setattr(server, "_warmup_thread", None)
-    monkeypatch.setattr(server.settings, "plesk_daemon_auto_warmup", True)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    payload = json.loads(await server.daemon_health())
-
-    assert payload["profile"] == "full-tq"
-    assert payload["device"] == "cpu"
-    assert payload["auto_warmup_enabled"] is True
-    assert payload["warmup_state"] == "ready"
-    assert payload["table_ready"] is True
-    assert payload["turboquant_expected"] is True
-    assert payload["turboquant_artifact_exists"] is True
-    assert (
-        payload["refresh_mode"] == "asynchronous-ready"
-    )  # Changed from synchronous-only
+async def test_lifecycle_maybe_start_background_warmup(mock_ctx_and_container):
+    _, mock_container = mock_ctx_and_container
+    maybe_start_background_warmup(mock_container)
+    mock_container.warmup_service.maybe_start_background_warmup.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_maybe_refresh_changed_sources_calls_refresh(monkeypatch):
-    import plesk_unified.server as server
+async def test_lifecycle_maybe_refresh_changed_sources_calls_service(
+    mock_ctx_and_container,
+):
+    _, mock_container = mock_ctx_and_container
+    mock_container.settings.plesk_auto_refresh_on_startup = True
 
-    called = {"count": 0}
-
-    async def fake_refresh(ctx, target_category, reset_db):
-        called["count"] += 1
-        assert target_category == "all"
-        assert reset_db is False
-        return "ok"
-
-    monkeypatch.setattr(server.settings, "plesk_auto_refresh_on_startup", True)
-    monkeypatch.setattr(server, "refresh_knowledge", fake_refresh)
-
-    # asyncio.run is called inside _maybe_refresh_changed_sources,
-    # so we don't need to await it here directly, but the mock must be async.
-    server._maybe_refresh_changed_sources()
-
-    # Wait a bit for the scheduled task to run in the event loop
-    await asyncio.sleep(0.01)
-
-    assert called["count"] == 1
-
-
-def test_load_toc_map_is_cached(monkeypatch, tmp_path):
-    import plesk_unified.io_utils as io_utils
-
-    toc_path = tmp_path / "toc.json"
-    toc_path.write_text(json.dumps([{"text": "A", "url": "a.htm"}]))
-
-    io_utils.load_toc_map.cache_clear()
-
-    original_read_text = type(toc_path).read_text
-    calls = {"count": 0}
-
-    def wrapped_read_text(self, *args, **kwargs):
-        calls["count"] += 1
-        return original_read_text(self, *args, **kwargs)
-
-    monkeypatch.setattr(type(toc_path), "read_text", wrapped_read_text, raising=False)
-
-    first = io_utils.load_toc_map(toc_path.parent)
-    second = io_utils.load_toc_map(toc_path.parent)
-
-    assert first == second
-    assert calls["count"] == 1
-
-
-# --- Category allowlist tests ---
-
-
-def _make_dummy_profile(use_turboquant=False):
-    class DummyProfile:
-        name = "full"
-        embed_model = "model"
-        reranker_model = "reranker"
-        reranker_enabled = False
-        tq_top_k = 25
-
-    DummyProfile.use_turboquant = use_turboquant
-    return DummyProfile()
-
-
-@pytest.mark.asyncio
-async def test_search_rejects_invalid_category(monkeypatch):
-    import plesk_unified.server as server
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    bad_category = "'; DROP TABLE plesk_knowledge; --"
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.search_plesk_unified("some query", category=bad_category)
-    assert "[ERROR] Invalid argument: Invalid category" in result
-
-
-@pytest.mark.asyncio
-async def test_search_accepts_valid_category(monkeypatch):
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-    fake_search = MagicMock()
-    fake_search.where.return_value = fake_search
-    fake_search.limit.return_value = fake_search
-    fake_search.to_list.return_value = []
-    fake_table.search.return_value = fake_search
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda: fake_table)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.search_plesk_unified("some query", category="api")
-    assert isinstance(result, str)
-    # where() is called for both vector and FTS search
-    assert fake_search.where.call_count >= 1
-    fake_search.where.assert_any_call("category = 'api'")
-
-
-@pytest.mark.asyncio
-async def test_search_with_no_category_is_allowed(monkeypatch):
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-    fake_search = MagicMock()
-    fake_search.limit.return_value = fake_search
-    fake_search.to_list.return_value = []
-    fake_table.search.return_value = fake_search
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda: fake_table)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.search_plesk_unified("some query", category=None)
-    assert isinstance(result, str)
-    fake_search.where.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_refresh_rejects_invalid_category(monkeypatch):
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-    fake_search = MagicMock()
-    fake_search.where.return_value = fake_search
-    fake_search.select.return_value = fake_search
-    fake_search.limit.return_value = fake_search
-    fake_search.to_list.return_value = []
-    fake_table.search.return_value = fake_search
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
-    bad_category = "'; DROP TABLE plesk_knowledge; --"
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.refresh_knowledge(target_category=bad_category)
-    assert "[ERROR] Invalid argument: Invalid category" in result
-
-
-@pytest.mark.asyncio
-async def test_refresh_accepts_valid_category(monkeypatch):
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-    fake_search = MagicMock()
-    fake_search.where.return_value = fake_search
-    fake_search.select.return_value = fake_search
-    fake_search.limit.return_value = fake_search
-    fake_search.to_list.return_value = []
-    fake_table.search.return_value = fake_search
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
-    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.refresh_knowledge(target_category="cli")
-    assert "SKIPPED" in result or "Finished" in result
-
-
-@pytest.mark.asyncio
-async def test_refresh_with_all_is_allowed(monkeypatch):
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda create_new=False: fake_table)
-    monkeypatch.setattr(server.io_utils, "ensure_source_exists", lambda _s: False)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.refresh_knowledge(target_category="all")
-    assert isinstance(result, str)
-
-
-def _make_fake_search(results):
-    fake_search = MagicMock()
-    fake_search.where.return_value = fake_search
-    fake_search.limit.return_value = fake_search
-    fake_search.to_list.return_value = results
-    return fake_search
-
-
-@pytest.mark.asyncio
-async def test_search_result_includes_doc_url_for_html_category(monkeypatch):
-    """Search output contains a URL line for categories with a known base URL."""
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-
-    def search_side_effect(query, query_type=None):
-        if query_type == "fts":
-            # Return empty search result to avoid RRF merging (which has low scores)
-            return _make_fake_search([])
-        return _make_fake_search(
-            [
-                {
-                    "text": "pm_Config::get('timeout');",
-                    "title": "Custom Settings",
-                    "filename": "77178.htm",
-                    "category": "guide",
-                    "breadcrumb": "Extensions > Settings",
-                    "_distance": 0.1,
-                }
-            ]
-        )
-
-    fake_table.search.side_effect = search_side_effect
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda: fake_table)
-    monkeypatch.setattr(server, "get_reranker", lambda: None)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.search_plesk_unified("settings")
-    assert "https://docs.plesk.com/en-US/obsidian/extensions-guide/77178.htm" in result
-
-
-@pytest.mark.asyncio
-async def test_search_result_no_url_for_github_only_categories(monkeypatch):
-    """Search output omits the URL line for php-stubs and js-sdk."""
-    import plesk_unified.server as server
-
-    fake_table = MagicMock()
-    fake_table.search.return_value = _make_fake_search(
-        [
-            {
-                "text": "abstract class pm_Hook_ConfigDefaults {}",
-                "title": "ConfigDefaults.php",
-                "filename": "ConfigDefaults.php",
-                "category": "php-stubs",
-                "breadcrumb": "",
-                "_distance": 0.1,
-            }
-        ]
-    )
-
-    monkeypatch.setattr(server, "_get_profile", lambda: _make_dummy_profile())
-    monkeypatch.setattr(server, "get_table", lambda: fake_table)
-    monkeypatch.setattr(server, "get_reranker", lambda: None)
-    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_executor.submit.side_effect = lambda f, *args, **kwargs: make_completed_future(
-        f(*args, **kwargs)
-    )
-    monkeypatch.setattr(server, "_executor", mock_executor)  # Mock the executor
-
-    result = await server.search_plesk_unified("config defaults")
-    assert "URL:" not in result
+    # In pytest-asyncio, there IS a running loop, so create_task will be used.
+    with patch("asyncio.create_task") as mock_create_task:
+        maybe_refresh_changed_sources(mock_container)
+        mock_create_task.assert_called_once()

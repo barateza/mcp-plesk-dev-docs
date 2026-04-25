@@ -347,7 +347,7 @@ class IndexingService:
         return report
 
     async def refresh_knowledge(
-        self, ctx: Any = None, target_category: str = "all", reset_db: bool = False
+        self, ctx: Any = None, category: str = "all", reset_db: bool = False
     ) -> str:
         """The main knowledge refresh pipeline."""
         await self._report_progress(ctx, 1, 4)
@@ -355,7 +355,7 @@ class IndexingService:
         # Validation should be done before calling this service or here
         logger.info(
             "Starting refresh_knowledge: target=%s, reset_db=%s",
-            target_category,
+            category,
             reset_db,
         )
 
@@ -368,7 +368,7 @@ class IndexingService:
 
         tasks = []
         for source in self.source_catalog.all():
-            if target_category == "all" or source.category.value == target_category:
+            if category == "all" or source.category.value == category:
                 tasks.append(self._sync_single_source(source, reset_db, source_entries))
 
         report = []

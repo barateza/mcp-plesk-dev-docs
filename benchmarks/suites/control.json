@@ -50,7 +50,7 @@
     "reference_context": "[CLI] subscription: Subscriptions\nDocType: cli-command\n---\nThe --create or -c command, with the parameter <subscription\\_name>, is used to create a new subscription."
   },
   {
-    "query": "list all domains via Plesk REST API",
+    "query": "list all domains via Plesk XML API",
     "relevant": [
       "GET /api/v2/domains",
       "admin-domain-list"

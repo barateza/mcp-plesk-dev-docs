@@ -96,14 +96,15 @@ class LanceDbRepository:
     def get_neighbors(
         self, filename: str, category: str, chunk_id: int, window: int = 1
     ) -> List[dict]:
-        """Fetch neighbor chunks (id-window to id+window) from same file and category."""
+        """Fetch neighbor chunks from the same file and category."""
         table = self.get_table()
         try:
             neighbors = (
                 table.search()
                 .where(
                     f"filename = '{filename}' AND category = '{category}' "
-                    f"AND chunk_id >= {chunk_id - window} AND chunk_id <= {chunk_id + window}"
+                    f"AND chunk_id >= {chunk_id - window} "
+                    f"AND chunk_id <= {chunk_id + window}"
                 )
                 .limit(2 * window + 1)
                 .to_list()

@@ -90,7 +90,8 @@ class IndexingService:
                 rows = (
                     table.search()
                     .where(
-                        f"filename = '{f.name}' AND category = '{source.category.value}'"
+                        f"filename = '{f.name}' AND "
+                        f"category = '{source.category.value}'"
                     )
                     .select(["chunk_hash"])
                     .limit(1000)
@@ -179,6 +180,36 @@ class IndexingService:
             self.executor, lambda: self.lancedb_repo.persist_batch(docs)
         )
 
+    async def _run_sync_tasks(
+        self,
+        source: Any,
+        files: List[Path],
+        toc_map: Dict[str, Any],
+        existing_files: Set[str],
+    ) -> List[Any]:
+        semaphore = asyncio.Semaphore(10)
+        ai_client = (
+            AIClient(api_key=self.settings.openrouter_api_key)
+            if self.settings.plesk_index_summaries
+            else None
+        )
+
+        tasks = []
+        for f in files:
+            if f.name.startswith("_") or f.name == "toc.json":
+                continue
+            tasks.append(
+                self._process_single_file(
+                    f, source, toc_map, existing_files, ai_client, semaphore
+                )
+            )
+
+        results = await asyncio.gather(*tasks)
+        if ai_client:
+            await ai_client.close()
+        self.summary_cache_repo.save()
+        return results
+
     async def _sync_single_source(
         self,
         source: Any,
@@ -250,27 +281,7 @@ class IndexingService:
             )
             files = io_utils.collect_files_for_source(legacy_source)
 
-            semaphore = asyncio.Semaphore(10)
-            ai_client = (
-                AIClient(api_key=self.settings.openrouter_api_key)
-                if self.settings.plesk_index_summaries
-                else None
-            )
-
-            tasks = []
-            for f in files:
-                if f.name.startswith("_") or f.name == "toc.json":
-                    continue
-                tasks.append(
-                    self._process_single_file(
-                        f, source, toc_map, existing_files, ai_client, semaphore
-                    )
-                )
-
-            results = await asyncio.gather(*tasks)
-            if ai_client:
-                await ai_client.close()
-            self.summary_cache_repo.save()
+            results = await self._run_sync_tasks(source, files, toc_map, existing_files)
 
             active_hashes = await self._handle_indexing_results(
                 results, existing_hashes, source.category.value

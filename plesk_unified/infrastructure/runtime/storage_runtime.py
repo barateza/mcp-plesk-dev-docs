@@ -55,9 +55,7 @@ class StorageRuntime:
                 return table
             return db.open_table("plesk_knowledge")
         except Exception:
-            logger.info(
-                "Table not found or error opening. Creating new 'plesk_knowledge' table."
-            )
+            logger.info("Table not found or error opening. Creating new table.")
             try:
                 db.drop_table("plesk_knowledge")
             except Exception:

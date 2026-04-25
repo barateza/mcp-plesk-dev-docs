@@ -30,7 +30,7 @@ class SearchService:
     def _rerank_and_score(
         self, query: str, candidates: List[dict], reranker: Any
     ) -> List[dict]:
-        """Apply a cross-encoder reranker to *candidates* and store _relevance scores."""
+        """Apply a cross-encoder reranker to candidates and store _relevance scores."""
         if not candidates or reranker is None:
             return candidates
 
@@ -228,8 +228,8 @@ class SearchService:
             )
 
             prompt = (
-                "Synthesize a concise, accurate answer to the following question using the "
-                "provided Plesk documentation chunks.\n"
+                "Synthesize a concise, accurate answer to the following "
+                "question using the provided Plesk documentation chunks.\n"
                 "If the information is not present, say so.\n\n"
                 f"Question: {query}\n\n"
                 f"Context:\n{context_text}"
@@ -292,6 +292,9 @@ class SearchService:
         if self.settings.plesk_enable_sampling and ctx and expanded_results:
             answer = await self._synthesize_answer(ctx, safe_query, expanded_results)
             if answer:
-                return f"### AI-Synthesized Answer\n\n{answer}\n\n---\n\n{formatted_results}"
+                return (
+                    f"### AI-Synthesized Answer\n\n{answer}\n\n---\n\n"
+                    f"{formatted_results}"
+                )
 
         return formatted_results

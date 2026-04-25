@@ -8,7 +8,7 @@ logger = logging.getLogger("plesk_unified")
 
 
 class SummaryCacheRepository:
-    """A persistent repository for AI-generated summaries indexed by file content hash."""
+    """Persistent repository for AI-generated summaries by file hash."""
 
     def __init__(self, cache_path: Path):
         self.cache_path = cache_path

@@ -18,7 +18,7 @@ def maybe_refresh_changed_sources() -> None:
         logger.info("Startup source refresh disabled by env var.")
         return
 
-    from plesk_unified.server import refresh_knowledge
+    from plesk_unified.legacy_server import refresh_knowledge
 
     try:
         logger.info("Running startup source change detection.")
@@ -38,6 +38,6 @@ def maybe_refresh_changed_sources() -> None:
 
 def maybe_start_background_warmup() -> None:
     """Start background warmup if enabled."""
-    from plesk_unified.server import _maybe_start_background_warmup
+    from plesk_unified.legacy_server import _maybe_start_background_warmup
 
     _maybe_start_background_warmup()

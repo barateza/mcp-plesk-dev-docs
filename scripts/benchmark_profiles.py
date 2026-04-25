@@ -167,7 +167,7 @@ def _load_server_for_profile(profile_name: str):
 
     import importlib
 
-    import plesk_unified.server as srv
+    import plesk_unified.legacy_server as srv
 
     importlib.reload(srv)
     return srv

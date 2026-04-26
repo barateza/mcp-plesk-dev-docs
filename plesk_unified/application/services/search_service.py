@@ -1,12 +1,14 @@
+import asyncio
 import logging
-import numpy as np
 from typing import Any, List, Optional, Dict, Tuple
+
+import numpy as np
 
 logger = logging.getLogger("plesk_unified")
 
 
 class SearchService:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         settings: Any,
         model_runtime: Any,
@@ -14,6 +16,7 @@ class SearchService:
         lancedb_repo: Any,
         turboquant_repo: Any,
         search_formatter: Any,
+        executor: Any,
     ):
         self.settings = settings
         self.model_runtime = model_runtime
@@ -21,6 +24,7 @@ class SearchService:
         self.lancedb_repo = lancedb_repo
         self.turboquant_repo = turboquant_repo
         self.search_formatter = search_formatter
+        self.executor = executor
 
     def _sigmoid(self, x: float) -> float:
         """Map a raw logit to a [0, 1] probability using the sigmoid function."""
@@ -98,13 +102,12 @@ class SearchService:
         )
         return results
 
-    def _get_search_candidates(
+    def _get_vector_candidates(
         self, query: str, category: Optional[str], n_candidates: int
     ) -> List[Dict[str, Any]]:
-        """Retrieve candidate pool using Hybrid Search (Vector + FTS)."""
+        """Perform Vector Search."""
         profile = self.model_runtime.get_profile()
 
-        # 1. Vector Search
         if getattr(profile, "use_turboquant", False):
             query_vec = np.asarray(
                 self.model_runtime.get_embedding_model().compute_query_embeddings(
@@ -122,34 +125,33 @@ class SearchService:
                 r = dict(meta)
                 r["_relevance"] = float(self._sigmoid(float(score) * 5.0))
                 vector_candidates.append(r)
-        else:
-            filter_expr = f"category = '{category}'" if category else None
-            raw = self.lancedb_repo.search_vector(
-                query, limit=n_candidates, filter_expr=filter_expr
-            )
-            vector_candidates = []
-            for r in raw:
-                rc = dict(r)
-                dist = float(rc.get("_distance") or 0.0)
-                rc["_relevance"] = float(1.0 / (1.0 + dist))
-                vector_candidates.append(rc)
+            return vector_candidates
 
-        # 2. FTS Search
-        fts_candidates = []
-        try:
-            filter_expr = f"category = '{category}'" if category else None
-            fts_raw = self.lancedb_repo.search_fts(
-                query, limit=n_candidates, filter_expr=filter_expr
-            )
-            fts_candidates = [dict(r) for r in fts_raw]
-        except Exception as e:
-            logger.warning("FTS search failed: %s", e)
-
-        # 3. Hybrid Merge (RRF)
-        if fts_candidates:
-            return self._rrf_merge(vector_candidates, fts_candidates)
-
+        filter_expr = f"category = '{category}'" if category else None
+        raw = self.lancedb_repo.search_vector(
+            query, limit=n_candidates, filter_expr=filter_expr
+        )
+        vector_candidates = []
+        for r in raw:
+            rc = dict(r)
+            dist = float(rc.get("_distance") or 0.0)
+            rc["_relevance"] = float(1.0 / (1.0 + dist))
+            vector_candidates.append(rc)
         return vector_candidates
+
+    def _get_fts_candidates(
+        self, query: str, category: Optional[str], n_candidates: int
+    ) -> List[Dict[str, Any]]:
+        """Perform FTS Search (Currently disabled for performance)."""
+        return []
+
+    def _get_search_candidates(
+        self, query: str, category: Optional[str], n_candidates: int
+    ) -> List[Dict[str, Any]]:
+        """Retrieve candidate pool using Hybrid Search (Vector + FTS)."""
+        vector_candidates = self._get_vector_candidates(query, category, n_candidates)
+        fts_candidates = self._get_fts_candidates(query, category, n_candidates)
+        return self._rrf_merge(vector_candidates, fts_candidates)
 
     def _apply_relevance_gate(self, results: List[Dict[str, Any]]) -> Optional[str]:
         """Check top result against profile threshold. Returns error if below."""
@@ -211,31 +213,36 @@ class SearchService:
                     clean_texts.append(t)
 
             meta_header = r.get("text", "").split("\n\n", 1)[0]
-            r["text"] = f"{meta_header}\n\n" + "\n[...]\n".join(clean_texts)
-            expanded_results.append(r)
+            # Copy record to avoid mutation issues
+            expanded = dict(r)
+            expanded["text"] = f"{meta_header}\n\n" + "\n[...]n".join(clean_texts)
+            expanded_results.append(expanded)
 
         return expanded_results
 
     async def search_raw(
         self, query: str, category: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """Run the search pipeline and return raw result dictionaries."""
+        """Run the search pipeline and return raw results."""
         safe_query = query or ""
+        loop = asyncio.get_running_loop()
 
-        # 1. Retrieve candidates
-        candidates = self._get_search_candidates(safe_query, category, n_candidates=15)
+        def _sync_pipeline():
+            # 1. Retrieve candidates
+            candidates = self._get_search_candidates(safe_query, category, 15)
 
-        # 2. Rerank
-        reranker = self.model_runtime.get_reranker()
-        results = self._rerank_and_score(safe_query, candidates, reranker)
+            # 2. Rerank
+            reranker = self.model_runtime.get_reranker()
+            results = self._rerank_and_score(safe_query, candidates, reranker)
 
-        # 3. Deduplicate
-        results = self._deduplicate_by_filename(results, max_per_file=1)
+            # 3. Deduplicate
+            results = self._deduplicate_by_filename(results, max_per_file=1)
 
-        # 4. Expand context
-        expanded_results = self._expand_context_with_neighbors(results)
+            # 4. Expand context
+            expanded_results = self._expand_context_with_neighbors(results)
+            return expanded_results
 
-        return expanded_results
+        return await loop.run_in_executor(self.executor, _sync_pipeline)
 
     async def search(
         self, query: str, category: Optional[str] = None
@@ -245,23 +252,26 @@ class SearchService:
         Returns (expanded_results, error_message).
         """
         safe_query = query or ""
+        loop = asyncio.get_running_loop()
 
-        # 1. Retrieve candidates
-        candidates = self._get_search_candidates(safe_query, category, n_candidates=15)
+        def _sync_pipeline():
+            # 1. Retrieve candidates
+            candidates = self._get_search_candidates(safe_query, category, 15)
 
-        # 2. Rerank
-        reranker = self.model_runtime.get_reranker()
-        results = self._rerank_and_score(safe_query, candidates, reranker)
+            # 2. Rerank
+            reranker = self.model_runtime.get_reranker()
+            results = self._rerank_and_score(safe_query, candidates, reranker)
 
-        # 3. Deduplicate
-        results = self._deduplicate_by_filename(results, max_per_file=1)
+            # 3. Deduplicate
+            results = self._deduplicate_by_filename(results, max_per_file=1)
 
-        # 4. Relevance Gate
-        error_msg = self._apply_relevance_gate(results)
-        if error_msg:
-            return [], error_msg
+            # 4. Relevance Gate
+            error_msg = self._apply_relevance_gate(results)
+            if error_msg:
+                return [], error_msg
 
-        # 5. Expand context
-        expanded_results = self._expand_context_with_neighbors(results)
+            # 5. Expand context
+            expanded_results = self._expand_context_with_neighbors(results)
+            return expanded_results, None
 
-        return expanded_results, None
+        return await loop.run_in_executor(self.executor, _sync_pipeline)

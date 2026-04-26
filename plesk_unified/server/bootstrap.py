@@ -123,6 +123,7 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         lancedb_repo=lancedb_repo,
         turboquant_repo=turboquant_repo,
         search_formatter=search_formatter,
+        executor=executor,
     )
 
     indexing_service = IndexingService(

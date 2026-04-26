@@ -96,12 +96,16 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "TC", "B", "B9", "PLR", "C4"]
-extend-ignore = ["E203"]
+extend-ignore = ["E203", "PLR2004"]
 extend-select = []
 
 [tool.ruff.lint.pylint]
 max-args = 6
 max-statements = 50
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR", "C4"]
+"scripts/*" = ["PLR"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

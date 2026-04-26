@@ -51,6 +51,11 @@ def search_service_fixture():
     mock_source_catalog = MagicMock(spec=SourceCatalog)
     mock_search_formatter.source_catalog = mock_source_catalog
 
+    mock_executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    mock_executor.submit.side_effect = lambda fn, *args, **kwargs: (
+        make_completed_future(fn(*args, **kwargs))
+    )
+
     search_service = SearchService(
         mock_settings,
         mock_model_runtime,
@@ -58,6 +63,7 @@ def search_service_fixture():
         mock_lancedb_repo,
         mock_turboquant_repo,
         mock_search_formatter,
+        mock_executor,
     )
     return (
         search_service,

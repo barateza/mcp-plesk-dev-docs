@@ -11,7 +11,7 @@ logger = logging.getLogger("plesk_unified")
 
 
 class IndexingService:
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         settings: Any,
         model_runtime: Any,
@@ -372,7 +372,7 @@ class IndexingService:
 
         tasks = []
         for source in self.source_catalog.all():
-            if category == "all" or source.category.value == category:
+            if category in {"all", source.category.value}:
                 tasks.append(self._sync_single_source(source, reset_db, source_entries))
 
         report = []

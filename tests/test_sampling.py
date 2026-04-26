@@ -12,10 +12,10 @@ from plesk_unified.application.services.search_service import SearchService
 from plesk_unified.server.tools.search_tools import search_plesk_unified
 
 
-# Helper to create a completed Future
-def make_completed_future(result_value):
+# Helper to simulate executor submission
+def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
-    f.set_result(result_value)
+    f.set_result(fn(*args, **kwargs))
     return f
 
 
@@ -36,9 +36,9 @@ async def mock_search_sampling_dependencies():
     mock_container.settings.plesk_rerank_candidates = 50
     mock_container.settings.plesk_min_relevance_threshold = None
 
-    # --- Mock executor (needed by SearchService indirectly) ---
+    # --- Mock executor ---
     mock_container.executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
-    mock_container.executor.submit.side_effect = make_completed_future
+    mock_container.executor.submit.side_effect = sync_submit
 
     # --- Mock logger ---
     mock_container.logger = MagicMock()
@@ -60,6 +60,7 @@ async def mock_search_sampling_dependencies():
         lancedb_repo=MagicMock(),
         turboquant_repo=MagicMock(),
         search_formatter=MagicMock(),
+        executor=mock_container.executor,
     )
     # Mock internal methods that perform heavy lifting
     search_service._get_search_candidates = MagicMock()

@@ -16,7 +16,7 @@ except ImportError:
 F = TypeVar("F", bound=Callable[..., Any])
 
 
-def _classify_error(exc: Exception) -> str:
+def _classify_error(exc: Exception) -> str:  # noqa: PLR0911
     """Map known exception types to user-friendly guidance strings."""
     exc_msg = str(exc)
     exc_msg_lower = exc_msg.lower()

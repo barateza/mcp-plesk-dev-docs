@@ -3,7 +3,7 @@
 # ID: 138fd403232d2ddd5efb44317e38bf03
 
 # start templated
-INSTALL_PYTHON=/home/siqueira/mcp-plesk-unified/.venv/bin/python3
+INSTALL_PYTHON=/Users/gilsonsiqueira/mcpServers/mcp-plesk-unified/.venv/bin/python3
 ARGS=(hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit)
 # end templated
 

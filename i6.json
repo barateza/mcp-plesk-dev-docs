@@ -1,0 +1,12 @@
+{
+  "id": "mcp-plesk-unified-7t0",
+  "title": "Switch main.py to boot from mcp_app.py",
+  "spec_id": ".specs/features/enterprise-ai-infrastructure/spec.md",
+  "status": "open",
+  "priority": 2,
+  "issue_type": "task",
+  "owner": "3647085+barateza@users.noreply.github.com",
+  "created_at": "2026-04-25T20:34:40.240944Z",
+  "created_by": "Gilson Siqueira",
+  "updated_at": "2026-04-25T20:34:40.240944Z"
+}

@@ -1,0 +1,12 @@
+{
+  "id": "mcp-plesk-unified-o40",
+  "title": "Implement TOC Resources (plesk://toc/)",
+  "spec_id": ".specs/features/enterprise-ai-infrastructure/spec.md",
+  "status": "open",
+  "priority": 3,
+  "issue_type": "feature",
+  "owner": "3647085+barateza@users.noreply.github.com",
+  "created_at": "2026-04-25T20:34:38.489231Z",
+  "created_by": "Gilson Siqueira",
+  "updated_at": "2026-04-25T20:34:38.489231Z"
+}

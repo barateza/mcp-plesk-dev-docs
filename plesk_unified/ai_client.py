@@ -85,10 +85,7 @@ class AIClient:
                         if res:
                             return res.strip()
 
-                logger.error(
-                    f"Model {model} returned status {response.status_code}: "
-                    f"{response.text[:200]}"
-                )
+                logger.error(f"Model {model} returned status {response.status_code}")
             except Exception as e:
                 logger.error(f"Answer Model {model} failed with exception: {e}")
                 continue
@@ -141,10 +138,7 @@ class AIClient:
                         if res:
                             return res.strip()
 
-                logger.error(
-                    f"Model {model} returned status {response.status_code}: "
-                    f"{response.text[:200]}"
-                )
+                logger.error(f"Model {model} returned status {response.status_code}")
             except Exception as e:
                 logger.error(f"Model {model} failed with exception: {e}")
                 continue
@@ -197,10 +191,7 @@ class AIClient:
                             )
                             return res.strip()
 
-                logger.error(
-                    f"Model {model} returned status {response.status_code}: "
-                    f"{response.text[:200]}"
-                )
+                logger.error(f"Model {model} returned status {response.status_code}")
             except Exception as e:
                 logger.error(f"Model {model} failed with exception: {e}")
                 continue

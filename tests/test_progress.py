@@ -20,13 +20,15 @@ def sync_submit(fn, *args, **kwargs):
 # Fixture to set up a mock AppContainer and AsyncMock ctx for progress testing
 @pytest.fixture
 def mock_ctx_and_container():
-    mock_ctx = AsyncMock(spec=Context)
+    mock_ctx = MagicMock(spec=Context)
+    mock_ctx.report_progress = AsyncMock()
 
     # Mock container and its services
     mock_container = MagicMock()
     mock_container.settings = MagicMock()
     mock_container.warmup_service = MagicMock()
-    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service = MagicMock()
+    mock_container.indexing_service.refresh_knowledge = AsyncMock()
     mock_container.executor = MagicMock()
     mock_container.executor.submit.side_effect = sync_submit
 
@@ -66,5 +68,5 @@ async def test_refresh_knowledge_delegates_to_service(mock_ctx_and_container):
 
     assert result == "Refresh report"
     mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
-        mock_ctx, "api", False
+        progress_callback=mock_ctx.report_progress, category="api", reset_db=False
     )

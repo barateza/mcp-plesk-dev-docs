@@ -42,6 +42,7 @@ def sync_submit(fn, *args, **kwargs):
 async def mock_server_dependencies():
     mock_container = MagicMock(spec=AppContainer)
     mock_ctx = MagicMock(spec=Context)
+    mock_ctx.report_progress = AsyncMock()
 
     # Configure mock_ctx to provide mock_container
     mock_ctx.request_context.lifespan_context = {"container": mock_container}
@@ -101,14 +102,17 @@ async def mock_server_dependencies():
     mock_container.model_runtime.get_profile.return_value = mock_profile
 
     # --- Mock SearchService ---
-    mock_container.search_service = AsyncMock()
-    mock_container.search_service.search.return_value = "Mocked search result."
+    mock_container.search_service = MagicMock()
+    mock_container.search_service.search = AsyncMock()
+    mock_container.search_service.search.return_value = ([], None)
 
     # --- Mock IndexingService ---
-    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service = MagicMock()
+    mock_container.indexing_service.refresh_knowledge = AsyncMock()
     mock_container.indexing_service.refresh_knowledge.return_value = (
         "FTS index rebuilt successfully."
     )
+    mock_container.indexing_service.get_all_available_categories = MagicMock()
     mock_container.indexing_service.get_all_available_categories.return_value = list(
         VALID_CATEGORIES
     )
@@ -248,7 +252,7 @@ async def test_refresh_knowledge_accepts_all_as_category(mock_server_dependencie
     try:
         result = await refresh_knowledge(mock_ctx, category="all")
         mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
-            mock_ctx, "all", False
+            progress_callback=mock_ctx.report_progress, category="all", reset_db=False
         )
         assert "FTS index rebuilt successfully." in result
     except Exception as e:
@@ -264,7 +268,7 @@ async def test_refresh_knowledge_accepts_valid_category_string(
     try:
         result = await refresh_knowledge(mock_ctx, category="guide")
         mock_container.indexing_service.refresh_knowledge.assert_called_once_with(
-            mock_ctx, "guide", False
+            progress_callback=mock_ctx.report_progress, category="guide", reset_db=False
         )
         assert "FTS index rebuilt successfully." in result
     except Exception as e:

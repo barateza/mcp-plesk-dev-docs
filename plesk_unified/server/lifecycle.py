@@ -25,13 +25,13 @@ def maybe_refresh_changed_sources(container: AppContainer) -> None:
             asyncio.get_running_loop()
             asyncio.create_task(
                 container.indexing_service.refresh_knowledge(
-                    None, category="all", reset_db=False
+                    progress_callback=None, category="all", reset_db=False
                 )
             )
         except RuntimeError:
             report = asyncio.run(
                 container.indexing_service.refresh_knowledge(
-                    None, category="all", reset_db=False
+                    progress_callback=None, category="all", reset_db=False
                 )
             )
             logger.info("Startup source refresh report:\n%s", report)

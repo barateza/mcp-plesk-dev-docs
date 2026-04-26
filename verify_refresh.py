@@ -23,7 +23,7 @@ async def run_verify():
 
     # This will use the existing LanceDB and source_state.json
     report = await container.indexing_service.refresh_knowledge(
-        category="all", reset_db=False
+        progress_callback=None, category="all", reset_db=False
     )
     print("Report:")
     print(report)

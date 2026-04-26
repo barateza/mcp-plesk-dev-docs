@@ -2,7 +2,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Set
 
 from bs4 import BeautifulSoup
 from markdownify import markdownify as _md
@@ -10,6 +10,10 @@ from markdownify import markdownify as _md
 from plesk_unified.ai_client import AIClient
 
 logger = logging.getLogger(__name__)
+
+# Constants for cognitive load rules
+MAX_TABLE_ROWS = 10
+MIN_PACKET_LEN = 5
 
 
 def _is_table_complex(table) -> bool:
@@ -21,7 +25,7 @@ def _is_table_complex(table) -> bool:
         return True
 
     rows = table.find_all("tr")
-    if len(rows) > 10:  # Oversized table
+    if len(rows) > MAX_TABLE_ROWS:  # Oversized table
         return True
 
     # Check for multi-level headers (th in non-first row or multiple rows with th)
@@ -46,15 +50,6 @@ def _normalize_table_with_llm(
         f"Table:\n{table_html}"
     )
 
-    # Use evaluate_ragas_score's judge logic OR generate_description's summary logic?
-    # Actually, we want prose, so generate_description (which is just a prompt wrapper)
-    # but with a custom prompt.
-    # Let's use a direct call if we want more control.
-    # For now, I'll use a direct prompt with AIClient.
-
-    # Reusing RAGAS_DEFAULT_MODELS as they are good for instruction following
-    # but we need one sentence summary usually in generate_description.
-    # Here we want a bit more.
     try:
         models = [model] if model else ["google/gemini-2.5-flash-lite"]
         res = ai_client.generate_description(prompt, model_list=models)
@@ -125,26 +120,11 @@ def _replace_tables_with_prose(
         table.replace_with(replacement)
 
 
-def parse_html_file(
-    path: Path, toc_meta: Optional[dict] = None
-) -> Tuple[str, Optional[str], str, Optional[str]]:
-    """Parse an HTML file and return (title, breadcrumb, text, endpoint).
+def extract_api_endpoints(html: str) -> Optional[str]:
+    """Extract API endpoint signatures (REST, XML, CLI) from HTML content."""
+    found_endpoints: Set[str] = set()
 
-    - Removes nav/footer/script/style/aside elements before extracting text.
-    - Prefers <main> or <article> when available.
-    - Converts HTML to Markdown so that code blocks and headings are preserved.
-    - Extracts API endpoint signatures (e.g., GET /path) if present.
-    """
-    path = Path(path)
-    with path.open("r", encoding="utf-8", errors="ignore") as fh:
-        html = fh.read()
-
-    # Task REQ-4: Extract all endpoint signatures, XML packets, and CLI commands.
-    # We do this FIRST before any BeautifulSoup cleaning.
-    found_endpoints = set()
-
-    # 1. REST API patterns (Method followed by optional flags and then path)
-    # This handles both "GET /path" and "curl -X GET ... /api/v2/path"
+    # 1. REST API patterns
     rest_matches = re.findall(
         r"(GET|POST|PUT|DELETE|PATCH).{0,100}?((/api/v2)?/[a-zA-Z0-9\/\-\_{}]+)",
         html,
@@ -152,21 +132,64 @@ def parse_html_file(
     for method, path, _ in rest_matches:
         found_endpoints.add(f"{method} {path}")
 
-    # 2. XML API patterns (Tags ending in _list, _get, _set)
+    # 2. XML API patterns
     xml_matches = re.findall(r"([a-z0-9\_]+(?:_list|_get|_set))", html)
     for packet in xml_matches:
-        if len(packet) > 5:  # avoid tiny noise
+        if len(packet) > MIN_PACKET_LEN:  # avoid tiny noise
             found_endpoints.add(f"XML: {packet}")
 
-    # 3. CLI patterns (plesk [bin] <obj> <cmd>)
+    # 3. CLI patterns
     cli_matches = re.findall(r"plesk\s+(?:bin\s+)?([a-z0-9\_]+)\s+([a-z0-9\_]+)", html)
     for obj, cmd in cli_matches:
         found_endpoints.add(f"CLI: {obj} {cmd}")
 
-    endpoint = ", ".join(sorted(list(found_endpoints))) if found_endpoints else None
+    if not found_endpoints:
+        return None
+
+    return ", ".join(sorted(found_endpoints))
+
+
+def clean_dom_tree(soup: BeautifulSoup) -> BeautifulSoup:
+    """Remove nav, footer, scripts and other noisy elements from the DOM tree."""
+    for sel in soup.select(
+        "nav, footer, script, style, aside, .sidebar, .toc, noscript"
+    ):
+        sel.decompose()
+
+    llm_enabled = os.environ.get("PLESK_HTML_LLM_TABLE_NORMALIZE") == "1"
+    ai_client = AIClient() if llm_enabled else None
+    _replace_tables_with_prose(soup, llm_enabled=llm_enabled, ai_client=ai_client)
+
+    return soup
+
+
+def convert_soup_to_markdown(soup: BeautifulSoup) -> str:
+    """Convert a cleaned BeautifulSoup tree into Markdown text."""
+    main = soup.find("main") or soup.find("article") or soup.body
+    raw_html = str(main) if main else str(soup)
+
+    # Convert to Markdown to preserve code blocks and headings.
+    text = _md(raw_html, heading_style="ATX", strip=["a"])
+
+    # Collapse runs of 3+ blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text
+
+
+def parse_html_file(
+    path: Path, toc_meta: Optional[dict] = None
+) -> Tuple[str, Optional[str], str, Optional[str]]:
+    """Parse an HTML file and return (title, breadcrumb, text, endpoint)."""
+    path = Path(path)
+    with path.open("r", encoding="utf-8", errors="ignore") as fh:
+        html = fh.read()
+
+    # 1. Extraction (Functional Decomposition)
+    endpoint = extract_api_endpoints(html)
 
     soup = BeautifulSoup(html, "html.parser")
 
+    # 2. Title extraction
     title_tag = soup.find("title")
     title = (
         title_tag.get_text(strip=True)
@@ -174,27 +197,11 @@ def parse_html_file(
         else (toc_meta or {}).get("title", "")
     )
 
-    # Remove common noisy elements
-    for sel in soup.select(
-        "nav, footer, script, style, aside, .sidebar, .toc, noscript"
-    ):
-        sel.decompose()
+    # 3. DOM Cleaning
+    soup = clean_dom_tree(soup)
 
-    # Preserve parameter relationships before markdown conversion flattens tables.
-    llm_enabled = os.environ.get("PLESK_HTML_LLM_TABLE_NORMALIZE") == "1"
-    ai_client = AIClient() if llm_enabled else None
-    _replace_tables_with_prose(soup, llm_enabled=llm_enabled, ai_client=ai_client)
-
-    main = soup.find("main") or soup.find("article") or soup.body
-    raw_html = str(main) if main else str(soup)
-
-    # Convert to Markdown to preserve code blocks and headings.
-    # strip=["a"] removes anchor tags but keeps their visible text,
-    # which avoids noisy "[text](url)" patterns in the indexed corpus.
-    text = _md(raw_html, heading_style="ATX", strip=["a"])
-
-    # Collapse runs of 3+ blank lines introduced by some HTML layouts.
-    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    # 4. Conversion
+    text = convert_soup_to_markdown(soup)
 
     breadcrumb = (toc_meta or {}).get("breadcrumb")
 
@@ -202,20 +209,9 @@ def parse_html_file(
 
 
 def clean_html_for_markdown(html: str) -> str:
-    """Return cleaned HTML string suitable for markdown conversion.
-
-    This removes nav/footer/script/style/aside nodes and returns the inner
-    HTML of main/article/body.
-    """
+    """Return cleaned HTML string suitable for markdown conversion."""
     soup = BeautifulSoup(html, "html.parser")
-    for sel in soup.select(
-        "nav, footer, script, style, aside, .sidebar, .toc, noscript"
-    ):
-        sel.decompose()
-
-    llm_enabled = os.environ.get("PLESK_HTML_LLM_TABLE_NORMALIZE") == "1"
-    ai_client = AIClient() if llm_enabled else None
-    _replace_tables_with_prose(soup, llm_enabled=llm_enabled, ai_client=ai_client)
+    soup = clean_dom_tree(soup)
 
     main = soup.find("main") or soup.find("article") or soup.body
     return str(main) if main else str(soup)

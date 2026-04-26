@@ -269,7 +269,9 @@ def run_benchmark(
         dummy_ctx = AsyncMock()  # Create a dummy ctx for refresh_knowledge
         report = asyncio.run(
             container.indexing_service.refresh_knowledge(
-                dummy_ctx, "all", reset_db=True
+                progress_callback=dummy_ctx.report_progress,
+                category="all",
+                reset_db=True,
             )
         )
         print(f"  Refresh complete:\n{report}")

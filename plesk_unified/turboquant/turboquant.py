@@ -6,7 +6,7 @@ import math
 from typing import Optional, Tuple, cast
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from .lloyd_max import LloydMaxCodebook
 

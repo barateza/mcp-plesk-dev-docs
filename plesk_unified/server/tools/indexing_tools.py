@@ -26,29 +26,32 @@ class IndexingTools:
         """Index Plesk documentation (blocking)."""
         cat_str = category.value if isinstance(category, CategoryEnum) else category
         validate_category(cat_str, allow_all=True)
-        return await self.indexing_service.refresh_knowledge(ctx, cat_str, reset_db)
+
+        # Pass progress callback to decouple domain service from Context object
+        return await self.indexing_service.refresh_knowledge(
+            progress_callback=ctx.report_progress, category=cat_str, reset_db=reset_db
+        )
 
     async def trigger_index_sync(
         self,
         ctx: Context,
         category: CategoryOrAll = "all",
         reset_db: bool = False,
-    ) -> Dict[str, str]:
-        """Trigger async re-indexing of Plesk documentation."""
+    ) -> Dict[str, Any]:
+        """Trigger a background sync job."""
         cat_str = category.value if isinstance(category, CategoryEnum) else category
         validate_category(cat_str, allow_all=True)
 
-        def job_wrapper(cat: CategoryOrAll, reset: bool) -> str:
-            # Run the async refresh in a new event loop within the background thread
-            cat_str = cat.value if isinstance(cat, CategoryEnum) else cat
-            res = asyncio.run(
-                self.indexing_service.refresh_knowledge(None, cat_str, reset)
+        def job_wrapper(target_cat: str, target_reset: bool):
+            # Background jobs don't have a UI Context for reporting progress.
+            # We use a new event loop in the background thread.
+            return asyncio.run(
+                self.indexing_service.refresh_knowledge(
+                    progress_callback=None, category=target_cat, reset_db=target_reset
+                )
             )
-            if isinstance(res, str) and res.startswith("[ERROR]"):
-                raise RuntimeError(res)
-            return res
 
-        job_id = self.job_registry.submit_job(job_wrapper, category, reset_db)
+        job_id = self.job_registry.submit_job(job_wrapper, cat_str, reset_db)
         return {"job_id": job_id, "status": "queued"}
 
     async def check_sync_status(self, job_id: str) -> Dict[str, Any]:
@@ -57,7 +60,8 @@ class IndexingTools:
 
     async def requantize_knowledge(self) -> str:
         """Rebuild the TurboQuant index from stored vectors."""
-        return await self.indexing_service._rebuild_indices(None)
+        # Domain service rebuilding indices without progress reporting
+        return await self.indexing_service._rebuild_indices(progress_callback=None)
 
 
 @tool_error_boundary
@@ -83,8 +87,12 @@ async def trigger_index_sync(
     ctx: Context,
     category: CategoryOrAll = "all",
     reset_db: bool = False,
-) -> Dict[str, str]:
-    """Trigger async re-indexing of Plesk documentation. Returns job_id immediately."""
+) -> Dict[str, Any]:
+    """
+    Trigger a background indexing job for Plesk documentation.
+
+    Returns a job_id that can be used with `check_sync_status`.
+    """
     container = ctx.request_context.lifespan_context["container"]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.trigger_index_sync(ctx, category, reset_db)
@@ -92,7 +100,9 @@ async def trigger_index_sync(
 
 @tool_error_boundary
 async def check_sync_status(ctx: Context, job_id: str) -> Dict[str, Any]:
-    """Check the status of a background indexing job."""
+    """
+    Check the status of a background indexing job.
+    """
     container = ctx.request_context.lifespan_context["container"]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.check_sync_status(job_id)
@@ -101,7 +111,7 @@ async def check_sync_status(ctx: Context, job_id: str) -> Dict[str, Any]:
 @tool_error_boundary
 async def requantize_knowledge(ctx: Context) -> str:
     """
-    Rebuild the TurboQuant index from already-stored LanceDB vectors.
+    Rebuild the TurboQuant index from stored vectors.
     """
     container = ctx.request_context.lifespan_context["container"]
     tools = IndexingTools(container.indexing_service, container.job_service)

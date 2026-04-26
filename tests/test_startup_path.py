@@ -22,11 +22,13 @@ def sync_submit(fn, *args, **kwargs):
 
 @pytest.fixture
 def mock_ctx_and_container():
-    mock_ctx = AsyncMock(spec=Context)
+    mock_ctx = MagicMock(spec=Context)
+    mock_ctx.report_progress = AsyncMock()
     mock_container = MagicMock()
     mock_container.settings = MagicMock()
     mock_container.warmup_service = MagicMock()
-    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service = MagicMock()
+    mock_container.indexing_service.refresh_knowledge = AsyncMock()
     mock_container.health_service = MagicMock()
     mock_container.executor = MagicMock()
     mock_container.executor.submit.side_effect = sync_submit

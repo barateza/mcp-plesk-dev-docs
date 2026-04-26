@@ -42,7 +42,9 @@ async def mock_all_ml_and_io_calls():
     This fixture provides a mock Context and AppContainer.
     """
     mock_container = MagicMock(spec=AppContainer)
-    mock_ctx = AsyncMock(spec=Context)
+    mock_ctx = MagicMock(spec=Context)
+    mock_ctx.sample = AsyncMock()
+    mock_ctx.report_progress = AsyncMock()
 
     # Configure mock_ctx to provide mock_container
     mock_ctx.request_context.lifespan_context = {"container": mock_container}
@@ -123,13 +125,20 @@ async def mock_all_ml_and_io_calls():
     )  # Assume reranker is always present
 
     # --- Mock SearchService ---
-    mock_container.search_service = AsyncMock()
+    mock_container.search_service = MagicMock()
+    mock_container.search_service.search = AsyncMock()
+    mock_container.search_service.search_formatter = MagicMock()
+    mock_container.search_service.search_formatter.format_markdown.side_effect = (
+        lambda x: f"Formatted: {x[0]['text']}" if x else ""
+    )
     mock_container.search_service.search.return_value = (
-        "Search result from mocked service."
+        [{"text": "Search result from mocked service.", "filename": "doc.htm"}],
+        None,
     )
 
     # --- Mock IndexingService ---
-    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service = MagicMock()
+    mock_container.indexing_service.refresh_knowledge = AsyncMock()
     # refresh_knowledge result for "cli" should return SKIPPED
     mock_container.indexing_service.refresh_knowledge.return_value = "SKIPPED cli"
 
@@ -195,10 +204,21 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
     via asyncio.gather complete without deadlock.
     """
     mock_ctx = mock_all_ml_and_io_calls
-    # Ensure SearchService mock is configured to return some data for search
-    mock_ctx.request_context.lifespan_context[
+    # Use SearchService mock from fixture
+    search_service_mock = mock_ctx.request_context.lifespan_context[
         "container"
-    ].search_service.search.return_value = "Search result from mocked service."
+    ].search_service
+    search_service_mock.search.return_value = (
+        [
+            {
+                "filename": "doc.htm",
+                "text": "result content",
+                "category": "guide",
+                "_relevance": 0.9,
+            }
+        ],
+        None,
+    )
     # Indexing service already configured to return "SKIPPED cli"
 
     async def mock_search_task():
@@ -220,19 +240,17 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
         assert isinstance(results[1], str)
         assert isinstance(results[2], str)
 
-        assert "Search result from mocked service." in results[0]
-        assert (
-            "SKIPPED cli" in results[1]
-        )  # From mock_container.indexing_service.refresh_knowledge.return_value
-        assert "Search result from mocked service." in results[2]
+        assert "result content" in results[0]
+        assert "SKIPPED cli" in results[1]
+        assert "result content" in results[2]
 
         # Verify that underlying services were called
+        search_service_mock.search.assert_called()
         mock_ctx.request_context.lifespan_context[
             "container"
-        ].search_service.search.assert_called()
-        mock_ctx.request_context.lifespan_context[
-            "container"
-        ].indexing_service.refresh_knowledge.assert_called_with(mock_ctx, "cli", False)
+        ].indexing_service.refresh_knowledge.assert_called_with(
+            progress_callback=mock_ctx.report_progress, category="cli", reset_db=False
+        )
 
     except Exception as e:
         pytest.fail(f"Concurrent calls failed or deadlocked: {e}")

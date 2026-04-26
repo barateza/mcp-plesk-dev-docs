@@ -75,13 +75,16 @@ async def mock_indexing_dependencies(job_registry_instance):
     mock_container.model_runtime.get_profile.return_value = mock_profile
 
     # --- Mock IndexingService ---
-    mock_container.indexing_service = AsyncMock()
+    mock_container.indexing_service = MagicMock()
+    mock_container.indexing_service.refresh_knowledge = AsyncMock()
     mock_container.indexing_service.refresh_knowledge.return_value = (
         "Mock refresh completed successfully."
     )
+    mock_container.indexing_service.process_source_files = MagicMock()
     mock_container.indexing_service.process_source_files.return_value = (
         set()
     )  # For trigger_index_sync
+    mock_container.indexing_service.persist_batch = AsyncMock()
     mock_container.indexing_service.persist_batch.return_value = None
     mock_container.indexing_service.create_fts_index.return_value = None
     mock_container.indexing_service.delete_source.return_value = None

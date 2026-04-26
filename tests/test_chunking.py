@@ -48,7 +48,7 @@ def test_build_doc_records_with_summary_and_endpoint():
 
 
 def test_chunk_hash_changes_with_version(monkeypatch):
-    import plesk_unified.chunking as chunking
+    from plesk_unified import chunking
 
     chunks = ["content"]
     meta = {"title": "T", "category": "cat", "breadcrumb": "B"}

@@ -1,3 +1,4 @@
+# ruff: noqa
 """Lloyd-Max scalar quantizer for rotated unit vectors.
 
 The coordinate distribution is approximately Beta-shaped on [-1, 1] after

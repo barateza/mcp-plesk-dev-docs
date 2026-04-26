@@ -22,9 +22,9 @@ def make_completed_future(result_value):
 @pytest.fixture
 async def mock_search_sampling_dependencies():
     mock_container = MagicMock(spec=AppContainer)
-    mock_ctx = AsyncMock(
-        spec=Context
-    )  # Use AsyncMock for ctx since it has async methods like .sample
+    mock_ctx = MagicMock(spec=Context)
+    mock_ctx.sample = AsyncMock()
+    mock_ctx.report_progress = AsyncMock()
 
     # Configure mock_ctx to provide mock_container
     mock_ctx.request_context.lifespan_context = {"container": mock_container}

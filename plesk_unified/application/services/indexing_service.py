@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, List, Set, Optional, Dict
+from typing import Any, List, Set, Optional, Dict, Callable
 from pathlib import Path
 
 from plesk_unified import io_utils, chunking
@@ -35,16 +35,20 @@ class IndexingService:
         self.source_catalog = source_catalog
         self.executor = executor
 
-    async def _report_progress(self, ctx: Any, current: int, total: int = 4) -> None:
-        if not ctx or not hasattr(ctx, "report_progress"):
+    async def _call_progress(
+        self,
+        progress_callback: Optional[Callable[[int, int], Any]],
+        current: int,
+        total: int = 4,
+    ) -> None:
+        if not progress_callback:
             return
         try:
-            if asyncio.iscoroutinefunction(ctx.report_progress):
-                await ctx.report_progress(current, total)
-            else:
-                ctx.report_progress(current, total)
+            res = progress_callback(current, total)
+            if asyncio.iscoroutine(res):
+                await res
         except Exception as e:
-            logger.debug("Failed to report progress: %s", e)
+            logger.debug("Progress callback failed: %s", e)
 
     async def _get_summary(
         self,
@@ -82,9 +86,7 @@ class IndexingService:
     ) -> List[Dict[str, Any]]:
         """Process a single file and return records or existing hashes."""
         if f.name in existing_files:
-            # If file already exists, we return its hashes to mark them as active
-            # This is a bit inefficient (fetching from DB for every file),
-            # but matches legacy behavior.
+
             def _fetch_hashes():
                 table = self.lancedb_repo.get_table()
                 rows = (
@@ -112,7 +114,6 @@ class IndexingService:
         if not parsed_doc:
             return []
 
-        # Apply TOC meta if available
         if toc_map and f.name in toc_map:
             meta = toc_map[f.name]
             parsed_doc.title = meta.get("title", parsed_doc.title)
@@ -217,7 +218,6 @@ class IndexingService:
         source_entries: Dict[str, Any],
     ) -> str:
         logger.info("Processing source: %s", source.category.value)
-        # We need to adapt the source definition back to dict for io_utils for now
         legacy_source = {
             "path": source.path,
             "cat": source.category.value,
@@ -314,7 +314,9 @@ class IndexingService:
 
         return f"Finished pass for {source.category.value}."
 
-    async def _rebuild_indices(self, ctx: Any) -> List[str]:
+    async def _rebuild_indices(
+        self, progress_callback: Optional[Callable[[int, int], Any]] = None
+    ) -> List[str]:
         loop = asyncio.get_running_loop()
         report = []
 
@@ -331,7 +333,7 @@ class IndexingService:
             logger.exception("Failed to rebuild FTS index.")
             report.append("ERROR rebuilding FTS index.")
 
-        await self._report_progress(ctx, 3, 4)
+        await self._call_progress(progress_callback, 3, 4)
 
         profile = self.model_runtime.get_profile()
         if getattr(profile, "use_turboquant", False):
@@ -347,12 +349,14 @@ class IndexingService:
         return report
 
     async def refresh_knowledge(
-        self, ctx: Any = None, category: str = "all", reset_db: bool = False
+        self,
+        progress_callback: Optional[Callable[[int, int], Any]] = None,
+        category: str = "all",
+        reset_db: bool = False,
     ) -> str:
         """The main knowledge refresh pipeline."""
-        await self._report_progress(ctx, 1, 4)
+        await self._call_progress(progress_callback, 1, 4)
 
-        # Validation should be done before calling this service or here
         logger.info(
             "Starting refresh_knowledge: target=%s, reset_db=%s",
             category,
@@ -376,13 +380,13 @@ class IndexingService:
             results = await asyncio.gather(*tasks)
             report.extend(results)
 
-        await self._report_progress(ctx, 2, 4)
+        await self._call_progress(progress_callback, 2, 4)
 
         self.source_state_repo.save(source_state)
 
-        index_report = await self._rebuild_indices(ctx)
+        index_report = await self._rebuild_indices(progress_callback)
         report.extend(index_report)
 
-        await self._report_progress(ctx, 4, 4)
+        await self._call_progress(progress_callback, 4, 4)
 
         return "\n".join(report)

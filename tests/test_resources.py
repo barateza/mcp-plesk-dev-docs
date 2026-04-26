@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from plesk_unified.server.mcp_app import create_mcp_app
 from plesk_unified.application.services.container import AppContainer
 from plesk_unified.server.resources import get_toc_resource
@@ -31,7 +31,7 @@ async def test_toc_resources_registered(mcp_app):
 @pytest.mark.asyncio
 async def test_toc_resource_calls_formatter(mock_app_container):
     """Verify get_toc_resource calls toc_formatter.to_json."""
-    mock_ctx = AsyncMock()
+    mock_ctx = MagicMock()
     mock_ctx.request_context.lifespan_context = {"container": mock_app_container}
 
     mock_app_container.toc_formatter.to_json.return_value = '{"toc": []}'
@@ -45,7 +45,7 @@ async def test_toc_resource_calls_formatter(mock_app_container):
 @pytest.mark.asyncio
 async def test_toc_resource_invalid_category(mock_app_container):
     """Verify TOC helper handles unknown categories gracefully."""
-    mock_ctx = AsyncMock()
+    mock_ctx = MagicMock()
     mock_ctx.request_context.lifespan_context = {"container": mock_app_container}
 
     # toc_formatter.to_json might raise ValueError for invalid category

@@ -2,13 +2,12 @@
 Unit tests for search-pipeline helper functions.
 """
 
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 import pytest
 import concurrent.futures
 from pathlib import Path
 
 # New imports
-from fastmcp import Context
 from plesk_unified.settings import PleskSettings as Settings
 from plesk_unified.application.services.search_service import SearchService
 from plesk_unified.config.sources import SourceCatalog
@@ -306,7 +305,6 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
         mock_lancedb_repo,
         mock_search_formatter,
     ) = search_service_fixture
-    mock_ctx = AsyncMock(spec=Context)
 
     class DummyProfile:
         name = "medium"
@@ -318,7 +316,7 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
     mock_settings.plesk_min_relevance_threshold = 0.55
 
     # Mock _get_search_candidates to return a low-relevance result
-    search_service._get_search_candidates = AsyncMock(
+    search_service._get_search_candidates = MagicMock(
         return_value=[
             {
                 "title": "Weak Result",
@@ -348,10 +346,10 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
         side_effect=lambda x, *args, **kwargs: x
     )
     search_service._expand_context_with_neighbors = MagicMock(side_effect=lambda x: x)
-    search_service._synthesize_answer = AsyncMock(return_value=None)
 
-    result = await search_service.search(mock_ctx, "query")
-    assert result == "I could not find a reliable answer."
+    results, error_msg = await search_service.search("query")
+    assert error_msg == "I could not find a reliable answer."
+    assert results == []
     search_service._get_search_candidates.assert_called_once()
     search_service._rerank_and_score.assert_called_once()
     search_service._deduplicate_by_filename.assert_called_once()
@@ -367,7 +365,6 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
         mock_lancedb_repo,
         mock_search_formatter,
     ) = search_service_fixture
-    mock_ctx = AsyncMock(spec=Context)
 
     class DummyProfile:
         name = "medium"
@@ -379,7 +376,7 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
     mock_settings.plesk_min_relevance_threshold = 0.55
 
     # Mock _get_search_candidates to return a high-relevance result
-    search_service._get_search_candidates = AsyncMock(
+    search_service._get_search_candidates = MagicMock(
         return_value=[
             {
                 "title": "Strong Result",
@@ -409,11 +406,12 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
         side_effect=lambda x, *args, **kwargs: x
     )
     search_service._expand_context_with_neighbors = MagicMock(side_effect=lambda x: x)
-    search_service._synthesize_answer = AsyncMock(return_value=None)
 
-    result = await search_service.search(mock_ctx, "query")
-    assert result == "Formatted results."  # Expect formatted output
+    results, error_msg = await search_service.search("query")
+    assert error_msg is None
+    assert len(results) == 1
+    assert results[0]["title"] == "Strong Result"
+
     search_service._get_search_candidates.assert_called_once()
     search_service._rerank_and_score.assert_called_once()
     search_service._deduplicate_by_filename.assert_called_once()
-    mock_search_formatter.format_markdown.assert_called_once()

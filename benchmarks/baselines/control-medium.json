@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "created_at": "2026-04-24T20:00:54.034543+00:00",
+  "created_at": "2026-04-26T00:54:17.763558+00:00",
   "runs": [
     {
       "suite": "control",
@@ -8,9 +8,9 @@
       "engine": "baseline",
       "routing_policy": "baseline-only",
       "n_runs": 1,
-      "hit_rate": 1.0,
+      "hit_rate": 0.95,
       "mrr": 0.95,
-      "avg_latency_s": 2.2156794771479325
+      "avg_latency_s": 2.698395760540734
     }
   ]
 }

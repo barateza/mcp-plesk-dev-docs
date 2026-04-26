@@ -354,11 +354,21 @@ def run_benchmark(
             )
         ragas_metrics.append(current_ragas)
 
+        top_score = (
+            final_search_results[0].get("_relevance", 0.0)
+            if final_search_results
+            else 0.0
+        )
         query_meta.append(
             {
+                "query": q["query"],
+                "hit": rank is not None,
+                "rr": rr_val,
+                "score": top_score,
+                "latency_s": latency,
                 "bucket": bucket,
                 "selected_engine": sel_engine,
-                "selected_pilot_config": sel_pilot.name if sel_pilot else None,
+                "selected_pilot_config": sel_pilot.name if sel_pilot else "base",
                 "routing_reason": reason,
             }
         )

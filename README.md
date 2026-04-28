@@ -126,7 +126,9 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 
 ## Key Features
 
-- **Hybrid Search (Vector + FTS):** Combines semantic ANN search with Full-Text Search (BM25/Tantivy) using Reciprocal Rank Fusion (RRF).
+- **Hybrid Search (Vector + FTS):** Combines semantic ANN search with
+    Full-Text Search (BM25/Tantivy) using Reciprocal Rank Fusion (RRF).
+    Set `PLESK_ENABLE_FTS=false` to disable FTS candidates.
 - **AI-Synthesized Answers:** Automatically generates a concise answer from the top search results using LLM sampling (requires `PLESK_ENABLE_SAMPLING=true`).
 - **Document-aware Chunking:** HTML guides use sentence-window sliding; PHP stubs and JS SDK files use hierarchical declaration boundaries.
 - **Table-to-Prose Normalization:** Converts complex HTML tables into descriptive prose before embedding to preserve semantics.

@@ -1,6 +1,6 @@
 # Roadmap — Enterprise AI Infrastructure Uplift
 
-**Current Milestone:** M1 — Foundation & Protocol Contracts
+**Current Milestone:** M7 — SOTA Retrieval Roadmap (Phase 1)
 **Status:** Planning
 
 ---
@@ -190,6 +190,29 @@
 
 **Hierarchical Code Chunking** — COMPLETED
 - Implement structural chunkers for PHP and JS that respect class and method boundaries.
+
+---
+
+## M7 — SOTA Retrieval Roadmap (Phase 1 and Phase 2)
+
+**Goal:** Deliver Phase 1 retrieval upgrades and document Phase 2 SOTA work
+without expanding default dependencies.
+
+### Phase 1 features
+
+- Re-enable FTS candidates with RRF hybrid merging.
+- Add AST-based chunking for PHP and JS with fallbacks.
+- Add MCP tools: get_file_content and resolve_references.
+- Require inline citations for synthesized answers and enable streaming when
+  supported.
+
+### Phase 2 features (documented, deferred)
+
+- Late interaction retrieval fused with vector and FTS results.
+- Query rewriting and HyDE pre-retrieval synthesis.
+- GraphRAG relation extraction and traversal fusion.
+- Semantic HTML chunking based on embedding similarity.
+- VLM-based diagram and image captioning.
 
 ---
 

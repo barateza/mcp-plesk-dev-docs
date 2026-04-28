@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Any, List, Optional, Dict, Tuple
 
 import numpy as np
@@ -142,8 +143,31 @@ class SearchService:
     def _get_fts_candidates(
         self, query: str, category: Optional[str], n_candidates: int
     ) -> List[Dict[str, Any]]:
-        """Perform FTS Search (Currently disabled for performance)."""
-        return []
+        """Perform FTS search when enabled, otherwise return empty list."""
+        enable_fts = getattr(self.settings, "plesk_enable_fts", True)
+        if not enable_fts:
+            return []
+
+        safe_query = (query or "").strip()
+        if not safe_query:
+            return []
+
+        filter_expr = f"category = '{category}'" if category else None
+        start = time.monotonic()
+        try:
+            raw = self.lancedb_repo.search_fts(
+                safe_query, limit=n_candidates, filter_expr=filter_expr
+            )
+        except Exception:
+            logger.warning(
+                "FTS search failed; falling back to vector only.", exc_info=True
+            )
+            return []
+        finally:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            logger.debug("FTS search latency: %.2f ms", elapsed_ms)
+
+        return [dict(r) for r in raw]
 
     def _get_search_candidates(
         self, query: str, category: Optional[str], n_candidates: int

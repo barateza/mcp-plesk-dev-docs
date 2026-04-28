@@ -1,14 +1,14 @@
 # Project State — Enterprise AI Infrastructure Uplift
 
-**Last Updated:** 2026-04-21
-**Session:** Linting compliance and structural decomposition
-**Status:** In-progress; Phase 6 complete; linting & pre-commit active.
+**Last Updated:** 2026-04-28
+**Session:** SOTA retrieval roadmap documentation
+**Status:** In-progress; Phase 6 complete; Phase 7 planning active.
 
 ---
 
 ## Current Focus
 
-Milestone M6 — Retrieval Quality Optimization (Tasks A-F)
+Milestone M7 — SOTA Retrieval Roadmap (Phase 1)
 
 ---
 
@@ -25,6 +25,7 @@ Milestone M6 — Retrieval Quality Optimization (Tasks A-F)
 | D7 | Decouple benchmark data from code into JSON suites | Hardcoded dictionaries in `benchmark_suites.py` were becoming unmaintainable and violating line length rules. | 2026-04-21 |
 | D8 | Decompose `server.py` god functions to helpers | Reducing cyclomatic complexity in `_infer_doctype`, `refresh_knowledge`, and `search_plesk_unified` to satisfy engineering standards. | 2026-04-21 |
 | D9 | Enforce Ruff C901 (Complexity) and activate pre-commit | Ensures long-term maintainability by preventing "god functions" from re-emerging; pre-commit prevents CI regressions. | 2026-04-21 |
+| D10 | Split SOTA retrieval roadmap into Phase 1 and Phase 2 | Phase 1 ships near-term retrieval upgrades, while Phase 2 documents heavier SOTA items behind optional dependencies. | 2026-04-28 |
 
 ---
 
@@ -36,7 +37,8 @@ _None currently._
 
 ## Preferences
 
-_No model guidance tips have been shown yet._
+- Model guidance: lightweight documentation updates can use a faster, lower-cost
+  model (shared 2026-04-28).
 
 ---
 
@@ -60,3 +62,5 @@ _No model guidance tips have been shown yet._
 - The `.specs/features/enterprise-ai-infrastructure/` feature folder covers all 20 features across 10 pillars as a single coordinated uplift
 - Individual milestones (M1–M5) map to natural implementation phases; each milestone is independently shippable
 - M6 has been added as a high-priority optimization path based on RAGAS results.
+- The SOTA retrieval roadmap lives in
+  `.specs/features/sota-retrieval-roadmap/`.

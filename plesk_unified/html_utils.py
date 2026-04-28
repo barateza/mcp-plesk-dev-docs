@@ -176,10 +176,10 @@ def convert_soup_to_markdown(soup: BeautifulSoup) -> str:
     return text
 
 
-def parse_html_file(
+def parse_html(
     path: Path, toc_meta: Optional[dict] = None
-) -> Tuple[str, Optional[str], str, Optional[str]]:
-    """Parse an HTML file and return (title, breadcrumb, text, endpoint)."""
+) -> Tuple[str, str, Optional[str], str, Optional[str]]:
+    """Parse an HTML file and return (filename, title, breadcrumb, text, endpoint)."""
     path = Path(path)
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         html = fh.read()
@@ -205,7 +205,7 @@ def parse_html_file(
 
     breadcrumb = (toc_meta or {}).get("breadcrumb")
 
-    return title, breadcrumb, text, endpoint
+    return path.name, title, breadcrumb, text, endpoint
 
 
 def clean_html_for_markdown(html: str) -> str:

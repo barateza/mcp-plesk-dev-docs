@@ -42,10 +42,14 @@ class SourceProcessor(Protocol):
 class HtmlSourceProcessor:
     def parse(self, file_path: Path) -> Optional[ParsedDocument]:
         try:
-            filename, title, breadcrumb, text = html_utils.parse_html(file_path)
+            filename, title, breadcrumb, text, endpoint = html_utils.parse_html(
+                file_path
+            )
             if not filename or not text:
                 return None
-            return ParsedDocument(filename, title or "", breadcrumb or "", text)
+            return ParsedDocument(
+                filename, title or "", breadcrumb or "", text, endpoint
+            )
         except Exception:
             logger.warning("Error parsing HTML file: %s", file_path.name, exc_info=True)
             return None

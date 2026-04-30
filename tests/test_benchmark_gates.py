@@ -13,7 +13,7 @@ from plesk_unified.benchmark_gates import (
 def _run(
     *,
     suite="control",
-    profile="medium",
+    profile="pro",
     engine="baseline",
     routing_policy="baseline-only",
     hit_rate=1.0,
@@ -44,13 +44,13 @@ def test_aggregate_runs_averages_repeats():
 
 def test_write_and_load_baseline_roundtrip(tmp_path: Path):
     target = tmp_path / "baseline.json"
-    runs = [_run(), _run(profile="light", mrr=0.9)]
+    runs = [_run(), _run(profile="local", mrr=0.9)]
     write_baseline(str(target), runs)
 
     loaded = load_baseline(str(target))
     assert len(loaded) == 2
     profiles = {r["profile"] for r in loaded}
-    assert profiles == {"medium", "light"}
+    assert profiles == {"pro", "local"}
 
 
 def test_quality_gate_passes_when_within_limits(tmp_path: Path):

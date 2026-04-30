@@ -51,12 +51,17 @@ class ModelRuntime:
             # Attempt 1: Optimal device
             try:
                 self._embedding_model = reg.create(
-                    name=profile.embed_model, device=device
+                    name=profile.embed_model,
+                    device=device,
+                    batch_size=16,
+                    trust_remote_code=True,
                 )
             except TypeError:
                 # Fallback for older lancedb versions
                 logger.debug("Device argument rejected, retrying without device kwarg.")
-                self._embedding_model = reg.create(name=profile.embed_model)
+                self._embedding_model = reg.create(
+                    name=profile.embed_model, trust_remote_code=True
+                )
 
             logger.info(
                 "Embedding model initialized successfully in %.2fs.",
@@ -68,7 +73,7 @@ class ModelRuntime:
                 platform_utils.log_hardware_degradation(device, e, "cpu")
                 try:
                     self._embedding_model = reg.create(
-                        name=profile.embed_model, device="cpu"
+                        name=profile.embed_model, device="cpu", trust_remote_code=True
                     )
                     logger.info("Embedding model initialized on CPU successfully.")
                 except Exception as e2:

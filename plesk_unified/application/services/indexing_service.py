@@ -147,7 +147,14 @@ class IndexingService:
     ) -> Set[str]:
         pending_docs = []
         active_hashes = set()
-        BATCH_SIZE_CHUNKS = 1000
+
+        device = self.model_runtime.detect_device()
+        default_batch = 500
+        BATCH_SIZE_CHUNKS = self.settings.plesk_indexing_batch_size or default_batch
+
+        logger.info(
+            "Using BATCH_SIZE_CHUNKS=%d for device '%s'", BATCH_SIZE_CHUNKS, device
+        )
 
         for result in results:
             if not result:
@@ -370,15 +377,11 @@ class IndexingService:
             self.storage_runtime.get_table(create_new=True)
             logger.warning("Database wiped by request.")
 
-        tasks = []
+        report = []
         for source in self.source_catalog.all():
             if category in {"all", source.category.value}:
-                tasks.append(self._sync_single_source(source, reset_db, source_entries))
-
-        report = []
-        if tasks:
-            results = await asyncio.gather(*tasks)
-            report.extend(results)
+                res = await self._sync_single_source(source, reset_db, source_entries)
+                report.append(res)
 
         await self._call_progress(progress_callback, 2, 4)
 

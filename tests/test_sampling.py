@@ -31,7 +31,7 @@ async def mock_search_sampling_dependencies():
 
     # --- Mock settings ---
     mock_container.settings = MagicMock(spec=Settings)
-    mock_container.settings.plesk_model_profile = "full-tq"
+    mock_container.settings.plesk_model_profile = "pro"
     mock_container.settings.plesk_enable_sampling = False  # Default to disabled
     mock_container.settings.plesk_rerank_candidates = 50
     mock_container.settings.plesk_min_relevance_threshold = None
@@ -46,7 +46,7 @@ async def mock_search_sampling_dependencies():
     # --- Mock ModelRuntime ---
     mock_container.model_runtime = MagicMock()
     mock_profile = MagicMock()
-    mock_profile.name = "full-tq"
+    mock_profile.name = "pro"
     mock_profile.use_turboquant = False
     mock_profile.tq_top_k = 25
     mock_container.model_runtime.get_profile.return_value = mock_profile

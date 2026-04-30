@@ -2,9 +2,9 @@
 
 ## RAG Indexing & Development
 
-1.  **Prefer the `medium` profile during feature development.**
-    *   `PLESK_MODEL_PROFILE=medium`
-    *   It is ~3x faster to index than `full` and offers superior MRR for the Plesk English corpus.
+1.  **Prefer the `pro` profile during feature development.**
+    *   `PLESK_MODEL_PROFILE=pro`
+    *   It offers state-of-the-art MRR for the Plesk English corpus with a moderate memory footprint.
     *   This preserves your context window and local iteration time.
 
 2.  **Use `reset_db=False` (Incremental Refresh) by default.**

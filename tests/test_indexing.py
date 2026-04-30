@@ -42,7 +42,7 @@ async def mock_indexing_dependencies(job_registry_instance):
 
     # --- Mock settings ---
     mock_container.settings = MagicMock(spec=Settings)
-    mock_container.settings.plesk_model_profile = "full-tq"
+    mock_container.settings.plesk_model_profile = "pro"
 
     # --- Mock executor ---
     mock_container.executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
@@ -70,7 +70,7 @@ async def mock_indexing_dependencies(job_registry_instance):
     # --- Mock ModelRuntime ---
     mock_container.model_runtime = MagicMock()
     mock_profile = MagicMock()
-    mock_profile.name = "full-tq"
+    mock_profile.name = "pro"
     mock_profile.use_turboquant = False
     mock_container.model_runtime.get_profile.return_value = mock_profile
 

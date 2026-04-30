@@ -24,11 +24,11 @@ Following an architectural review of the project's corpus (~2,200 chunks, ~6.8 M
 
 |Profile|Embed model|Dim|HR@5|MRR@5|Faith|Recall|Prec|Latency|Est. RAM|
 |--------|------------|---|----|-----|-----|------|----|----------|--------|
-|`local`|arctic-embed-s|384|*TBD*|*TBD*|*TBD*|*TBD*|*TBD*|~1.1s|~130 MB|
-|`pro`|modernbert-base|768|*TBD*|*TBD*|*TBD*|*TBD*|*TBD*|~1.3s|~500 MB|
+|`local`|arctic-embed-s|384|90.0%|0.850|*TBD*|*TBD*|*TBD*|~1.1s|~130 MB|
+|`pro`|arctic-embed-m|768|85.0%|0.767|*TBD*|*TBD*|*TBD*|~1.3s|~500 MB|
 |`sandbox`|gte-large-v1.5|1024|*TBD*|*TBD*|*TBD*|*TBD*|*TBD*|~0.5s|~1.3 GB|
 
-*Note: Baselines currently being re-captured following profile consolidation.*
+*Note: RAGAS metrics (Faith/Recall/Prec) are pending next evaluation run.*
 
 ---
 
@@ -101,4 +101,8 @@ $BP --suite control --profile pro --engine baseline --capture-baseline --baselin
 
 # Evaluate (Fail on Gate)
 $BP --suite control --profile pro --engine baseline --baseline-file benchmarks/baselines/control-pro.json --gate-config benchmarks/gates/default.json --fail-on-gate
+```
+nfig benchmarks/gates/default.json --fail-on-gate
+```
+
 ```

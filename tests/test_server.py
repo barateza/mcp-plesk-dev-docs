@@ -49,7 +49,7 @@ async def mock_server_dependencies():
 
     # --- Mock settings ---
     mock_container.settings = MagicMock(spec=Settings)
-    mock_container.settings.plesk_model_profile = "full-tq"
+    mock_container.settings.plesk_model_profile = "pro"
     mock_container.settings.plesk_enable_sampling = False
     mock_container.settings.plesk_rerank_candidates = 50
     mock_container.settings.plesk_min_relevance_threshold = None
@@ -95,7 +95,7 @@ async def mock_server_dependencies():
     mock_container.model_runtime.get_reranker.return_value = None
 
     mock_profile = MagicMock()
-    mock_profile.name = "full-tq"
+    mock_profile.name = "pro"
     mock_profile.embed_model = "test-embed-model"
     mock_profile.reranker_enabled = False
     mock_profile.use_turboquant = False
@@ -345,7 +345,7 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
             real_runtime = ModelRuntime()
 
             mock_profile = MagicMock()
-            mock_profile.name = "full-tq"
+            mock_profile.name = "pro"
             mock_profile.embed_model = "test-embed-model"
             mock_profile.reranker_enabled = False
             mock_profile.use_turboquant = False

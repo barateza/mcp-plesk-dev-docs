@@ -184,9 +184,9 @@ class SearchService:
 
         profile = self.model_runtime.get_profile()
         default_threshold = 0.55
-        if profile.name == "light":
+        if profile.name == "local":
             default_threshold = 0.50
-        elif profile.name == "medium":
+        elif profile.name == "pro":
             default_threshold = 0.60
 
         min_relevance = self.settings.plesk_min_relevance_threshold or default_threshold

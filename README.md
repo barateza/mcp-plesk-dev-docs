@@ -70,10 +70,9 @@ uv run python -m plesk_unified.server.main                 # Run server
 
 ### Model Profiles
 Set `PLESK_MODEL_PROFILE` (default: `pro`):
-- `local`: arctic-s (130MB RAM)
-- `pro`: modernbert (500MB RAM)
-- `sandbox`: gte-large (1.3GB RAM)
-- `full-tq`: bge-m3 quantized (1.3GB RAM)
+- `local`: arctic-s (130MB RAM) - Ultra-fast, low footprint.
+- `pro`: arctic-m (500MB RAM) - Optimized for macOS/Windows parity.
+- `sandbox`: gte-large (1.3GB RAM) - Experimental research profile.
 
 **Detailed benchmarks in [docs/benchmarks.md](docs/benchmarks.md).**
 

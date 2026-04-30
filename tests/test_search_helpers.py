@@ -34,7 +34,7 @@ def search_service_fixture():
 
     mock_model_runtime = MagicMock()
     mock_profile = MagicMock()
-    mock_profile.name = "medium"
+    mock_profile.name = "pro"
     mock_profile.use_turboquant = False
     mock_profile.reranker_enabled = False
     mock_profile.tq_top_k = 25
@@ -313,7 +313,7 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
     ) = search_service_fixture
 
     class DummyProfile:
-        name = "medium"
+        name = "pro"
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25
@@ -373,7 +373,7 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
     ) = search_service_fixture
 
     class DummyProfile:
-        name = "medium"
+        name = "pro"
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25

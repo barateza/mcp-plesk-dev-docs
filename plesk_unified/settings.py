@@ -24,7 +24,7 @@ class PleskSettings(BaseSettings):
     log_handler: Literal["os", "file", "both"] = "os"
 
     # Model Profile & Overrides
-    plesk_model_profile: str = "full-tq"
+    plesk_model_profile: str = "pro"
     plesk_embed_model: Optional[str] = None
     plesk_reranker_model: Optional[str] = None
     plesk_reranker_enabled: Optional[bool] = None
@@ -38,6 +38,7 @@ class PleskSettings(BaseSettings):
     plesk_enable_sampling: bool = False
     plesk_rerank_candidates: int = 50
     plesk_min_relevance_threshold: Optional[float] = None
+    plesk_indexing_batch_size: Optional[int] = None
 
     # External APIs & Hardware
     openrouter_api_key: str = ""

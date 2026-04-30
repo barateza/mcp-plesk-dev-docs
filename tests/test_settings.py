@@ -57,7 +57,7 @@ def test_settings_loads_defaults_when_env_absent(cleanup_plesk_env_vars):
     settings = PleskSettings(_env_file=None)
 
     assert settings.log_level == "INFO"
-    assert settings.plesk_model_profile == "full-tq"
+    assert settings.plesk_model_profile == "pro"
     assert settings.plesk_daemon_auto_warmup is False
     assert settings.openrouter_api_key == ""
     assert settings.tqdm_disable is True
@@ -73,7 +73,7 @@ def test_settings_parses_valid_env_vars(cleanup_plesk_env_vars):
         os.environ,
         {
             "LOG_LEVEL": "DEBUG",
-            "PLESK_MODEL_PROFILE": "medium",
+            "PLESK_MODEL_PROFILE": "local",
             "PLESK_DAEMON_AUTO_WARMUP": "True",
             "OPENROUTER_API_KEY": "sk-12345",
             "TQDM_DISABLE": "False",
@@ -83,7 +83,7 @@ def test_settings_parses_valid_env_vars(cleanup_plesk_env_vars):
     ):
         settings = PleskSettings(_env_file=None)
         assert settings.log_level == "DEBUG"
-        assert settings.plesk_model_profile == "medium"
+        assert settings.plesk_model_profile == "local"
         assert settings.plesk_daemon_auto_warmup is True
         assert settings.openrouter_api_key == "sk-12345"
         assert settings.tqdm_disable is False

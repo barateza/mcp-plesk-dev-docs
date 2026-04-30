@@ -44,55 +44,42 @@ class ModelProfile:
 
 
 _PROFILES: dict[str, ModelProfile] = {
-    "light": ModelProfile(
-        name="light",
-        embed_model="BAAI/bge-small-en-v1.5",
+    "local": ModelProfile(
+        name="local",
+        embed_model="snowflake/snowflake-arctic-embed-s",
         embed_dim=384,
         reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         reranker_enabled=True,
-        description=(
-            "~200 MB total. Ideal for M2 MacBook Air or any memory-constrained host."
-        ),
-        approx_ram_mb=200,
+        description=("~130 MB RAM. Ideal for M1/M2 MacBook Air or edge devices."),
+        approx_ram_mb=130,
     ),
-    "medium": ModelProfile(
-        name="medium",
-        embed_model="BAAI/bge-base-en-v1.5",
+    "pro": ModelProfile(
+        name="pro",
+        embed_model="snowflake/snowflake-arctic-embed-m-v1.5",
         embed_dim=768,
         reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         reranker_enabled=True,
-        description="~600 MB total. Good quality with moderate memory use.",
-        approx_ram_mb=600,
+        description="~500 MB RAM. State-of-the-art English retrieval default.",
+        approx_ram_mb=500,
     ),
-    "full": ModelProfile(
-        name="full",
-        embed_model="BAAI/bge-m3",
+    "sandbox": ModelProfile(
+        name="sandbox",
+        embed_model="Alibaba-NLP/gte-large-en-v1.5",
         embed_dim=1024,
         reranker_model="BAAI/bge-reranker-base",
         reranker_enabled=True,
         description=(
-            "~1.8 GB total. Maximum quality. Recommended for RTX 4070 Super / CUDA."
-        ),
-        approx_ram_mb=1800,
-    ),
-    "full-tq": ModelProfile(
-        name="full-tq",
-        embed_model="BAAI/bge-m3",
-        embed_dim=1024,
-        reranker_model="BAAI/bge-reranker-base",
-        reranker_enabled=True,
-        description=(
-            "TurboQuant 4-bit profile with category-aware retrieval. "
-            "Quality parity target with significantly lower latency."
+            "Experimental research profile using TurboQuant 5-bit quantization. "
+            "Massive English-only model (1024d) for quantization research."
         ),
         approx_ram_mb=1300,
         use_turboquant=True,
-        tq_bits=4,
+        tq_bits=5,
         tq_top_k=25,
     ),
 }
 
-DEFAULT_PROFILE = "full-tq"
+DEFAULT_PROFILE = "pro"
 
 
 # ---------------------------------------------------------------------------

@@ -20,11 +20,7 @@ class StorageRuntime:
     def db_path(self) -> Path:
         """Return the path to the LanceDB database for the active profile."""
         profile = self.model_runtime.get_profile()
-        # full-tq shares embeddings/dimension with full, so reuse full's LanceDB corpus.
-        db_profile = (
-            "full" if getattr(profile, "use_turboquant", False) else profile.name
-        )
-        return self.base_dir / "storage" / f"lancedb_{db_profile}"
+        return self.base_dir / "storage" / f"lancedb_{profile.name}"
 
     @property
     def tq_dir(self) -> Path:

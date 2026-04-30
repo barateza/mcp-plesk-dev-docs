@@ -465,7 +465,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profiles",
         nargs="+",
-        default=["light", "medium", "full", "full-tq"],
+        default=["local", "pro", "sandbox"],
         help="Profiles to benchmark (default: light medium full full-tq)",
     )
     parser.add_argument(

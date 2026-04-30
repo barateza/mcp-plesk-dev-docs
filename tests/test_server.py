@@ -374,8 +374,15 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
             )
             # Check that create was called twice: once for CUDA, once for CPU
             assert mock_hf_reg.create.call_count == 2
-            mock_hf_reg.create.assert_any_call(name="test-embed-model", device="cuda")
-            mock_hf_reg.create.assert_any_call(name="test-embed-model", device="cpu")
+            mock_hf_reg.create.assert_any_call(
+                name="test-embed-model",
+                device="cuda",
+                batch_size=16,
+                trust_remote_code=True,
+            )
+            mock_hf_reg.create.assert_any_call(
+                name="test-embed-model", device="cpu", trust_remote_code=True
+            )
 
 
 @pytest.mark.asyncio

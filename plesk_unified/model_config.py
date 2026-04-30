@@ -4,9 +4,9 @@ Model profile configuration for mcp-plesk-unified.
 Profiles let you trade RAM/VRAM footprint against retrieval quality.
 Select a profile via the PLESK_MODEL_PROFILE environment variable.
 
-  PLESK_MODEL_PROFILE=light    ~200 MB total  (M2 MacBook Air, memory-constrained)
-  PLESK_MODEL_PROFILE=full     ~1.8 GB total  (RTX 4070 Super, max quality)
-  PLESK_MODEL_PROFILE=medium   ~600 MB total  (balanced middle ground)
+  PLESK_MODEL_PROFILE=local    - ~130 MB RAM (M1/M2/M3 MacBooks, memory-constrained)
+  PLESK_MODEL_PROFILE=pro      - ~500 MB RAM (Balanced, dual-OS default)
+  PLESK_MODEL_PROFILE=sandbox  - ~1.3 GB RAM (TurboQuant research, massive models)
 
 You can also override individual components without changing the profile:
     PLESK_EMBED_MODEL=BAAI/bge-base-en-v1.5
@@ -94,7 +94,7 @@ def get_active_profile() -> ModelProfile:
         Priority (highest to lowest):
             1. PLESK_EMBED_MODEL / PLESK_RERANKER_MODEL  (per-component overrides)
             2. PLESK_MODEL_PROFILE                        (named profile)
-            3. Compiled-in default ("full-tq")
+            3. Compiled-in default ("pro")
     """
     profile_name = settings.plesk_model_profile
     profile_name = profile_name.lower().strip()

@@ -44,7 +44,7 @@ class TestProfileSelection:
         mc = reload_config({})
         p = mc.get_active_profile()
         assert p.name == "pro"
-        assert p.embed_model == "Alibaba-NLP/gte-modernbert-base"
+        assert p.embed_model == "snowflake/snowflake-arctic-embed-m-v1.5"
         assert p.embed_dim == 768
 
     def test_local_profile(self):
@@ -95,12 +95,12 @@ class TestComponentOverrides:
         mc = reload_config(
             {
                 "PLESK_MODEL_PROFILE": "local",
-                "PLESK_EMBED_MODEL": "Alibaba-NLP/gte-modernbert-base",
+                "PLESK_EMBED_MODEL": "snowflake/snowflake-arctic-embed-m-v1.5",
                 "PLESK_EMBED_DIM": "768",
             }
         )
         p = mc.get_active_profile()
-        assert p.embed_model == "Alibaba-NLP/gte-modernbert-base"
+        assert p.embed_model == "snowflake/snowflake-arctic-embed-m-v1.5"
         assert p.embed_dim == 768
 
     def test_embed_dim_override_without_model_uses_profile_dim(self, caplog):

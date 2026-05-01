@@ -377,8 +377,9 @@ class IndexingService:
 
         report = []
         if tasks:
-            results = await asyncio.gather(*tasks)
-            report.extend(results)
+            for task in tasks:
+                result = await task
+                report.append(result)
 
         await self._call_progress(progress_callback, 2, 4)
 

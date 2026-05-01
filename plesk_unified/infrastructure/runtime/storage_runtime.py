@@ -48,10 +48,6 @@ class StorageRuntime:
                     schema=self.model_runtime.get_schema(),
                     mode="overwrite",
                 )
-                # Task A: Enable Full-Text Search (FTS) for hybrid retrieval.
-                table.create_fts_index(
-                    ["text", "filename"], use_tantivy=True, replace=True
-                )
                 return table
             return db.open_table("plesk_knowledge")
         except Exception:
@@ -63,7 +59,6 @@ class StorageRuntime:
             table = db.create_table(
                 "plesk_knowledge", schema=self.model_runtime.get_schema(), mode="create"
             )
-            table.create_fts_index(["text", "filename"], use_tantivy=True, replace=True)
             return table
 
     def table_health(self) -> Tuple[bool, Optional[str]]:

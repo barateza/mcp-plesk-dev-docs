@@ -62,7 +62,6 @@ if TYPE_CHECKING:
 
 # New imports for AppContainer architecture
 import asyncio
-from plesk_unified.settings import PleskSettings
 from plesk_unified.platform_utils import get_optimal_device
 from plesk_unified.types import CategoryEnum
 from unittest.mock import AsyncMock  # For dummy ctx and mocks for TQ index
@@ -176,16 +175,17 @@ def evaluate_ragas_metrics(
 # Refactored to load AppContainer
 def _load_container_for_profile(profile_name: str) -> AppContainer:
     """Load an AppContainer instance configured for the given profile."""
-    # Ensure settings are reloaded with the new profile environment variable
-    os.environ["PLESK_MODEL_PROFILE"] = profile_name
-
+    # Import settings to modify the global singleton before bootstrap
+    from plesk_unified.settings import settings as global_settings
     from plesk_unified.server.bootstrap import create_app
 
-    # Create fresh settings for this profile
-    new_settings = PleskSettings()
+    # Force the global settings singleton to use the requested profile.
+    # This is required because get_active_profile() and other core logic
+    # depend on this shared global state.
+    global_settings.plesk_model_profile = profile_name
 
     # Create the app container using the bootstrap logic
-    container = create_app(Path(os.getcwd()), new_settings)
+    container = create_app(Path(os.getcwd()), global_settings)
     return container
 
 

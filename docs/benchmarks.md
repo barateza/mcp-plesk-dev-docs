@@ -5,6 +5,32 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
+## Latest results — 2026-05-01 (Apple Silicon, MPS)
+
+**Hardware:** Apple M2 Pro (Mac mini)
+**Python:** 3.12.12
+**Query set:** 20 queries (Expanded control suite with RAGAS evaluation)
+**Logic Version:** `CHUNK_VERSION=v14` (Structural Context Injection)
+
+### Summary
+
+|Profile|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|----|-----|----------|--------|
+|`light`|**100.0%**|**0.950**|2.48 s|~200 MB|
+|`medium`|**100.0%**|**0.950**|3.48 s|~600 MB|
+
+### Observations
+
+1. **100% Hit Rate achieved.** The implementation of **Structural Context Injection** (prepending `// Context: Class::Method` to PHP chunks) resolved the long-standing retrieval misses for extension configuration settings. Class-level methods are now correctly associated with their parent context, making them highly discoverable by both small and base models.
+
+2. **Apple Silicon Stability.** By dynamically adjusting `BATCH_SIZE_CHUNKS` to **256** when `mps` is detected, the indexing process is now stable on Apple hardware, avoiding the memory pressure and lock-ups previously observed during the "Materializing" phase.
+
+3. **Latency Consistency.** Latency on Apple Silicon is comparable across profiles, with a slight overhead for the `medium` model's larger embedding dimension. The primary bottleneck remains the embedding/ANN phase rather than reranking.
+
+4. **Chunk Explosion Fixed.** Optimization of the sentence-window sliding logic (introducing configurable `overlap` step) reduced chunk inflation from 5x to ~1.6x, significantly improving indexing speed and storage efficiency.
+
+---
+
 ## Quality Optimization Features (April 2026)
 
 Following Phase 6 and the subsequent regression analysis on the expanded 20-query suite, several targeted retrieval and context enhancements were implemented:

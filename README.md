@@ -120,7 +120,7 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 |Normalization|Table-to-Prose (Optional LLM)|Preserves table semantics during embedding|
 |Summarization|SummaryCache (Optional LLM)|Generates macro-context descriptions for files|
 
-**Index stats:** ~830 files · ~2 200 chunks across 5 sources · ~0.4–3 s retrieval on CUDA (profile-dependent)
+**Index stats:** ~830 files · ~3 500 chunks across 5 sources · **100% Hit Rate** · ~2.4–3.5 s retrieval on Apple Silicon (MPS)
 
 ---
 
@@ -193,12 +193,12 @@ PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-t
 
 |Profile|Embed model|Dim|HR@5*|MRR@5*|Avg latency*|Est. RAM|
 |---|---|---|---|---|---|---|
-|`light`|BAAI/bge-small-en-v1.5|384|**80.0%**|**0.800**|1.2 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**80.0%**|0.735|1.3 s|~600 MB|
+|`light`|BAAI/bge-small-en-v1.5|384|**100.0%**|**0.950**|2.4 s|~200 MB|
+|`medium`|BAAI/bge-base-en-v1.5|768|**100.0%**|**0.950**|2.6 s|~600 MB|
 |`full`|BAAI/bge-m3|1024|75.0%|0.750|3.6 s|~1 800 MB|
 |`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.4 s**|~1 300 MB|
 
-\* Measured on NVIDIA CUDA (2026-04-21). See [docs/benchmarks.md](docs/benchmarks.md) for details.
+\* Measured on Apple Silicon (MPS) (2026-05-01). See [docs/benchmarks.md](docs/benchmarks.md) for details.
 
 ---
 

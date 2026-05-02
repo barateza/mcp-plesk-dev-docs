@@ -67,3 +67,8 @@ done
 1. **No Speculative Pushing:** You are strictly forbidden from executing `git push` or `bd close` until you have executed `scripts/benchmark_profiles.py` with the `--fail-on-gate` flag.
 2. **Evidence-Based Completion:** You must include the `MRR@5` and `Hit Rate` results in your final session summary.
 3. **Regression Recovery:** If a gate fails, you must revert the logic change or optimize the chunking/embedding parameters until the metrics match or exceed the baseline.
+
+### Shell Command Safety
+- **No Inline Expansion:** Never use `bash -c` with inline code strings to write or modify files. This prevents unintended shell expansion of variables or special characters within the code block.
+- **Heredoc Requirement:** If you need to create or edit a file via the shell, you must strictly use single-quoted heredocs to prevent bash expansion.
+  - **Example:** `cat << 'EOF' > filename.php`

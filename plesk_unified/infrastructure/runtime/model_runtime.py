@@ -133,24 +133,28 @@ class ModelRuntime:
             from sentence_transformers import CrossEncoder  # type: ignore
 
             device = self.detect_device()
-            try:
-                self._reranker = CrossEncoder(profile.reranker_model, device=device)
-            except Exception as e:
-                if device in ("cuda", "mps"):
-                    platform_utils.log_hardware_degradation(device, e, "cpu")
-                    # Fallback to CPU
-                    self._reranker = CrossEncoder(profile.reranker_model, device="cpu")
-                else:
-                    raise
+            # TASK: Explicitly pass device and verify initialization
+            self._reranker = CrossEncoder(profile.reranker_model, device=device)
+
+            # Verification of actual device
+            actual_device = "unknown"
+            if hasattr(self._reranker, "model") and hasattr(
+                self._reranker.model, "device"
+            ):
+                actual_device = str(self._reranker.model.device)
+            elif hasattr(self._reranker, "device"):
+                actual_device = str(self._reranker.device)
 
             logger.info(
-                "Reranker initialized on %s in %.2fs.",
-                getattr(self._reranker, "device", device),
+                "Reranker initialized on %s (requested %s) in %.2fs.",
+                actual_device,
+                device,
                 time.perf_counter() - init_started,
             )
         except Exception as e:
             logger.warning(
-                "Reranker initialization failed (%s). Proceeding without reranking.",
+                "Reranker initialization failed on %s: %s. Reranking will be disabled.",
+                self.detect_device(),
                 str(e),
                 exc_info=True,
             )

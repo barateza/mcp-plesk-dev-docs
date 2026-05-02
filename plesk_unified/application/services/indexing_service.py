@@ -147,7 +147,10 @@ class IndexingService:
     ) -> Set[str]:
         pending_docs = []
         active_hashes = set()
-        BATCH_SIZE_CHUNKS = 1000
+
+        # Optimize batch size for device (MPS is inefficient with very large batches)
+        device = self.model_runtime.detect_device()
+        BATCH_SIZE_CHUNKS = 256 if device == "mps" else 1000
 
         for result in results:
             if not result:

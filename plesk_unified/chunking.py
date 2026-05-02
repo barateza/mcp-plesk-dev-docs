@@ -4,7 +4,7 @@ from typing import Dict, List
 
 # Bump this version whenever the chunking logic or context injection changes
 # to force a re-embedding of changed chunks while preserving identical ones.
-CHUNK_VERSION = "v10"
+CHUNK_VERSION = "v14"
 
 
 def chunk_by_chars(text: str, size: int = 1500, overlap: int = 200) -> List[str]:
@@ -55,10 +55,13 @@ def _split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def chunk_by_sentence_window(text: str, window_size: int = 5) -> List[str]:
-    """Build overlapping sentence windows (stride=1) for narrative documents.
+def chunk_by_sentence_window(
+    text: str, window_size: int = 5, overlap: int = 2
+) -> List[str]:
+    """Build overlapping sentence windows with configurable stride.
 
     Task C: Increased default window size to 5 for better context.
+    The stride is determined by window_size - overlap to prevent chunk explosion.
     """
     if not text:
         return []
@@ -69,57 +72,73 @@ def chunk_by_sentence_window(text: str, window_size: int = 5) -> List[str]:
         return [" ".join(sentences)]
 
     chunks: List[str] = []
-    for idx in range(0, len(sentences) - window_size + 1):
+    step = max(1, window_size - overlap)
+    for idx in range(0, len(sentences), step):
         chunk = " ".join(sentences[idx : idx + window_size]).strip()
         if chunk:
             chunks.append(chunk)
+        # If this chunk already reached the end, stop to avoid redundant tail chunks
+        if idx + window_size >= len(sentences):
+            break
     return chunks
 
 
 def chunk_php_hierarchical(
     text: str, section_max_lines: int = 150, overlap: int = 20
 ) -> List[str]:
-    """Chunk PHP by class/method declarations, preserving docblocks.
+    """Chunk PHP by declarations, preserving docblocks and injecting context.
 
     Task F: Improved boundary detection and block preservation.
+    Phase 5: Structural context injection for better method retrieval.
     """
     if not text:
         return []
 
     # Regex that matches PHP declarations, optionally preceded by a docblock.
-    # Pattern: (/** ... */)? (abstract|final)? (class|interface|trait|function)
+    # Pattern: (/** ... */)? (abstract|final|...)* (class|interface|trait|function)
     boundary_regex = (
         r"(?:/\*\*[\s\S]*?\*/\s*)?"
-        r"^\s*(?:abstract\s+|final\s+)*"
-        r"(?:class|interface|trait|public\s+function|protected\s+function|"
-        r"private\s+function|function)\b"
+        r"^\s*(?:abstract\s+|final\s+|public\s+|protected\s+|private\s+|static\s+)*"
+        r"(class|interface|trait|function)\s+([a-zA-Z0-9_]+)"
     )
 
-    # Use multiline flag for ^ to work correctly
-    sections = []
     matches = list(re.finditer(boundary_regex, text, re.MULTILINE))
 
     if not matches:
         return chunk_by_lines(text, section_max_lines, overlap)
 
-    # Split text into sections based on match boundaries
-    last_pos = 0
-    for match in matches:
-        if match.start() > last_pos:
-            section = text[last_pos : match.start()].strip()
-            if section:
-                sections.append(section)
-        last_pos = match.start()
+    sections = []
+    current_class = ""
 
-    # Add the last section
-    if last_pos < len(text):
-        sections.append(text[last_pos:].strip())
+    for i, match in enumerate(matches):
+        m_type = match.group(1)
+        m_name = match.group(2)
+
+        # If there's text before the first match (like <?php)
+        if i == 0 and match.start() > 0:
+            sections.append(text[0 : match.start()].strip())
+
+        # Determine header for this block
+        header = ""
+        if m_type == "function" and current_class:
+            header = f"// Context: {current_class}::{m_name}\n"
+        elif m_type in ("class", "interface", "trait"):
+            header = f"// Context: {m_type} {m_name}\n"
+            current_class = m_name
+
+        # Find end of this section
+        next_start = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        section_text = text[match.start() : next_start].strip()
+
+        if section_text:
+            sections.append(f"{header}{section_text}")
 
     chunks: List[str] = []
     for section in sections:
+        if not section:
+            continue
         line_count = len(section.splitlines())
         if line_count > section_max_lines:
-            # If a single class/method is still too large, use line-based splitting
             chunks.extend(chunk_by_lines(section, section_max_lines, overlap))
         else:
             chunks.append(section)

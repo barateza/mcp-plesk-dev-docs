@@ -2,6 +2,10 @@
 
 ## RAG Indexing & Development
 
+0.  **Apple Silicon (MPS) Optimization**
+    *   Indexing automatically detects `mps` and uses a reduced `BATCH_SIZE_CHUNKS=256` to ensure stability and prevent memory lock-ups during the "Materializing" phase.
+
+
 1.  **Prefer the `medium` profile during feature development.**
     *   `PLESK_MODEL_PROFILE=medium`
     *   It is ~3x faster to index than `full` and offers superior MRR for the Plesk English corpus.
@@ -24,6 +28,10 @@
 
 *   Always re-verify retrieval quality after logic changes using `scripts/benchmark_profiles.py`.
 *   Maintain the **Golden Baseline** in `benchmarks/baselines/control.json`.
+    *   **Verified Performance (2026-05-01):**
+        *   **Light:** 100% Hit Rate, 0.95 MRR (Avg Latency: ~2.4s)
+        *   **Medium:** 100% Hit Rate, 0.95 MRR (Avg Latency: ~2.6s)
+
 *   Hybrid Search (Vector + FTS) is now the default; ensure any schema changes preserve the Tantivy FTS index.
 *   **Maintain low cyclomatic complexity.** Refactor functions that exceed Ruff C901 thresholds by decomposing logic into focused helper functions.
 *   **Keep pre-commit hooks active.** Ensure `ruff check` and `ruff format` pass locally before pushing to CI.

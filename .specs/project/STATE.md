@@ -1,8 +1,8 @@
 # Project State — Enterprise AI Infrastructure Uplift
 
-**Last Updated:** 2026-04-28
+**Last Updated:** 2026-05-01
 **Session:** SOTA retrieval roadmap documentation
-**Status:** In-progress; Phase 6 complete; Phase 7 planning active.
+**Status:** Completed Milestone M6; Phase 1 of M7 active.
 
 ---
 
@@ -43,6 +43,10 @@ _None currently._
 ---
 
 ## Completed
+- **M6 Optimization:** Achieved 100% Hit Rate and 0.95 MRR on Light/Medium profiles.
+- **PHP Context Injection:** Resolved pm_Config retrieval via Class::Method header injection (CHUNK_VERSION v14).
+- **MPS Stability:** Optimized Apple Silicon indexing throughput with dynamic batching (256 chunks).
+- **Chunk Explosion Fix:** Reduced sentence window inflation from 5x to 1.6x via overlap step logic.
 
 - **Phase 6:** RAGAS evaluation plumbing (Faithfulness, Recall, Precision metrics).
 - **P2:** LLM-assisted complex table normalization.

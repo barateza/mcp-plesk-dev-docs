@@ -122,6 +122,17 @@ class JsSourceProcessor:
             chunks = chunking.chunk_by_sentence_window(doc.text, window_size=3)
             return chunks or chunking.chunk_by_lines(doc.text, 60, 10)
 
+        # Try AST chunking if enabled
+        from plesk_unified.settings import settings
+
+        if settings.plesk_enable_ast_chunking:
+            lang = "javascript"
+            if doc.filename.endswith((".ts", ".tsx")):
+                lang = "typescript"
+            chunks = chunking.chunk_by_ast(doc.text, lang)
+            if chunks:
+                return chunks
+
         chunks = chunking.chunk_js_hierarchical(
             doc.text, section_max_lines=60, overlap=10
         )

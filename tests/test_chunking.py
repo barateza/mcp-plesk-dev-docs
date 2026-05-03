@@ -100,3 +100,13 @@ export function second() {
     assert len(chunks) >= 2
     assert any("first" in c for c in chunks)
     assert any("second" in c for c in chunks)
+
+
+def test_chunk_by_ast_returns_none_when_no_tree_sitter(monkeypatch):
+    from plesk_unified import chunking
+
+    # Mock _get_ts_lang to return None
+    monkeypatch.setattr(chunking, "_get_ts_lang", lambda x: None)
+
+    res = chunking.chunk_by_ast("text", "php")
+    assert res is None

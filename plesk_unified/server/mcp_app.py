@@ -23,7 +23,11 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
         container.executor.shutdown(wait=False)
 
     # Register tools
-    from plesk_unified.server.tools.search_tools import search_plesk_unified
+    from plesk_unified.server.tools.search_tools import (
+        search_plesk_unified,
+        get_file_content,
+        resolve_references,
+    )
     from plesk_unified.server.tools.admin_tools import (
         warmup_server,
         daemon_health,
@@ -37,6 +41,8 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
     )
 
     mcp.tool()(search_plesk_unified)
+    mcp.tool()(get_file_content)
+    mcp.tool()(resolve_references)
     mcp.tool()(warmup_server)
     mcp.tool()(daemon_health)
     mcp.tool()(list_model_profiles)

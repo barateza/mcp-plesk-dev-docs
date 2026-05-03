@@ -1,10 +1,111 @@
 import hashlib
 import re
-from typing import Dict, List
+import logging
+from typing import Dict, List, Optional
+
+logger = logging.getLogger("plesk_unified")
 
 # Bump this version whenever the chunking logic or context injection changes
 # to force a re-embedding of changed chunks while preserving identical ones.
-CHUNK_VERSION = "v14"
+CHUNK_VERSION = "v15"
+
+# Global registry for tree-sitter languages to avoid repeated lookups
+_TS_LANGS = {}
+
+
+def _get_ts_lang(lang_name: str):
+    """Get or load a tree-sitter language."""
+    if lang_name in _TS_LANGS:
+        return _TS_LANGS[lang_name]
+
+    try:
+        import tree_sitter_languages
+
+        lang = tree_sitter_languages.get_language(lang_name)
+        _TS_LANGS[lang_name] = lang
+        return lang
+    except Exception:
+        return None
+
+
+def _get_ts_query(lang_name: str) -> Optional[str]:
+    """Return the tree-sitter query string for the given language."""
+    if lang_name == "php":
+        return """
+            (class_declaration) @decl
+            (function_declaration) @decl
+            (method_declaration) @decl
+            (interface_declaration) @decl
+            (trait_declaration) @decl
+        """
+    if lang_name in ("javascript", "typescript"):
+        return """
+            (class_declaration) @decl
+            (function_declaration) @decl
+            (method_definition) @decl
+            (export_statement) @decl
+        """
+    return None
+
+
+def chunk_by_ast(
+    text: str, lang_name: str, max_chars: int = 1500, overlap: int = 200
+) -> Optional[List[str]]:
+    """Chunk code using tree-sitter AST nodes (classes, functions, methods)."""
+    lang = _get_ts_lang(lang_name)
+    query_str = _get_ts_query(lang_name)
+    if not lang or not query_str:
+        return None
+
+    try:
+        from tree_sitter import Parser
+
+        parser = Parser()
+        parser.set_language(lang)
+        tree = parser.parse(bytes(text, "utf-8"))
+        query = lang.query(query_str)
+        captures = query.captures(tree.root_node)
+
+        if not captures:
+            return None
+
+        chunks = []
+        last_end = 0
+
+        for node, _ in captures:
+            # Handle gap before this node
+            if node.start_byte > last_end:
+                gap = text[last_end : node.start_byte].strip()
+                if gap:
+                    chunks.extend(
+                        chunk_by_chars(gap, max_chars, overlap)
+                        if len(gap) > max_chars
+                        else [gap]
+                    )
+
+            block = text[node.start_byte : node.end_byte].strip()
+            if block:
+                chunks.extend(
+                    chunk_by_chars(block, max_chars, overlap)
+                    if len(block) > max_chars
+                    else [block]
+                )
+            last_end = node.end_byte
+
+        # Handle tail
+        if last_end < len(text):
+            tail = text[last_end:].strip()
+            if tail:
+                chunks.extend(
+                    chunk_by_chars(tail, max_chars, overlap)
+                    if len(tail) > max_chars
+                    else [tail]
+                )
+
+        return chunks
+    except Exception as e:
+        logger.warning("AST chunking failed for %s: %s", lang_name, e)
+        return None
 
 
 def chunk_by_chars(text: str, size: int = 1500, overlap: int = 200) -> List[str]:

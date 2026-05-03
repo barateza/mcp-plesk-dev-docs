@@ -158,14 +158,19 @@ class SearchService:
             raw = self.lancedb_repo.search_fts(
                 safe_query, limit=n_candidates, filter_expr=filter_expr
             )
+            count = len(raw)
+            elapsed_ms = (time.monotonic() - start) * 1000
+            logger.info(
+                "FTS search: query='%s', candidates=%d, latency=%.2fms",
+                safe_query,
+                count,
+                elapsed_ms,
+            )
         except Exception:
             logger.warning(
                 "FTS search failed; falling back to vector only.", exc_info=True
             )
             return []
-        finally:
-            elapsed_ms = (time.monotonic() - start) * 1000
-            logger.debug("FTS search latency: %.2f ms", elapsed_ms)
 
         return [dict(r) for r in raw]
 
@@ -239,7 +244,7 @@ class SearchService:
             meta_header = r.get("text", "").split("\n\n", 1)[0]
             # Copy record to avoid mutation issues
             expanded = dict(r)
-            expanded["text"] = f"{meta_header}\n\n" + "\n[...]n".join(clean_texts)
+            expanded["text"] = f"{meta_header}\n\n" + "\n[...]\n".join(clean_texts)
             expanded_results.append(expanded)
 
         return expanded_results
@@ -299,3 +304,38 @@ class SearchService:
             return expanded_results, None
 
         return await loop.run_in_executor(self.executor, _sync_pipeline)
+
+    async def get_file_content(self, filename: str, category: str) -> str:
+        """Retrieve the full content of a specific documentation file."""
+        loop = asyncio.get_running_loop()
+
+        def _sync_get():
+            table = self.lancedb_repo.get_table()
+            # Fetch all chunks for this file, sorted by chunk_id
+            chunks = (
+                table.search()
+                .where(f"filename = '{filename}' AND category = '{category}'")
+                .limit(1000)
+                .to_list()
+            )
+            if not chunks:
+                return f"File '{filename}' not found in category '{category}'."
+
+            chunks.sort(key=lambda x: x.get("chunk_id", 0))
+
+            # Assemble full text.
+            # We skip the meta-header for all but the first chunk if needed,
+            # but usually chunks contain the full text block.
+            # For simplicity, we join them with clear markers.
+            parts = []
+            for i, c in enumerate(chunks):
+                text = c.get("text", "")
+                if i > 0 and "\n\n" in text:
+                    # Strip meta-header from subsequent chunks
+                    parts.append(text.split("\n\n", 1)[1])
+                else:
+                    parts.append(text)
+
+            return "\n\n".join(parts)
+
+        return await loop.run_in_executor(self.executor, _sync_get)

@@ -35,6 +35,7 @@ class PleskSettings(BaseSettings):
     plesk_auto_refresh_on_startup: bool = True
     plesk_index_summaries: bool = False
     plesk_enable_fts: bool = True
+    plesk_enable_ast_chunking: bool = False
     plesk_enable_sampling: bool = False
     plesk_rerank_candidates: int = 50
     plesk_min_relevance_threshold: Optional[float] = None

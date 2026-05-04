@@ -37,7 +37,7 @@ class PleskSettings(BaseSettings):
     plesk_enable_fts: bool = True
     plesk_enable_ast_chunking: bool = False
     plesk_enable_sampling: bool = False
-    plesk_rerank_candidates: int = 35
+    plesk_rerank_candidates: Optional[int] = None
     plesk_min_relevance_threshold: Optional[float] = None
 
     # External APIs & Hardware

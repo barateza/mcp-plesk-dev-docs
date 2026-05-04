@@ -38,6 +38,7 @@ class ModelProfile:
     reranker_enabled: bool
     description: str
     approx_ram_mb: int
+    rerank_candidates: int = 35
     use_turboquant: bool = False
     tq_bits: int = 5
     tq_top_k: int = 25
@@ -54,6 +55,7 @@ _PROFILES: dict[str, ModelProfile] = {
             "~200 MB total. Ideal for M2 MacBook Air or any memory-constrained host."
         ),
         approx_ram_mb=200,
+        rerank_candidates=35,
     ),
     "medium": ModelProfile(
         name="medium",
@@ -63,6 +65,7 @@ _PROFILES: dict[str, ModelProfile] = {
         reranker_enabled=True,
         description="~600 MB total. Good quality with moderate memory use.",
         approx_ram_mb=600,
+        rerank_candidates=35,
     ),
     "full": ModelProfile(
         name="full",
@@ -162,6 +165,7 @@ def get_active_profile() -> ModelProfile:
         reranker_enabled=reranker_enabled and (reranker_model is not None),
         description=base.description,
         approx_ram_mb=base.approx_ram_mb,
+        rerank_candidates=settings.plesk_rerank_candidates or base.rerank_candidates,
         use_turboquant=base.use_turboquant,
         tq_bits=base.tq_bits,
         tq_top_k=base.tq_top_k,

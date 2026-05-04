@@ -258,7 +258,8 @@ class SearchService:
 
         def _sync_pipeline():
             # 1. Retrieve candidates
-            n_candidates = getattr(self.settings, "plesk_rerank_candidates", 50)
+            profile = self.model_runtime.get_profile()
+            n_candidates = profile.rerank_candidates
             candidates = self._get_search_candidates(safe_query, category, n_candidates)
 
             # 2. Rerank
@@ -286,7 +287,8 @@ class SearchService:
 
         def _sync_pipeline():
             # 1. Retrieve candidates
-            n_candidates = getattr(self.settings, "plesk_rerank_candidates", 50)
+            profile = self.model_runtime.get_profile()
+            n_candidates = profile.rerank_candidates
             candidates = self._get_search_candidates(safe_query, category, n_candidates)
 
             # 2. Rerank

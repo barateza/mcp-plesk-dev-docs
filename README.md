@@ -199,7 +199,7 @@ PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-t
 |Profile|Embed model|Dim|HR@5*|MRR@5*|Avg latency*|Est. RAM|
 |---|---|---|---|---|---|---|
 |`light`|BAAI/bge-small|384|**100.0%**|**0.950**|**3.6 s**|~200 MB|
-|`medium`|BAAI/bge-base|768|**100.0%**|**0.950**|**3.9 s**|~600 MB|
+|`medium`|BAAI/bge-base|768|**100.0%**|**0.917**|**3.7 s**|~600 MB|
 |`full`|BAAI/bge-m3|1024|75.0%|0.750|4.1 s|~1 800 MB|
 |`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.4 s**|~1 300 MB|
 

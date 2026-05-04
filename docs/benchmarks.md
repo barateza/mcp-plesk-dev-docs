@@ -16,10 +16,10 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 |Profile|Embed model|Reranker|HR@5|MRR@5|Avg latency|Est. RAM|
 |--------|------------|---|---|-----|----------|--------|
-|`light`|BAAI/bge-small|**MiniLM-L4-v2**|**100.0%**|**0.950**|**3.62 s**|~200 MB|
-|`medium`|BAAI/bge-base|**MiniLM-L4-v2**|**100.0%**|**0.950**|3.97 s|~600 MB|
+|`light`|BAAI/bge-small|**MiniLM-L4-v2**|**100.0%**|**0.950**|**3.60 s**|~200 MB|
+|`medium`|BAAI/bge-base|**MiniLM-L4-v2**|**100.0%**|**0.917**|**3.73 s**|~600 MB|
 
-> **Note:** Latency includes the new **Hybrid Search** overhead (parallel Vector + FTS). While wall-clock time is higher than previous vector-only runs, the robustness for keyword-exact technical queries is significantly improved.
+> **Note:** The `medium` profile accepts a minor MRR delta (-0.033) compared to the L6 baseline in exchange for significantly improved cross-encoder latency and pipeline consistency. Both profiles are now optimized for 35 candidates.
 
 ### Reranker Optimization Matrix
 

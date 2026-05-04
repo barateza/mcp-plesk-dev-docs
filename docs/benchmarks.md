@@ -50,6 +50,20 @@ We programmatically evaluated several reranker models and candidate pool sizes (
 
 ---
 
+## Discarded Experiments: ONNX Backend (Apple Silicon)
+
+In May 2026, we conducted a rigorous investigation into using the **ONNX runtime** with `backend="onnx"` for cross-encoder rerankers to potentially improve throughput.
+
+**Findings:**
+- **Severe System Instability:** On Apple Silicon (M2), `onnxruntime` coupled with `optimum` triggered recurring "Context leaks" in the macOS CoreAnalytics and CoreML frameworks.
+- **Memory Explosion:** Despite proper resource shutdown (`AppContainer.shutdown()`) and explicit garbage collection, process RSS ballooned from **370 MB to over 18 GB** in specific scenarios (notably L6-onnx), leading to heavy swap pressure and system-wide hangs.
+- **Latency Paradox:** While individual search latencies remained low, the wall-clock time between queries expanded to **minutes** due to driver-level contention and memory management overhead.
+- **CPU Backend Failure:** Even when forcing `CPUExecutionProvider`, the underlying libraries attempted to initialize GPU contexts, preserving the instability.
+
+**Decision:** **Aborted.** The PyTorch/MPS backend remains the only verified, stable standard for this project on Apple Silicon. The performance gains of MiniLM-L4-v2 (native torch) are sufficient without the risk of system-level crashes.
+
+---
+
 ## Results — 2026-05-01 (Apple Silicon, MPS)
 
 ## Quality Optimization Features (April 2026)

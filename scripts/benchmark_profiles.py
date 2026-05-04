@@ -416,6 +416,12 @@ def run_benchmark(
     if ragas:
         _add_ragas_summary(res, ragas_metrics)
 
+    # Clean up resources to prevent context leaks and memory accumulation
+    container.shutdown()
+    import gc
+
+    gc.collect()
+
     return res
 
 

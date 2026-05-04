@@ -14,6 +14,7 @@ class ModelRuntime:
         self._reranker: Any = None
         self._active_profile: Any = None
         self._detected_device: Optional[str] = None
+        self._reranker_failed: bool = False
 
     def get_profile(self) -> Any:
         """Return the active model profile."""
@@ -118,7 +119,7 @@ class ModelRuntime:
 
     def get_reranker(self) -> Any:
         """Return the cross-encoder reranker, initializing it on first call."""
-        if self._reranker is not None:
+        if self._reranker is not None or self._reranker_failed:
             return self._reranker
 
         profile = self.get_profile()
@@ -152,6 +153,7 @@ class ModelRuntime:
                 time.perf_counter() - init_started,
             )
         except Exception as e:
+            self._reranker_failed = True
             logger.warning(
                 "Reranker initialization failed on %s: %s. Reranking will be disabled.",
                 self.detect_device(),

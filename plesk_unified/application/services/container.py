@@ -50,3 +50,13 @@ class AppContainer:
 
     # These will be added as we extract more services
     job_service: Any = None
+
+    def shutdown(self):
+        """Shut down the executor and other resources."""
+        self.logger.info("Shutting down AppContainer...")
+        self.executor.shutdown(wait=True)
+        # Clear model caches if possible
+        if hasattr(self.model_runtime, "_embedding_model"):
+            self.model_runtime._embedding_model = None
+        if hasattr(self.model_runtime, "_reranker"):
+            self.model_runtime._reranker = None

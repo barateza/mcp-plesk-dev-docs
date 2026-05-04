@@ -15,6 +15,7 @@ class StorageRuntime:
         self.base_dir = base_dir
         self.model_runtime = model_runtime
         self._tq_index: Optional[TurboQuantIndex] = None
+        self._cached_table: Optional[Any] = None
 
     @property
     def db_path(self) -> Path:
@@ -33,6 +34,15 @@ class StorageRuntime:
 
     def get_table(self, create_new: bool = False) -> Any:
         """Connect to or create the LanceDB table."""
+
+        # 1. Clear cache if we are rebuilding the database
+        if create_new:
+            self._cached_table = None
+
+        # 2. Return the warm table if it's already loaded in memory
+        if self._cached_table is not None:
+            return self._cached_table
+
         path = self.db_path
         logger.debug("Connecting to LanceDB at %s", path)
         db = lancedb.connect(str(path))
@@ -48,8 +58,12 @@ class StorageRuntime:
                     schema=self.model_runtime.get_schema(),
                     mode="overwrite",
                 )
+                self._cached_table = table
                 return table
-            return db.open_table("plesk_knowledge")
+
+            table = db.open_table("plesk_knowledge")
+            self._cached_table = table
+            return table
         except Exception:
             logger.info("Table not found or error opening. Creating new table.")
             try:
@@ -59,6 +73,7 @@ class StorageRuntime:
             table = db.create_table(
                 "plesk_knowledge", schema=self.model_runtime.get_schema(), mode="create"
             )
+            self._cached_table = table
             return table
 
     def table_health(self) -> Tuple[bool, Optional[str]]:

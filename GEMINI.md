@@ -64,6 +64,8 @@ done
 
 ### Retrieval Integrity
 - **FTS Validation:** Hybrid search is a core feature. After any indexing operation, you must verify that the Full-Text Search (FTS) index has been rebuilt and is returning keyword-exact results.
+- **AST-Aware Chunking:** For PHP and JS/TS sources, prefer AST-aware chunking (enabled via `plesk_enable_ast_chunking`). This preserves structural boundaries like class and method definitions, leading to superior retrieval for technical code queries.
+- **Deterministic Tools:** Use `get_file_content` for full document retrieval and `resolve_references` for symbol cross-referencing when vector search snippets provide insufficient context.
 - **Verification over Inference:** Never assume a logic change improved metrics. Always rerun the `control` suite and inspect the database directly to confirm metadata injection.
 
 ### Dual-Sync Initialization

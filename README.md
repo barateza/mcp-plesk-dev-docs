@@ -113,14 +113,14 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 |Component|Technology|Role|
 |---|---|---|
 |Embeddings|BAAI/bge-small · bge-base · bge-m3 (profile)|Semantic embeddings — see [Model profiles](#model-profiles)|
-|Reranker|ms-marco-MiniLM / bge-reranker-base (profile)|Cross-encoder result reranking (always applied)|
+|Reranker|**ms-marco-MiniLM-L4-v2** (Optimized)|Fast cross-encoder result reranking (default)|
 |Vector DB|LanceDB|Apache Arrow-based ANN search + Full-Text Search (FTS)|
 |MCP Server|FastMCP|Modular server with tools, prompts, and resources|
-|Ingestion|Document-aware Chunkers|Preserves semantic boundaries (sentence-window, hierarchical)|
+|Ingestion|**AST-Aware Chunkers**|Tree-sitter based structural boundaries (PHP/JS/TS)|
 |Normalization|Table-to-Prose (Optional LLM)|Preserves table semantics during embedding|
 |Summarization|SummaryCache (Optional LLM)|Generates macro-context descriptions for files|
 
-**Index stats:** ~830 files · ~3 500 chunks across 5 sources · **100% Hit Rate** · ~2.4–3.5 s retrieval on Apple Silicon (MPS)
+**Index stats:** ~830 files · ~3 500 chunks across 5 sources · **100% Hit Rate** · **~3.6 s** hybrid retrieval on Apple Silicon (MPS)
 
 ---
 
@@ -128,11 +128,14 @@ See [Model profiles](#model-profiles) for the available embed and reranker model
 
 - **Hybrid Search (Vector + FTS):** Combines semantic ANN search with
     Full-Text Search (BM25/Tantivy) using Reciprocal Rank Fusion (RRF).
-    Set `PLESK_ENABLE_FTS=false` to disable FTS candidates.
-- **AI-Synthesized Answers:** Automatically generates a concise answer from the top search results using LLM sampling (requires `PLESK_ENABLE_SAMPLING=true`).
-- **Document-aware Chunking:** HTML guides use sentence-window sliding; PHP stubs and JS SDK files use hierarchical declaration boundaries.
-- **Table-to-Prose Normalization:** Converts complex HTML tables into descriptive prose before embedding to preserve semantics.
-- **Neighborhood Retrieval:** Automatically fetches adjacent chunks (prev/next) for the top results to triple the context available for grounding.
+- **AST-Aware Chunking:** Uses `tree-sitter` to respect class and method
+    boundaries in PHP, JS, and TS documentation (opt-in).
+- **Deterministic Documentation Tools:** Directly retrieve full file content
+    (`get_file_content`) or resolve symbol references (`resolve_references`).
+- **AI-Synthesized Answers with Citations:** Concise LLM answers from search
+    results with structured inline citations `[1]`, `[2]`.
+- **Neighborhood Retrieval:** Automatically fetches adjacent chunks (prev/next)
+    to triple the context available for grounding.
 - **Macro-Context Summaries:** Optionally generates and caches file-level summaries to enrich every chunk with document-wide purpose.
 - **Async Indexing:** Trigger and monitor indexing jobs in the background without blocking the MCP server.
 - **TurboQuant Acceleration:** Fast 4-bit quantized search for the `full` profile, delivering 10x lower latency on CUDA.
@@ -148,6 +151,8 @@ This server provides tools, prompts, and resources to AI clients. See **[docs/mc
 | Tool | Description |
 |---|---|
 | `search_plesk_unified` | Search across all 5 sources with hybrid ranking and reranking. |
+| `get_file_content` | Retrieve the full content of a specific documentation file. |
+| `resolve_references` | Find all files referencing a specific symbol or topic. |
 | `refresh_knowledge` | Re-fetch sources and update the index. Supports incremental sync. |
 | `trigger_index_sync` | Start a background indexing job (returns `job_id`). |
 | `check_sync_status` | Check the status of a background indexing job. |
@@ -166,7 +171,7 @@ This server provides tools, prompts, and resources to AI clients. See **[docs/mc
 
 - `plesk://toc/api` - Table of Contents for API documentation.
 - `plesk://toc/cli` - Table of Contents for CLI reference.
-- `plesk://toc/guide` - Table of Contents for Extensions Guide.
+- `plesk://toc/guide" - Table of Contents for Extensions Guide.
 - `plesk://toc/php-stubs` - Hierarchical list of PHP classes and methods.
 - `plesk://toc/js-sdk` - Hierarchical list of JS SDK components.
 
@@ -193,12 +198,12 @@ PLESK_MODEL_PROFILE=full-tq   # light | medium | full | full-tq (default: full-t
 
 |Profile|Embed model|Dim|HR@5*|MRR@5*|Avg latency*|Est. RAM|
 |---|---|---|---|---|---|---|
-|`light`|BAAI/bge-small-en-v1.5|384|**100.0%**|**0.950**|2.4 s|~200 MB|
-|`medium`|BAAI/bge-base-en-v1.5|768|**100.0%**|**0.950**|2.6 s|~600 MB|
-|`full`|BAAI/bge-m3|1024|75.0%|0.750|3.6 s|~1 800 MB|
+|`light`|BAAI/bge-small|384|**100.0%**|**0.950**|**3.6 s**|~200 MB|
+|`medium`|BAAI/bge-base|768|**100.0%**|**0.950**|**3.9 s**|~600 MB|
+|`full`|BAAI/bge-m3|1024|75.0%|0.750|4.1 s|~1 800 MB|
 |`full-tq`|BAAI/bge-m3|1024|75.0%|0.750|**0.4 s**|~1 300 MB|
 
-\* Measured on Apple Silicon (MPS) (2026-05-01). See [docs/benchmarks.md](docs/benchmarks.md) for details.
+\* Measured on Apple Silicon (MPS) (2026-05-03) using Hybrid Search + MiniLM-L4-v2. See [docs/benchmarks.md](docs/benchmarks.md) for details.
 
 ---
 

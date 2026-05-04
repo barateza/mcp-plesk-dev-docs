@@ -48,7 +48,7 @@ _PROFILES: dict[str, ModelProfile] = {
         name="light",
         embed_model="BAAI/bge-small-en-v1.5",
         embed_dim=384,
-        reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        reranker_model="cross-encoder/ms-marco-MiniLM-L4-v2",
         reranker_enabled=True,
         description=(
             "~200 MB total. Ideal for M2 MacBook Air or any memory-constrained host."
@@ -59,7 +59,7 @@ _PROFILES: dict[str, ModelProfile] = {
         name="medium",
         embed_model="BAAI/bge-base-en-v1.5",
         embed_dim=768,
-        reranker_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        reranker_model="cross-encoder/ms-marco-MiniLM-L4-v2",
         reranker_enabled=True,
         description="~600 MB total. Good quality with moderate memory use.",
         approx_ram_mb=600,

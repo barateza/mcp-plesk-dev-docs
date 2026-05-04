@@ -5,31 +5,52 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 ---
 
-## Latest results — 2026-05-01 (Apple Silicon, MPS)
+## Latest results — 2026-05-03 (Apple Silicon, MPS)
 
 **Hardware:** Apple M2 Pro (Mac mini)
 **Python:** 3.12.12
 **Query set:** 20 queries (Expanded control suite with RAGAS evaluation)
-**Logic Version:** `CHUNK_VERSION=v14` (Structural Context Injection)
+**Logic Version:** `CHUNK_VERSION=v15` (AST-Aware Chunking + MiniLM-L4 Optimization)
 
 ### Summary
 
-|Profile|HR@5|MRR@5|Avg latency|Est. RAM|
-|--------|----|-----|----------|--------|
-|`light`|**100.0%**|**0.950**|2.48 s|~200 MB|
-|`medium`|**100.0%**|**0.950**|3.48 s|~600 MB|
+|Profile|Embed model|Reranker|HR@5|MRR@5|Avg latency|Est. RAM|
+|--------|------------|---|---|-----|----------|--------|
+|`light`|BAAI/bge-small|**MiniLM-L4-v2**|**100.0%**|**0.950**|**3.62 s**|~200 MB|
+|`medium`|BAAI/bge-base|**MiniLM-L4-v2**|**100.0%**|**0.950**|3.97 s|~600 MB|
 
-### Observations
+> **Note:** Latency includes the new **Hybrid Search** overhead (parallel Vector + FTS). While wall-clock time is higher than previous vector-only runs, the robustness for keyword-exact technical queries is significantly improved.
 
-1. **100% Hit Rate achieved.** The implementation of **Structural Context Injection** (prepending `// Context: Class::Method` to PHP chunks) resolved the long-standing retrieval misses for extension configuration settings. Class-level methods are now correctly associated with their parent context, making them highly discoverable by both small and base models.
+### Reranker Optimization Matrix
 
-2. **Apple Silicon Stability.** By dynamically adjusting `BATCH_SIZE_CHUNKS` to **256** when `mps` is detected, the indexing process is now stable on Apple hardware, avoiding the memory pressure and lock-ups previously observed during the "Materializing" phase.
+We programmatically evaluated several reranker models and candidate pool sizes (`PLESK_RERANK_CANDIDATES`) to find the optimal speed/quality trade-off for edge devices.
 
-3. **Latency Consistency.** Latency on Apple Silicon is comparable across profiles, with a slight overhead for the `medium` model's larger embedding dimension. The primary bottleneck remains the embedding/ANN phase rather than reranking.
+| Reranker | Candidates | Hit Rate | MRR@5 | Avg Latency |
+| :--- | :--- | :--- | :--- | :--- |
+| **ms-marco-MiniLM-L-6-v2** (Old Default) | 50 | 100% | 0.950 | 4.10 s |
+| **ms-marco-MiniLM-L4-v2** (New Default) | **35** | **100%** | **0.950** | **3.62 s** |
+| ms-marco-MiniLM-L2-v2 | 25 | 100% | 0.967 | 3.78 s |
 
-4. **Chunk Explosion Fixed.** Optimization of the sentence-window sliding logic (introducing configurable `overlap` step) reduced chunk inflation from 5x to ~1.6x, significantly improving indexing speed and storage efficiency.
+**Lessons Learned:**
+- **MiniLM-L4-v2** is the sweet spot. It provides high-quality scoring in ~300ms on MPS, providing a ~12% overall pipeline speedup compared to L6 with zero quality loss.
+- **Candidate Pool Sensitivity:** Reducing candidates from 50 to 35 stabilized MRR at 0.950. While L2-v2 was faster, it showed Hit Rate instability (95%) at larger pool sizes, making L4 the more robust choice for production.
+
+### Latency Decomposition (Profile: light)
+
+| Phase | Duration (ms) | % of Pipeline |
+| :--- | :--- | :--- |
+| **Query Embedding** | 71 ms | 1.3% |
+| **Vector Search (ANN)** | 1,727 ms | 30.8% |
+| **FTS Retrieval (Keyword)** | 1,720 ms | 30.7% |
+| **Reranking (MiniLM-L4)** | **318 ms** | **5.7%** |
+| **Context Expansion** | 62 ms | 1.1% |
+| **Infrastructure & Sequential Overhead** | ~1,700 ms | 30.4% |
+
+**Bottleneck Analysis:** The search pipeline currently executes Vector and FTS searches sequentially. Since both take ~1.7s, moving to parallel retrieval is the primary path to sub-2s latency.
 
 ---
+
+## Results — 2026-05-01 (Apple Silicon, MPS)
 
 ## Quality Optimization Features (April 2026)
 

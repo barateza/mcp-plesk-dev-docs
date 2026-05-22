@@ -160,4 +160,12 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 MIT. See [LICENSE](LICENSE).
 
+## Ownership & Disclaimer
+
+This is a personal project by Gilson Siqueira. It is not officially affiliated with, endorsed by, or supported by Plesk or WebPros International GmbH. Plesk is a trademark of WebPros International GmbH.
+
+Important notice about Plesk-owned deliverables
+
+Portions of this repository were developed under contract for Plesk International GmbH ("Plesk") only if specifically identified as such. The MIT license above applies only to material the repository owner is authorized to license. Files or directories owned by Plesk, if any, are listed in [NOTICE](NOTICE). If you need assurance about licensing for a particular file, contact Plesk or seek legal counsel before relying on the MIT License for Plesk-owned files.
+
 *Built to make Plesk extension development faster.*

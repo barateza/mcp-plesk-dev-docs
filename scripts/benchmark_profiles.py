@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Quality benchmark for mcp-plesk-unified model profiles.
+Quality benchmark for mcp-plesk-dev-docs model profiles.
 
 Measures retrieval quality of each profile against a hand-labelled query set,
 then prints a side-by-side comparison so you can make an informed trade-off.
@@ -8,39 +8,39 @@ then prints a side-by-side comparison so you can make an informed trade-off.
 Usage
 -----
 # Benchmark all profiles (requires a built index for each):
-  python scripts/benchmark_profiles.py
+    python scripts/benchmark_profiles.py
 
 # Benchmark a single profile (whatever PLESK_MODEL_PROFILE is set to):
-  PLESK_MODEL_PROFILE=light python scripts/benchmark_profiles.py --profile light
+    PLESK_MODEL_PROFILE=light python scripts/benchmark_profiles.py --profile light
 
 # Use a custom query file instead of the built-in ones:
-  python scripts/benchmark_profiles.py --queries my_queries.json
+    python scripts/benchmark_profiles.py --queries my_queries.json
 
 Query file format (JSON)
 ------------------------
 A list of objects, each with:
-  - "query"     : str    the search query
-  - "relevant"  : list   substrings that MUST appear in at least one result
-                          to count as a hit (case-insensitive)
-  - "category"  : str?   optional category filter (same as search_plesk_unified)
+    - "query"     : str   — the search query
+    - "relevant"  : list  — substrings that MUST appear in at least one result
+                             to count as a hit (case-insensitive)
+    - "category"  : str?  — optional category filter (same as search_plesk_unified)
 
 Example:
-  [
-    {
-      "query": "how to define default config settings for an extension",
-      "relevant": ["ConfigDefaults", "getDefaults"],
-      "category": "php-stubs"
-    },
-    {
-      "query": "restart plesk service from CLI",
-      "relevant": ["plesk repair", "service restart"],
-      "category": "cli"
-    }
-  ]
+    [
+        {
+            "query": "how to define default config settings for an extension",
+            "relevant": ["ConfigDefaults", "getDefaults"],
+            "category": "php-stubs"
+        },
+        {
+            "query": "restart plesk service from CLI",
+            "relevant": ["plesk repair", "service restart"],
+            "category": "cli"
+        }
+    ]
 
 Metrics reported
 ----------------
-- Hit Rate (HR@5)  : fraction of queries where 61 relevant result appears in top-5
+- Hit Rate (HR@5)  : fraction of queries where a relevant result appears in the top-5
 - MRR@5           : mean reciprocal rank (1/rank of first hit, averaged across queries)
 - Avg latency     : wall-clock time per query (seconds)
 - Peak RSS        : resident set size after loading models (MB)
@@ -465,7 +465,7 @@ def _add_ragas_summary(
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Benchmark retrieval quality across mcp-plesk-unified model profiles."
+            "Benchmark retrieval quality across mcp-plesk-dev-docs model profiles."
         )
     )
     parser.add_argument(

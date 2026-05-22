@@ -1,4 +1,4 @@
-# mcp-plesk-unified
+# mcp-plesk-dev-docs
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
@@ -111,8 +111,8 @@ This server provides tools, prompts, and resources. See **[docs/mcp-components.m
 ### Install
 
 ```bash
-git clone https://github.com/barateza/mcp-plesk-unified.git
-cd mcp-plesk-unified
+git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+cd mcp-plesk-dev-docs
 uv pip install -e .
 ```
 

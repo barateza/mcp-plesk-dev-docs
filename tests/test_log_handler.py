@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from plesk_unified.log_handler import _SYSLOG_IDENT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -240,4 +241,4 @@ class TestHandlerConfig:
             handlers = _call_factory(tmp_path, {"LOG_HANDLER": "os"})
         syslog = handlers[0]
         assert isinstance(syslog, logging.handlers.SysLogHandler)
-        assert "plesk-unified-mcp" in syslog.ident
+        assert _SYSLOG_IDENT in syslog.ident

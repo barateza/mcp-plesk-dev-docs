@@ -1,17 +1,17 @@
 """
-Model profile configuration for mcp-plesk-unified.
+Model profile configuration for mcp-plesk-dev-docs.
 
 Profiles let you trade RAM/VRAM footprint against retrieval quality.
 Select a profile via the PLESK_MODEL_PROFILE environment variable.
 
-  PLESK_MODEL_PROFILE=light    ~200 MB total  (M2 MacBook Air, memory-constrained)
-  PLESK_MODEL_PROFILE=full     ~1.8 GB total  (RTX 4070 Super, max quality)
-  PLESK_MODEL_PROFILE=medium   ~600 MB total  (balanced middle ground)
+    PLESK_MODEL_PROFILE=light    ~200 MB total  (M2 MacBook Air, memory-constrained)
+    PLESK_MODEL_PROFILE=full     ~1.8 GB total  (RTX 4070 Super, max quality)
+    PLESK_MODEL_PROFILE=medium   ~600 MB total  (balanced middle ground)
 
 You can also override individual components without changing the profile:
-    PLESK_EMBED_MODEL=BAAI/bge-base-en-v1.5
-    PLESK_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
-    PLESK_RERANKER_ENABLED=false
+        PLESK_EMBED_MODEL=BAAI/bge-base-en-v1.5
+        PLESK_RERANKER_MODEL=cross-encoder/ms-marco-MiniLM-L-6-v2
+        PLESK_RERANKER_ENABLED=false
 """
 
 from __future__ import annotations

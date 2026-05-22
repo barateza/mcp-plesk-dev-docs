@@ -317,6 +317,7 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25
+        rerank_candidates = 50
 
     mock_model_runtime.get_profile.return_value = DummyProfile()
     mock_settings.plesk_min_relevance_threshold = 0.55
@@ -377,6 +378,7 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25
+        rerank_candidates = 50
 
     mock_model_runtime.get_profile.return_value = DummyProfile()
     mock_settings.plesk_min_relevance_threshold = 0.55

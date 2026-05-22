@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).parent.parent.parent
 
 def create_mcp_app(container: AppContainer) -> FastMCP:
     """Create and configure the FastMCP application."""
-    mcp = FastMCP("mcp-plesk-unified")
+    mcp = FastMCP("mcp-plesk-dev-docs")
 
     @mcp.lifespan()
     @asynccontextmanager

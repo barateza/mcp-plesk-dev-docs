@@ -2,7 +2,7 @@
 
 ## Problem Statement
 
-`mcp-plesk-unified` is a functional RAG-over-documentation MCP server, but it falls short of enterprise production standards across three dimensions: **protocol completeness** (no Resources, Prompts, Sampling, Roots, or progress notifications), **operational maturity** (synchronous blocking tools, no container distribution, no CI/CD automation), and **contract strictness** (raw `os.environ.get()` calls, untyped string category parameters, opaque error messages that cause LLM hallucinations). The 10-pillar high-level plan identifies 20 concrete features to close these gaps.
+`mcp-plesk-dev-docs` is a functional RAG-over-documentation MCP server, but it falls short of enterprise production standards across three dimensions: **protocol completeness** (no Resources, Prompts, Sampling, Roots, or progress notifications), **operational maturity** (synchronous blocking tools, no container distribution, no CI/CD automation), and **contract strictness** (raw `os.environ.get()` calls, untyped string category parameters, opaque error messages that cause LLM hallucinations). The 10-pillar high-level plan identifies 20 concrete features to close these gaps.
 
 ## Goals
 

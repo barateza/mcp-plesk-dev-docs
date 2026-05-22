@@ -1,6 +1,6 @@
 # MCP Components Reference
 
-This document provides a detailed reference for all Model Context Protocol (MCP) components exposed by the `mcp-plesk-unified` server.
+This document provides a detailed reference for all Model Context Protocol (MCP) components exposed by the `mcp-plesk-dev-docs` server.
 
 ---
 

@@ -1,6 +1,6 @@
 # Plesk Unified MCP Server — Enterprise AI Infrastructure Uplift
 
-**Vision:** Evolve `mcp-plesk-unified` from a functional RAG server into a production-grade enterprise AI infrastructure component that is async-first, protocol-complete, observable, containerized, and continuously verified.
+**Vision:** Evolve `mcp-plesk-dev-docs` from a functional RAG server into a production-grade enterprise AI infrastructure component that is async-first, protocol-complete, observable, containerized, and continuously verified.
 
 **For:** AI developers, Plesk extension authors, and DevOps teams who embed this MCP server into their LLM workflows.
 

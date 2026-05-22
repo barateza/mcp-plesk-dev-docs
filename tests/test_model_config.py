@@ -53,7 +53,7 @@ class TestProfileSelection:
         assert p.name == "light"
         assert p.embed_model == "BAAI/bge-small-en-v1.5"
         assert p.embed_dim == 384
-        assert p.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        assert p.reranker_model == "cross-encoder/ms-marco-MiniLM-L4-v2"
         assert p.reranker_enabled is True
 
     def test_medium_profile(self):

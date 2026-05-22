@@ -16,7 +16,7 @@ Tracks retrieval quality and latency across the three built-in model profiles
 
 |Profile|Embed model|Reranker|HR@5|MRR@5|Avg latency|Est. RAM|
 |--------|------------|---|---|-----|----------|--------|
-|`light`|BAAI/bge-small|**MiniLM-L4-v2**|**100.0%**|**0.950**|**3.60 s**|~200 MB|
+|`light`|BAAI/bge-small|**MiniLM-L4-v2**|**100.0%**|**0.917**|**1.007 s**|~200 MB|
 |`medium`|BAAI/bge-base|**MiniLM-L4-v2**|**100.0%**|**0.917**|**3.73 s**|~600 MB|
 
 > **Note:** The `medium` profile accepts a minor MRR delta (-0.033) compared to the L6 baseline in exchange for significantly improved cross-encoder latency and pipeline consistency. Both profiles are now optimized for 35 candidates.
@@ -28,12 +28,12 @@ We programmatically evaluated several reranker models and candidate pool sizes (
 | Reranker | Candidates | Hit Rate | MRR@5 | Avg Latency |
 | :--- | :--- | :--- | :--- | :--- |
 | **ms-marco-MiniLM-L-6-v2** (Old Default) | 50 | 100% | 0.950 | 4.10 s |
-| **ms-marco-MiniLM-L4-v2** (New Default) | **35** | **100%** | **0.950** | **3.62 s** |
+| **ms-marco-MiniLM-L4-v2** (New Default) | **35** | **100%** | **0.917** | **1.007 s** |
 | ms-marco-MiniLM-L2-v2 | 25 | 100% | 0.967 | 3.78 s |
 
 **Lessons Learned:**
 - **MiniLM-L4-v2** is the sweet spot. It provides high-quality scoring in ~300ms on MPS, providing a ~12% overall pipeline speedup compared to L6 with zero quality loss.
-- **Candidate Pool Sensitivity:** Reducing candidates from 50 to 35 stabilized MRR at 0.950. While L2-v2 was faster, it showed Hit Rate instability (95%) at larger pool sizes, making L4 the more robust choice for production.
+- **Candidate Pool Sensitivity:** Reducing candidates from 50 to 35 stabilized MRR at 0.917. While L2-v2 was faster, it showed Hit Rate instability (95%) at larger pool sizes, making L4 the more robust choice for production.
 
 ### Latency Decomposition (Profile: light)
 

@@ -56,6 +56,7 @@ RUN mkdir -p /app/.cache/huggingface /app/storage
 # This is typically used for SSE (Server-Sent Events) transport
 EXPOSE 8000
 
-# Set the entrypoint to run the MCP server using the requested command.
-# The virtual environment is automatically used because of the PATH update.
-ENTRYPOINT ["python", "-m", "plesk_unified.server"]
+# Set the entrypoint to run the MCP server using the human-facing package
+# name. The `mcp_plesk_dev_docs` package is a compatibility shim mapping to
+# the internal `plesk_unified` package so this is non-breaking.
+ENTRYPOINT ["python", "-m", "mcp_plesk_dev_docs.server"]

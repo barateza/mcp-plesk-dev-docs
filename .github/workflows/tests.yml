@@ -46,8 +46,8 @@ jobs:
 
     - name: Import verification
       run: |
-        python -c "from plesk_unified.server import mcp; print('✓ Imports successful')"
+        python -c "from mcp_plesk_dev_docs.server import mcp; print('✓ Imports successful')"
 
     - name: Server startup test
       run: |
-        timeout 10 python -m plesk_unified.server 2>&1 | head -20 || echo "Server initialization completed"
+        timeout 10 python -m mcp_plesk_dev_docs.server 2>&1 | head -20 || echo "Server initialization completed"

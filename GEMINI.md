@@ -1,4 +1,4 @@
-# Engineering Guidelines (mcp-plesk-unified)
+# Engineering Guidelines (mcp-plesk-dev-docs)
 
 ## RAG Indexing & Development
 
@@ -29,7 +29,7 @@
 *   Always re-verify retrieval quality after logic changes using `scripts/benchmark_profiles.py`.
 *   Maintain the **Golden Baseline** in `benchmarks/baselines/control.json`.
     *   **Verified Performance (2026-05-01):**
-        *   **Light:** 100% Hit Rate, 0.95 MRR (Avg Latency: ~2.4s)
+        *   **Light:** 100% Hit Rate, 0.917 MRR (Avg Latency: ~1.007s)
         *   **Medium:** 100% Hit Rate, 0.95 MRR (Avg Latency: ~2.6s)
 
 *   Hybrid Search (Vector + FTS) is now the default; ensure any schema changes preserve the Tantivy FTS index.

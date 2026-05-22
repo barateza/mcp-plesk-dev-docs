@@ -46,8 +46,9 @@ def generate_plesk_toc(repo_path, category_name):
 
 
 if __name__ == "__main__":
-    # Update these paths to match your local machine
-    KB_ROOT = Path("/Users/gilsonsiqueira/mcpServers/mcp-plesk-unified/knowledge_base")
+    # Resolve repository root dynamically so this script works after renames
+    REPO_ROOT = Path(__file__).resolve().parent.parent
+    KB_ROOT = REPO_ROOT / "knowledge_base"
 
     generate_plesk_toc(KB_ROOT / "stubs", "PHP API Stubs")
     generate_plesk_toc(KB_ROOT / "sdk", "Extension SDK")

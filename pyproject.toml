@@ -3,7 +3,7 @@ requires = ["setuptools>=70.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "plesk-unified"
+name = "mcp-plesk-dev-docs"
 version = "0.4.2"
 description = "A unified MCP server that indexes and retrieves Plesk documentation using vector embeddings and semantic search with reranking"
 readme = "README.md"
@@ -42,17 +42,17 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/barateza/mcp-plesk-unified"
-Documentation = "https://github.com/barateza/mcp-plesk-unified#readme"
-Repository = "https://github.com/barateza/mcp-plesk-unified.git"
-"Bug Tracker" = "https://github.com/barateza/mcp-plesk-unified/issues"
+Homepage = "https://github.com/barateza/mcp-plesk-dev-docs"
+Documentation = "https://github.com/barateza/mcp-plesk-dev-docs#readme"
+Repository = "https://github.com/barateza/mcp-plesk-dev-docs.git"
+"Bug Tracker" = "https://github.com/barateza/mcp-plesk-dev-docs/issues"
 
 [tool.setuptools]
 packages = ["plesk_unified", "plesk_unified.turboquant"]
 
 [project.scripts]
 # Console script to run the MCP server
-plesk-unified-mcp = "plesk_unified.server:main"
+mcp-plesk-dev-docs = "plesk_unified.server:main"
 
 [project.optional-dependencies]
 # Note: torch is already a dependency of sentence-transformers

@@ -15,8 +15,8 @@ harassment-free environment for everyone.
 2. **Clone your fork** locally:
 
    ```bash
-   git clone https://github.com/barateza/mcp-plesk-unified.git
-   cd mcp-plesk-unified
+   git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+   cd mcp-plesk-dev-docs
    ```
 
 3. **Create a virtual environment**:
@@ -45,7 +45,7 @@ harassment-free environment for everyone.
 3. **Test your changes**:
 
    ```bash
-   python -m plesk_unified.server  # Verify the server starts correctly
+   python -m mcp_plesk_dev_docs.server  # Verify the server starts correctly
    ```
 
 4. **Commit with clear messages**:
@@ -187,7 +187,7 @@ Include:
 
 ## Questions?
 
-- Check existing [GitHub Issues](https://github.com/barateza/mcp-plesk-unified/issues).
+- Check existing [GitHub Issues](https://github.com/barateza/mcp-plesk-dev-docs/issues).
 - Open a new Discussion or Issue.
 - Be patient—maintainers are volunteers.
 

@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class PleskSettings(BaseSettings):
     """
-    Configuration settings for mcp-plesk-unified.
+    Configuration settings for mcp-plesk-dev-docs.
 
     Fields map to environment variables (e.g., log_level maps to LOG_LEVEL).
     """
@@ -37,7 +37,9 @@ class PleskSettings(BaseSettings):
     plesk_enable_fts: bool = True
     plesk_enable_ast_chunking: bool = False
     plesk_enable_sampling: bool = False
-    plesk_rerank_candidates: Optional[int] = None
+    # Default number of candidates to send to the reranker when not overridden.
+    # Historically this default was 50; keep that default for backward compatibility.
+    plesk_rerank_candidates: Optional[int] = 50
     plesk_min_relevance_threshold: Optional[float] = None
 
     # External APIs & Hardware
@@ -59,9 +61,33 @@ class PleskSettings(BaseSettings):
         log_dir.mkdir(parents=True, exist_ok=True)
         return str(log_dir / "plesk_unified.log")
 
+    @property
+    def embedding_model_dimensions(self) -> int:
+        """Return embedding vector dimension: explicit override or profile default.
+
+        Priority: `plesk_embed_dim` (explicit env override) -> profile default.
+        Lazy-imports model_config to avoid expensive imports at module load time.
+        """
+        if self.plesk_embed_dim:
+            return self.plesk_embed_dim
+        # Lazy import so we don't cause circular imports at module import time.
+        from plesk_unified.model_config import get_active_profile
+
+        return get_active_profile().embed_dim
+
 
 # Allow tests to suppress .env loading by setting PLESK_ENV_FILE="" or to another file.
 _env_file = os.environ.get("PLESK_ENV_FILE", ".env")
 if not _env_file:
     _env_file = None
-settings = PleskSettings(_env_file=_env_file)
+
+# Update the class-level model_config before instantiating the settings singleton.
+# We intentionally set `env_file` even when `_env_file` is `None` so tests can
+# suppress .env loading by setting `PLESK_ENV_FILE=""` in the environment.
+PleskSettings.model_config = SettingsConfigDict(
+    env_file=_env_file,
+    env_file_encoding="utf-8",
+    extra="ignore",
+)
+
+settings = PleskSettings()

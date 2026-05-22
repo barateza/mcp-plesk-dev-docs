@@ -10,7 +10,7 @@ Platform behaviour
 - **macOS**   : ``SysLogHandler`` → Apple Unified Logging: ``/var/run/syslog``
                 View: ``log stream --predicate 'eventMessage CONTAINS "plesk_unified"'``
 - **Linux**   : ``SysLogHandler`` → journald / syslog via ``/dev/log``
-                View with: ``journalctl -t plesk-unified-mcp --follow``
+                View with: ``journalctl -t mcp-plesk-dev-docs --follow``
 - **Windows** : ``NTEventLogHandler`` → Windows Event Log (requires ``pywin32``)
                 View with: Event Viewer → Windows Logs → Application
 - **Fallback**: ``RotatingFileHandler`` when native logging isn't available
@@ -35,8 +35,8 @@ from typing import List
 # ------------------------------------------------------------------ #
 # Constants
 # ------------------------------------------------------------------ #
-_SYSLOG_IDENT = "plesk-unified-mcp"
-_NT_EVENT_SOURCE = "PleskUnifiedMCP"
+_SYSLOG_IDENT = "mcp-plesk-dev-docs"
+_NT_EVENT_SOURCE = "McpPleskDevDocs"
 
 # Syslog facility: LOG_USER == 1, works on both macOS and Linux.
 # Using the integer directly avoids the Pyre "instance-only attribute" warning

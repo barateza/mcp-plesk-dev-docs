@@ -63,7 +63,7 @@ Optimized for Apple Silicon (M2/M3) using MPS acceleration and memory-resident t
 
 | Profile | Embed Model | HR@5 | MRR@5 | Avg Latency | Est. RAM |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **`light`** | BAAI/bge-small | **100.0%** | **0.950** | **~0.35s** | ~200 MB |
+| **`light`** | BAAI/bge-small | **100.0%** | **0.917** | **1.007 s** | ~200 MB |
 | **`medium`** | BAAI/bge-base | **100.0%** | **0.917** | **~0.60s** | ~600 MB |
 | **`full-tq`** | BAAI/bge-m3 | 75.0% | 0.750 | **~0.40s** | ~1300 MB |
 
@@ -119,17 +119,17 @@ uv pip install -e .
 ### Initial Indexing
 
 ```bash
-uv run python -m plesk_unified.server.main refresh_knowledge
+uv run python -m mcp_plesk_dev_docs.server.main refresh_knowledge
 ```
 
 ### Running
 
 ```bash
 # Standard mode
-uv run python -m plesk_unified.server.main
+uv run python -m mcp_plesk_dev_docs.server.main
 
 # Responsive daemon mode (auto-warmup)
-PLESK_DAEMON_AUTO_WARMUP=true uv run python -m plesk_unified.server.main
+PLESK_DAEMON_AUTO_WARMUP=true uv run python -m mcp_plesk_dev_docs.server.main
 ```
 
 ---

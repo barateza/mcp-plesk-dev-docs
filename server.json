@@ -1,0 +1,20 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.barateza/mcp-plesk-dev-docs",
+  "description": "An MCP server that indexes and retrieves Plesk documentation.",
+  "repository": {
+    "url": "https://github.com/barateza/mcp-plesk-dev-docs",
+    "source": "github"
+  },
+  "version": "0.4.3",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "mcp-plesk-dev-docs",
+      "version": "0.4.3",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

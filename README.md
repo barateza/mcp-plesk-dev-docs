@@ -1,6 +1,8 @@
 # mcp-plesk-dev-docs
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)](https://www.python.org/downloads/)
+[![PyPI](https://img.shields.io/pypi/v/mcp-plesk-dev-docs?style=flat-square)](https://pypi.org/project/mcp-plesk-dev-docs/)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-green?style=flat-square)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.barateza%2Fmcp-plesk-dev-docs/versions/0.4.3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green?style=flat-square)](https://modelcontextprotocol.io/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)

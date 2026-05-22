@@ -183,6 +183,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ---
 
 ## Unreleased
+### Changed (2026-05-22)
+
+- **Benchmark baseline updated:** `benchmarks/baselines/light.json` updated to HR@5=1.0, MRR@5=0.917, `avg_latency_s`=1.007 after a verified re-run; the benchmark gate was re-run and accepted the new baseline.
+- **Docs synchronized:** Updated `README.md`, `docs/benchmarks.md`, and `GEMINI.md` to reflect the accepted light-profile baseline and latency measurements.
+- **Pre-push gate adjusted:** `.beads/hooks/pre-push` now runs the `light` profile against `benchmarks/baselines/light.json` to align the local pre-push quality gate with the active benchmark profile.
+- **Human-facing rename & shim:** Added compatibility shim package `mcp_plesk_dev_docs` and updated human-facing references to `mcp-plesk-dev-docs` across README, Dockerfile, CI workflows, and CONTRIBUTING.
+- **Settings & tests fixes:** Resolved Pydantic `PleskSettings` issues (`embedding_model_dimensions`, explicit `model_config` usage) and updated related tests — full test-suite and `ruff` passed locally.
+- **Committed & pushed:** All changes were committed and pushed to `main` after pre-push verification passed.
 
 ### Planned
 

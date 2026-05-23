@@ -82,7 +82,7 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
-tq-search = { path = "./packages/tq-search", editable = true }
+tq-search = { path = "/Users/gilsonsiqueira/tq-search", editable = true }
 torch = [
 
   { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },

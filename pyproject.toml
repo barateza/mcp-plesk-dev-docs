@@ -38,7 +38,10 @@ dependencies = [
     "markdownify>=0.14.1",
     "tantivy>=0.22.0",
     "lance-namespace==0.6.1",
+    "tq-search",
 ]
+
+
 
 [project.urls]
 Homepage = "https://github.com/barateza/mcp-plesk-dev-docs"
@@ -47,7 +50,8 @@ Repository = "https://github.com/barateza/mcp-plesk-dev-docs.git"
 "Bug Tracker" = "https://github.com/barateza/mcp-plesk-dev-docs/issues"
 
 [tool.setuptools]
-packages = ["plesk_unified", "plesk_unified.turboquant"]
+packages = ["plesk_unified"]
+
 
 [project.scripts]
 # Console script to run the MCP server
@@ -78,7 +82,9 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
+tq-search = { path = "./packages/tq-search", editable = true }
 torch = [
+
   { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
 ]
 torchvision = [

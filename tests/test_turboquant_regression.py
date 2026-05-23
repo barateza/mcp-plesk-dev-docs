@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from plesk_unified import tq_index
-from plesk_unified.turboquant import LloydMaxCodebook, TurboQuantMSE, TurboQuantProd
+from tq_search import LloydMaxCodebook, TurboQuantMSE, TurboQuantProd
 
 
 def test_turboquant_package_exports():

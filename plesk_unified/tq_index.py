@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from plesk_unified.turboquant import TurboQuantProd
+from tq_search import TurboQuantProd
 
 
 class TurboQuantIndex:

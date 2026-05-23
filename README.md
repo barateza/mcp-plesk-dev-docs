@@ -9,6 +9,8 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square)](https://github.com/astral-sh/ruff)
 
+> [!NOTE]
+> This MCP server provides unified documentation search for extension developers. If you are looking to manage your live Plesk server via AI, please see the [official Plesk MCP Server](https://talk.plesk.com/threads/mcp-server-extension-for-plesk-wp-toolkit.389895/).
 
 **State-of-the-Art (SOTA) semantic search across the entire Plesk documentation surface, optimized for sub-second latency on Apple Silicon.**
 
@@ -110,31 +112,57 @@ This server provides tools, prompts, and resources. See **[docs/mcp-components.m
 
 ---
 
-## Quickstart
+## 🚀 Installation & Setup
 
-### Install
+Because this server is published to [PyPI](https://pypi.org/project/mcp-plesk-dev-docs/) and listed on the [MCP Registry](https://registry.modelcontextprotocol.io), you don't even need to clone the repository to run it!
 
-```bash
-git clone https://github.com/barateza/mcp-plesk-dev-docs.git
-cd mcp-plesk-dev-docs
-uv pip install -e .
+### Option 1: Run instantly via `uvx` (Recommended)
+
+You can run or integrate the server in seconds.
+
+#### 1. Add to Claude Desktop
+Add the server config to your `claude_desktop_config.json` (typically at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "plesk-dev-docs": {
+      "command": "uvx",
+      "args": ["mcp-plesk-dev-docs"]
+    }
+  }
+}
 ```
 
-### Initial Indexing
+#### 2. Configure in Cursor
+Go to **Settings > Features > MCP**, click **+ Add New MCP Server**:
+- **Name:** `plesk-dev-docs`
+- **Type:** `command`
+- **Command:** `uvx mcp-plesk-dev-docs`
 
-```bash
-uv run python -m mcp_plesk_dev_docs.server.main refresh_knowledge
-```
+---
 
-### Running
+### Option 2: Local Developer Setup (Manual Build)
 
-```bash
-# Standard mode
-uv run python -m mcp_plesk_dev_docs.server.main
+If you want to modify the source code, run benchmarks, or manage database migrations:
 
-# Responsive daemon mode (auto-warmup)
-PLESK_DAEMON_AUTO_WARMUP=true uv run python -m mcp_plesk_dev_docs.server.main
-```
+1. **Clone and Install:**
+   ```bash
+   git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+   cd mcp-plesk-dev-docs
+   uv pip install -e .
+   ```
+
+2. **Run Initial Indexing:**
+   Generate the offline vector database and full-text search indexes:
+   ```bash
+   uv run python -m mcp_plesk_dev_docs.server.main refresh_knowledge
+   ```
+
+3. **Start the Server:**
+   ```bash
+   uv run python -m mcp_plesk_dev_docs.server.main
+   ```
 
 ---
 

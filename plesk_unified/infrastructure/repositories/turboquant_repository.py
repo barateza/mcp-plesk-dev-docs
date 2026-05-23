@@ -20,3 +20,7 @@ class TurboQuantRepository:
     def build_from_table(self) -> TurboQuantIndex:
         """Build a new TurboQuant index from the database."""
         return self.storage_runtime.build_tq_index_from_table()
+
+    def get_tq_index(self) -> TurboQuantIndex:
+        """Return the TurboQuant index, loading or building it as needed."""
+        return self.storage_runtime.get_tq_index()

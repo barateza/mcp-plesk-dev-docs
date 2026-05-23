@@ -8,6 +8,7 @@
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green?style=flat-square)](https://modelcontextprotocol.io/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square)](https://github.com/astral-sh/ruff)
+[![MCP Badge](https://lobehub.com/badge/mcp/barateza-mcp-plesk-unified)](https://lobehub.com/mcp/barateza-mcp-plesk-unified)
 
 > [!NOTE]
 > This MCP server provides unified documentation search for extension developers. If you are looking to manage your live Plesk server via AI, please see the [official Plesk MCP Server](https://talk.plesk.com/threads/mcp-server-extension-for-plesk-wp-toolkit.389895/).

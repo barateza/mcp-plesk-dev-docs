@@ -179,10 +179,16 @@ class IndexingService:
         return active_hashes
 
     async def _persist_docs(self, docs: List[Dict[str, Any]]) -> None:
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            self.executor, lambda: self.lancedb_repo.persist_batch(docs)
-        )
+        device = self.model_runtime.detect_device()
+        if device == "mps":
+            # For MPS stability and to avoid multi-threaded PyTorch deadlocks,
+            # perform persistence directly on the main thread.
+            self.lancedb_repo.persist_batch(docs)
+        else:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(
+                self.executor, lambda: self.lancedb_repo.persist_batch(docs)
+            )
 
     async def _run_sync_tasks(
         self,
@@ -366,8 +372,10 @@ class IndexingService:
             reset_db,
         )
 
+        profile = self.model_runtime.get_profile()
         source_state = self.source_state_repo.load()
-        source_entries = source_state.setdefault("sources", {})
+        profile_state = source_state.setdefault(profile.name, {})
+        source_entries = profile_state.setdefault("sources", {})
 
         if reset_db:
             self.storage_runtime.get_table(create_new=True)

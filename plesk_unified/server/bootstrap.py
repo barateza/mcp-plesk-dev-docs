@@ -81,6 +81,15 @@ def configure_environment(settings):
     os.environ["TQDM_DISABLE"] = "1" if settings.tqdm_disable else "0"
     os.environ["TRANSFORMERS_VERBOSITY"] = settings.transformers_verbosity
 
+    # Optimize PyTorch CPU execution on Apple Silicon (using Accelerate / VecLib)
+    # and prevent thread contention overhead
+    import sys
+
+    if sys.platform == "darwin":
+        os.environ.setdefault("VECLIB_MAXIMUM_THREADS", "4")
+        os.environ.setdefault("OMP_NUM_THREADS", "4")
+        os.environ.setdefault("MKL_NUM_THREADS", "4")
+
 
 def create_executor(max_workers: int = 4) -> ThreadPoolExecutor:
     """Create a shared thread pool executor."""

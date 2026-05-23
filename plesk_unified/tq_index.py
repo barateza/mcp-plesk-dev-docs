@@ -52,6 +52,13 @@ class TurboQuantIndex:
         if self.compressed_db is None:
             return []
 
+        # 1. Lazily move the compressed database to the target device once
+        first_val = next(iter(self.compressed_db.values()))
+        if str(first_val.device) != self.device:
+            self.compressed_db = {
+                k: v.to(self.device) for k, v in self.compressed_db.items()
+            }
+
         selected_indices: list[int]
         if category:
             selected_indices = self._category_to_indices.get(category, [])
@@ -60,25 +67,30 @@ class TurboQuantIndex:
         else:
             selected_indices = list(range(len(self._meta)))
 
-        # 1. L2-Normalize the query
+        # 2. L2-Normalize the query
         norm = np.linalg.norm(query_vec)
         query_normalized = query_vec / max(norm, 1e-12)
 
-        # 2. Prepare query as a batched tensor (1, dim)
+        # 3. Prepare query as a batched tensor (1, dim) directly on target device
         q = torch.from_numpy(query_normalized).to(self.device).unsqueeze(0)
 
-        # 3. Slice candidates and move them to the target device.
-        selected_tensor = torch.as_tensor(selected_indices, dtype=torch.long)
-        db_on_device = {
-            k: v.index_select(0, selected_tensor).to(self.device)
-            for k, v in self.compressed_db.items()
-        }
+        # 4. Slice candidates only if we are actually filtering a subset
+        if category and len(selected_indices) < len(self._meta):
+            selected_tensor = torch.as_tensor(
+                selected_indices, dtype=torch.long, device=self.device
+            )
+            db_on_device = {
+                k: v.index_select(0, selected_tensor)
+                for k, v in self.compressed_db.items()
+            }
+        else:
+            db_on_device = self.compressed_db
 
-        # 4. Perform a SINGLE batched inner product calculation
+        # 5. Perform a SINGLE batched inner product calculation
         with torch.no_grad():
             scores = self.quantizer.inner_product(q, db_on_device).squeeze(0)
 
-        # 5. Sort and return
+        # 6. Sort and return
         scores_np = scores.cpu().numpy()
         idx = np.argsort(-scores_np)[:top_k]
 

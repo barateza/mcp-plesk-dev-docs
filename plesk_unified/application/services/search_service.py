@@ -262,9 +262,12 @@ class SearchService:
             n_candidates = profile.rerank_candidates
             candidates = self._get_search_candidates(safe_query, category, n_candidates)
 
-            # 2. Rerank
+            # 2. Rerank only top candidates to avoid cross-encoder bottleneck
+            max_rerank = 20 if "full" in profile.name else 35
             reranker = self.model_runtime.get_reranker()
-            results = self._rerank_and_score(safe_query, candidates, reranker)
+            results = self._rerank_and_score(
+                safe_query, candidates[:max_rerank], reranker
+            )
 
             # 3. Deduplicate
             results = self._deduplicate_by_filename(results, max_per_file=1)
@@ -291,9 +294,12 @@ class SearchService:
             n_candidates = profile.rerank_candidates
             candidates = self._get_search_candidates(safe_query, category, n_candidates)
 
-            # 2. Rerank
+            # 2. Rerank only top candidates to avoid cross-encoder bottleneck
+            max_rerank = 20 if "full" in profile.name else 35
             reranker = self.model_runtime.get_reranker()
-            results = self._rerank_and_score(safe_query, candidates, reranker)
+            results = self._rerank_and_score(
+                safe_query, candidates[:max_rerank], reranker
+            )
 
             # 3. Deduplicate
             results = self._deduplicate_by_filename(results, max_per_file=1)

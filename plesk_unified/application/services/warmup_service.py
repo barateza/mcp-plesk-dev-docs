@@ -53,6 +53,15 @@ class WarmupService:
         self.storage_runtime.get_table(create_new=False)
         parts.append("LanceDB table ready.")
 
+        # Warm up FTS index to avoid first-query lazy-load spike
+        if getattr(self.settings, "plesk_enable_fts", True):
+            try:
+                table = self.storage_runtime.get_table(create_new=False)
+                table.search("warmup").limit(1).to_list()
+                parts.append("LanceDB FTS index warmed up.")
+            except Exception as e:
+                logger.debug("Failed to warm up FTS index: %s", e)
+
         if getattr(profile, "use_turboquant", False):
             tq_path = self.storage_runtime.get_tq_index_path()
             if tq_path.exists():

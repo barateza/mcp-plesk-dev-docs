@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-05-23
+
+### Fixed
+- **Retrieval Quality for Full Profile.** Fixed `source_state.json` key isolation per-profile in `indexing_service.py` to prevent state collision, and resolved `max_rerank` candidate truncation in `search_service.py` (fixed at 35).
+- **Apple Silicon MPS Deadlocks.** Bypassed thread executor during document persistence on `mps` to avoid multi-threaded PyTorch deadlocks and reduce memory footprints (eliminating the 19GB memory bloat).
+- **PyTorch CPU Contention.** Added process-wide CPU threading environment variables in `bootstrap.py` to optimize macOS PyTorch execution.
+- **MCP Publisher server.json Versioning.** Bumped `server.json` version metadata to `0.5.0` to fix the duplicate version error during MCP Registry publishing.
+
+### Added
+- **GitHub Actions Publish Workflow.** Configured `.github/workflows/publish.yml` to support PyPI Trusted Publishing (OIDC).
+
 ## [0.4.4] - 2026-04-21
+
 
 ### Added
 - **`verify_refresh.py` utility.** A new helper script to verify that documentation indexing correctly skips unchanged sources based on fingerprinting.
@@ -206,6 +218,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.5.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.0
 [0.4.4]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.4
 [0.4.3]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.3
 [0.4.2]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.2

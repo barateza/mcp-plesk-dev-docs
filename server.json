@@ -6,12 +6,12 @@
     "url": "https://github.com/barateza/mcp-plesk-dev-docs",
     "source": "github"
   },
-  "version": "0.5.0.post1",
+  "version": "0.5.1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "mcp-plesk-dev-docs",
-      "version": "0.5.0.post1",
+      "version": "0.5.1",
       "transport": {
         "type": "stdio"
       }

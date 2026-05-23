@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-23
+
+### Added
+- **Instant Installation Guide.** Added `uvx mcp-plesk-dev-docs` quick-run section to the `README.md` and detailed integration steps for Claude Desktop and Cursor.
+- **Reference Alert.** Added clarification distinguishing the developer-focused documentation search MCP server from the operational server-management server.
+
 ## [0.5.0] - 2026-05-23
 
 ### Fixed

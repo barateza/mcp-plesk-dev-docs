@@ -1,8 +1,8 @@
-# TurboQuant: 5-bit Vector Quantization for Fast Retrieval
+# TurboQuant: 4-bit Vector Quantization for Fast Retrieval
 
 The `full-tq` profile routes searches through `TurboQuantIndex`
 (`plesk_unified/tq_index.py`), keeping the 1024-dim embedding corpus in a
-5-bit compressed buffer instead of raw float32 tensors.  This lets candidate
+4-bit compressed buffer instead of raw float32 tensors.  This lets candidate
 scoring run entirely in GPU memory and avoids decompressing the full corpus
 that powers the base `full` profile.  The implementation lives in the
 in-repo `plesk_unified.turboquant` package.
@@ -45,7 +45,7 @@ Numbers below were collected with `scripts/benchmark_profiles.py
 | HR@5   | 91.7% |
 | MRR@5  | 0.875 |
 | Avg latency (CUDA) | 0.07 s |
-| Est. RAM | ~1 300 MB (5-bit) |
+| Est. RAM | ~1 300 MB (4-bit) |
 
 ### Compression characteristics
 

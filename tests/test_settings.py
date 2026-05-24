@@ -61,7 +61,7 @@ def test_settings_loads_defaults_when_env_absent(cleanup_plesk_env_vars):
     assert settings.plesk_daemon_auto_warmup is False
     assert settings.openrouter_api_key == ""
     assert settings.tqdm_disable is True
-    assert settings.plesk_auto_refresh_on_startup is True
+    assert settings.plesk_auto_refresh_on_startup is False
     assert settings.plesk_index_summaries is False
     assert settings.plesk_rerank_candidates == 50
     assert settings.plesk_html_llm_table_normalize is False

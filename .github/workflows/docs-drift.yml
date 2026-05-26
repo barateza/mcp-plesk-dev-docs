@@ -1,4 +1,4 @@
-name: Documentation Drift Check
+name: TOC Enrichment Check
 
 permissions:
   contents: read
@@ -9,8 +9,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-drift:
-    name: Detect Documentation Drift
+  toc-enrich:
+    name: Enrich TOC Descriptions
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,27 +23,26 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 markdownify
+          pip install requests beautifulsoup4
 
-      - name: Run management script
+      - name: Run TOC enrichment
         run: |
-          # This will check for updates and download/convert them if available.
-          # If it makes changes to knowledge_base/, git status will show them.
-          python scripts/manage_plesk_docs.py
+          python scripts/enrich_html_toc.py
 
       - name: Check for changes
         id: git-check
         run: |
           if [ -n "$(git status --porcelain knowledge_base/)" ]; then
             echo "DRIFT_DETECTED=true" >> $GITHUB_ENV
-            echo "Changes detected in knowledge_base/"
+            echo "TOC descriptions updated in knowledge_base/"
           else
             echo "DRIFT_DETECTED=false" >> $GITHUB_ENV
-            echo "No changes detected."
+            echo "No TOC updates needed."
           fi
 
-      - name: Fail if drift detected
+      - name: Fail if enrichment produced changes
         if: env.DRIFT_DETECTED == 'true'
         run: |
-          echo "Error: Documentation drift detected. Please run 'python scripts/manage_plesk_docs.py' locally and commit the changes."
+          echo "TOC descriptions were updated. Run locally to review and commit:"
+          echo "  python scripts/enrich_html_toc.py"
           exit 1

@@ -150,12 +150,14 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
     # If repo_url is present, clone from Git via subprocess.
     if repo_url and source_path:
         _validate_repo_url(repo_url)
-        import subprocess  # nosec: only used after URL validation
+        # Only used after URL validation above
+        import subprocess  # nosec
 
         git_path = _get_git_path()
         logger.info("Cloning %s with %s", repo_url, git_path)
         try:
-            result = subprocess.run(  # nosec B603 — repo_url validated by _validate_repo_url above
+            # repo_url validated by _validate_repo_url above
+            result = subprocess.run(  # nosec
                 [git_path, "clone", "--", repo_url, str(source_path)],
                 capture_output=True,
                 text=True,
@@ -176,12 +178,14 @@ def ensure_source_exists(source: Dict[str, Any]) -> bool:
     # If zip_url is present, download and extract the Zip file.
     if zip_url and source_path:
         _validate_zip_url(zip_url)
-        import urllib.request  # nosec: only used after URL validation
+        # Only used after URL validation above
+        import urllib.request  # nosec
 
         logger.info("Downloading zip %s from %s...", source.get("cat"), zip_url)
         try:
             source_path.mkdir(parents=True, exist_ok=True)
-            response = urllib.request.urlopen(  # nosec B310 — zip_url validated by _validate_zip_url above
+            # zip_url validated by _validate_zip_url above
+            response = urllib.request.urlopen(  # nosec
                 zip_url, timeout=30
             )
             data = response.read()

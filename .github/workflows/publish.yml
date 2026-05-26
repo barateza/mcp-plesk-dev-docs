@@ -37,7 +37,7 @@ jobs:
           path: dist/
 
   publish-pypi:
-    name: Publish to PyPI
+    name: Publish to PyPI + MCP Registry
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -56,11 +56,15 @@ jobs:
       - name: Publish package distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
+      - name: Checkout repository (for server.json)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Update server.json version from tag
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Updating server.json version to $VERSION"
-          # Update both occurrences: root version and package version
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/g" server.json
 
       - name: Commit server.json update
@@ -70,3 +74,7 @@ jobs:
           git add server.json
           git commit -m "chore: bump server.json to ${GITHUB_REF_NAME#v} [skip ci]"
           git push
+
+      # Manual step after CI completes:
+      #   mcp-publisher login github
+      #   mcp-publisher publish

@@ -3,26 +3,39 @@ import logging
 import numpy as np
 import json
 import base64
+import torch
 from pathlib import Path
 from typing import Any, Optional, Tuple
 from plesk_unified.tq_index import TurboQuantIndex
 from plesk_unified import platform_utils
 
 
-def _encode_ndarray(arr: np.ndarray) -> dict:
-    """Encode a numpy ndarray as a JSON-serialisable dict."""
-    return {
-        "__ndarray__": True,
-        "data": base64.b64encode(arr.tobytes()).decode("ascii"),
-        "dtype": str(arr.dtype),
-        "shape": list(arr.shape),
-    }
+def _encode_tensor_dict(
+    tensors: dict[str, torch.Tensor] | None,
+) -> dict | None:
+    """Encode a dict of torch Tensors as a JSON-serialisable structure."""
+    if tensors is None:
+        return None
+    encoded = {}
+    for name, t in tensors.items():
+        cpu_t = t.cpu().contiguous()
+        encoded[name] = {
+            "data": base64.b64encode(cpu_t.numpy().tobytes()).decode("ascii"),
+            "dtype": str(cpu_t.dtype),
+            "shape": list(cpu_t.shape),
+        }
+    return {"__tensor_dict__": True, "items": encoded}
 
 
-def _decode_ndarray(obj: dict) -> np.ndarray:
-    """Reconstruct a numpy ndarray from the dict produced by _encode_ndarray."""
-    arr = np.frombuffer(base64.b64decode(obj["data"]), dtype=np.dtype(obj["dtype"]))
-    return arr.reshape(obj["shape"])
+def _decode_tensor_dict(obj: dict | None) -> dict[str, torch.Tensor] | None:
+    """Reconstruct a dict of torch Tensors from the encoded structure."""
+    if obj is None:
+        return None
+    decoded = {}
+    for name, enc in obj["items"].items():
+        arr = np.frombuffer(base64.b64decode(enc["data"]), dtype=np.dtype(enc["dtype"]))
+        decoded[name] = torch.from_numpy(arr.reshape(enc["shape"]))
+    return decoded
 
 
 logger = logging.getLogger("plesk_unified")
@@ -112,7 +125,7 @@ class StorageRuntime:
     def save_tq_index(self, tq_index: TurboQuantIndex) -> None:
         """Serialize and save the TurboQuant index to disk in JSON format."""
         data = {
-            "compressed_db": _encode_ndarray(tq_index.compressed_db),
+            "compressed_db": _encode_tensor_dict(tq_index.compressed_db),
             "meta": tq_index._meta,
             "category_to_indices": tq_index._category_to_indices,
             "bits": tq_index.bits,
@@ -159,7 +172,7 @@ class StorageRuntime:
 
         with path.open("r") as fh:
             data = json.load(fh)
-        tq_index.compressed_db = _decode_ndarray(data["compressed_db"])
+        tq_index.compressed_db = _decode_tensor_dict(data.get("compressed_db"))
         tq_index._meta = data.get("meta", [])
         tq_index._category_to_indices = data.get("category_to_indices", {})
         return tq_index

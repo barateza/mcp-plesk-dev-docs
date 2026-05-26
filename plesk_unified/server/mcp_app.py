@@ -13,7 +13,7 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
     """Create and configure the FastMCP application."""
     mcp = FastMCP("mcp-plesk-dev-docs")
 
-    @mcp.lifespan()
+    @mcp.lifespan()  # type: ignore[type-var]
     @asynccontextmanager
     async def lifespan(mcp_instance: FastMCP) -> AsyncGenerator[dict, None]:
         # Yield the container for access via ctx.request_context.lifespan_context

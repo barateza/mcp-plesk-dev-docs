@@ -129,14 +129,14 @@ class JsSourceProcessor:
             lang = "javascript"
             if doc.filename.endswith((".ts", ".tsx")):
                 lang = "typescript"
-            chunks = chunking.chunk_by_ast(doc.text, lang)
-            if chunks:
-                return chunks
+            ast_chunks = chunking.chunk_by_ast(doc.text, lang)
+            if ast_chunks:
+                return ast_chunks
 
-        chunks = chunking.chunk_js_hierarchical(
+        js_chunks = chunking.chunk_js_hierarchical(
             doc.text, section_max_lines=60, overlap=10
         )
-        return chunks or chunking.chunk_by_lines(doc.text, 60, 10)
+        return js_chunks or chunking.chunk_by_lines(doc.text, 60, 10)
 
 
 class ProcessorRegistry:

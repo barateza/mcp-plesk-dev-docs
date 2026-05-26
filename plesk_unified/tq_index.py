@@ -16,8 +16,8 @@ class TurboQuantIndex:
         self.quantizer = TurboQuantProd(dim, bits, device=device)
 
         # Batched tensors for compressed vectors.
-        self.compressed_db = None
-        self._meta = []
+        self.compressed_db: dict[str, torch.Tensor] | None = None
+        self._meta: list[dict] = []
         self._category_to_indices: dict[str, list[int]] = {}
 
     def add(self, vecs: np.ndarray, metas: list[dict]) -> None:

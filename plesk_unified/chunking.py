@@ -10,7 +10,7 @@ logger = logging.getLogger("plesk_unified")
 CHUNK_VERSION = "v15"
 
 # Global registry for tree-sitter languages to avoid repeated lookups
-_TS_LANGS = {}
+_TS_LANGS: dict[str, object] = {}
 
 
 def _get_ts_lang(lang_name: str):

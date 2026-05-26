@@ -77,7 +77,7 @@ class PleskSettings(BaseSettings):
 
 
 # Allow tests to suppress .env loading by setting PLESK_ENV_FILE="" or to another file.
-_env_file = os.environ.get("PLESK_ENV_FILE", ".env")
+_env_file: str | None = os.environ.get("PLESK_ENV_FILE", ".env")
 if not _env_file:
     _env_file = None
 

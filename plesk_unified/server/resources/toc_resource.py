@@ -7,6 +7,6 @@ async def get_toc_resource(category: str, ctx: Context) -> str:
     """
     Get the Table of Contents for a specific Plesk documentation category.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     # Use TocFormatter from the container to return the TOC as a JSON string
     return container.toc_formatter.to_json(category)

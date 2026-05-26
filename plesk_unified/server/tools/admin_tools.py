@@ -74,7 +74,7 @@ class AdminTools:
 @tool_error_boundary
 async def warmup_server(ctx: Context) -> str:
     """Preload the active profile models and table without running indexing."""
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = AdminTools(
         container.model_runtime,
         container.warmup_service,
@@ -87,7 +87,7 @@ async def warmup_server(ctx: Context) -> str:
 @tool_error_boundary
 async def daemon_health(ctx: Context) -> str:
     """Return daemon-centric readiness status."""
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = AdminTools(
         container.model_runtime,
         container.warmup_service,
@@ -100,7 +100,7 @@ async def daemon_health(ctx: Context) -> str:
 @tool_error_boundary
 async def list_model_profiles(ctx: Context) -> str:
     """List built-in model profiles and show the active profile."""
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = AdminTools(
         container.model_runtime,
         container.warmup_service,

@@ -1,7 +1,7 @@
 import logging
 from typing import Optional, List, Dict, Any
 from fastmcp import Context
-from mcp.types import SamplingMessage
+from mcp.types import SamplingMessage, TextContent
 from plesk_unified.types import CategoryEnum, validate_category
 from plesk_unified.error_handling import tool_error_boundary
 
@@ -50,25 +50,16 @@ class SearchTools:
                 messages=[
                     SamplingMessage(
                         role="user",
-                        content={"type": "text", "text": prompt},
+                        content=TextContent(type="text", text=prompt),
                     )
                 ],
                 max_tokens=600,
             )
 
-            if not (sample_result and sample_result.content):
+            if not (sample_result and sample_result.text):
                 return None
 
-            answer_text = ""
-            if hasattr(sample_result.content, "text"):
-                answer_text = sample_result.content.text
-            elif (
-                isinstance(sample_result.content, dict)
-                and sample_result.content.get("type") == "text"
-            ):
-                answer_text = sample_result.content.get("text")
-            else:
-                answer_text = str(sample_result.content)
+            answer_text = sample_result.text or ""
 
             if answer_text:
                 return f"{answer_text}\n\n**Sources:**\n{citation_list}"
@@ -136,7 +127,7 @@ async def search_plesk_unified(
     """
     Search the unified Plesk documentation for a specific query.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     search_tools = SearchTools(container.search_service)
     return await search_tools.search_plesk_unified(ctx, query, category)
 
@@ -153,7 +144,7 @@ async def get_file_content(
     Use this when you have a filename from a search result and need more context
     than what was provided in the search snippets.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     search_tools = SearchTools(container.search_service)
     return await search_tools.get_file_content(filename, category)
 
@@ -170,6 +161,6 @@ async def resolve_references(
     Useful for finding usage examples of a class, method, or CLI command
     across the documentation.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     search_tools = SearchTools(container.search_service)
     return await search_tools.resolve_references(query, category)

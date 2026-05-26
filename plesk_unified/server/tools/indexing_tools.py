@@ -77,7 +77,7 @@ async def refresh_knowledge(
     indexing operation. For very large documentation sets, use
     `trigger_index_sync` instead.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.refresh_knowledge(ctx, category, reset_db)
 
@@ -93,7 +93,7 @@ async def trigger_index_sync(
 
     Returns a job_id that can be used with `check_sync_status`.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.trigger_index_sync(ctx, category, reset_db)
 
@@ -103,7 +103,7 @@ async def check_sync_status(ctx: Context, job_id: str) -> Dict[str, Any]:
     """
     Check the status of a background indexing job.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.check_sync_status(job_id)
 
@@ -113,6 +113,6 @@ async def requantize_knowledge(ctx: Context) -> str:
     """
     Rebuild the TurboQuant index from stored vectors.
     """
-    container = ctx.request_context.lifespan_context["container"]
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     tools = IndexingTools(container.indexing_service, container.job_service)
     return await tools.requantize_knowledge()

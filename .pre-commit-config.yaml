@@ -28,3 +28,13 @@ repos:
         # are intentional pytest patterns, and production code already has none.
         args: [-r, --skip, B101]
         stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: quality-gate
+        name: quality gate
+        description: "Run light-profile control benchmark against golden baseline"
+        entry: .venv/bin/python3 scripts/benchmark_profiles.py --suite control --profile light --baseline-file benchmarks/baselines/light.json --gate-config benchmarks/gates/default.json --fail-on-gate
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

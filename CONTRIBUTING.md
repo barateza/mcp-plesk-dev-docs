@@ -19,17 +19,20 @@ harassment-free environment for everyone.
    cd mcp-plesk-dev-docs
    ```
 
-3. **Create a virtual environment**:
+3. **Run the bootstrap script** (auto-installs `uv`, creates venv, installs dependencies):
+
+   ```bash
+   ./install.sh          # Linux / macOS
+   # powershell -ExecutionPolicy Bypass -File install.ps1   # Windows
+   ```
+
+   Or set up manually:
 
    ```bash
    python -m venv .venv
-   source .venv/bin/activate
-   ```
-
-4. **Install development dependencies**:
-
-   ```bash
-   pip install -e .
+   source .venv/bin/activate   # Linux/macOS
+   # .venv\Scripts\Activate.ps1   # Windows
+   pip install -e ".[dev]"
    ```
 
 ## Make changes
@@ -217,7 +220,10 @@ ruff check . --fix
 ruff format .
 
 # Type check
-pyright plesk_unified/
+mypy --ignore-missing-imports .
+
+# Security scan
+bandit -r . -x ./tests
 
 # Run tests
 pytest

@@ -200,15 +200,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## Unreleased
-### Changed (2026-05-22)
+## [0.5.2] - 2026-05-23
+
+### Added
+
+- **Single-instance lock.** New `server/lock.py` module prevents concurrent LanceDB access when multiple MCP clients or IDE sessions launch the server simultaneously. Uses a PID file with cross-platform liveness checks via `psutil`.
+- **CI: mypy type checking.** Added `mypy --ignore-missing-imports .` step to the `tests.yml` workflow to catch type errors on every push and PR.
+- **CI: Bandit SAST.** Added `bandit -r . -x ./tests` step to the `tests.yml` workflow for automated security scanning of the codebase.
+- **Bootstrap scripts.** Added `install.sh` (Linux/macOS) and `install.ps1` (Windows) that auto-install `uv`, create a venv, and install the project and dev dependencies in editable mode.
+- **Dev dependencies.** Added `mypy>=1.15.0` and `bandit>=1.8.0` to `[project.optional-dependencies] dev`.
+
+### Changed
 
 - **Benchmark baseline updated:** `benchmarks/baselines/light.json` updated to HR@5=1.0, MRR@5=0.917, `avg_latency_s`=1.007 after a verified re-run; the benchmark gate was re-run and accepted the new baseline.
 - **Docs synchronized:** Updated `README.md`, `docs/benchmarks.md`, and `GEMINI.md` to reflect the accepted light-profile baseline and latency measurements.
 - **Pre-push gate adjusted:** `.beads/hooks/pre-push` now runs the `light` profile against `benchmarks/baselines/light.json` to align the local pre-push quality gate with the active benchmark profile.
 - **Human-facing rename & shim:** Added compatibility shim package `mcp_plesk_dev_docs` and updated human-facing references to `mcp-plesk-dev-docs` across README, Dockerfile, CI workflows, and CONTRIBUTING.
 - **Settings & tests fixes:** Resolved Pydantic `PleskSettings` issues (`embedding_model_dimensions`, explicit `model_config` usage) and updated related tests — full test-suite and `ruff` passed locally.
-- **Committed & pushed:** All changes were committed and pushed to `main` after pre-push verification passed.
+
+## Unreleased
 
 ### Planned
 
@@ -224,6 +234,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.5.2]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.2
+[0.5.1]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.1
 [0.5.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.0
 [0.4.4]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.4
 [0.4.3]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.3

@@ -80,6 +80,7 @@ Optimized for Apple Silicon (M2/M3) using MPS acceleration and memory-resident t
 
 ## Key Features
 
+- **Single-Instance Lock:** PID-based lock prevents concurrent LanceDB access when multiple MCP clients or IDE sessions try to launch the server simultaneously.
 - **Sub-Second Hybrid Search:** Combined Vector + Tantivy FTS with **RAM-cached table connections** for instant retrieval.
 - **AST-Aware Chunking:** Uses `tree-sitter` to respect class and method boundaries in PHP, JS, and TS documentation.
 - **TurboQuant Acceleration:** Fast 4-bit quantized search for the `full-tq` profile, delivering 10x lower latency for large models.
@@ -147,12 +148,20 @@ Go to **Settings > Features > MCP**, click **+ Add New MCP Server**:
 
 If you want to modify the source code, run benchmarks, or manage database migrations:
 
-1. **Clone and Install:**
-   ```bash
-   git clone https://github.com/barateza/mcp-plesk-dev-docs.git
-   cd mcp-plesk-dev-docs
-   uv pip install -e .
-   ```
+**Quick bootstrap (recommended):**
+```bash
+git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+cd mcp-plesk-dev-docs
+./install.sh          # Linux / macOS
+# powershell -ExecutionPolicy Bypass -File install.ps1   # Windows
+```
+
+**Manual setup:**
+```bash
+git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+cd mcp-plesk-dev-docs
+uv pip install -e ".[dev]"
+```
 
 2. **Run Initial Indexing:**
    Generate the offline vector database and full-text search indexes:

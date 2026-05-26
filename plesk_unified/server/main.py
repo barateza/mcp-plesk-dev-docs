@@ -15,6 +15,11 @@ BASE_DIR = Path(__file__).parent.parent.parent
 
 def run_server():
     """Main entrypoint for the MCP server."""
+    # 0. Single-instance lock — prevent concurrent LanceDB access
+    from plesk_unified.server.lock import acquire_lock
+
+    acquire_lock()
+
     start_time = time.perf_counter()
 
     # 1. Bootstrap (Composition Root)

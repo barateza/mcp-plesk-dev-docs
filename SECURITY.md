@@ -57,12 +57,16 @@ public GitHub issue. Instead, follow responsible disclosure practices.
    - Check for known vulnerabilities: run `pip check`.
    - Keep the Python version current (3.12+).
 
-2. **Validate input**:
+2. **Run security scans**:
+   - Bandit SAST runs automatically in CI on every push and PR via `.github/workflows/tests.yml`.
+   - Run locally before submitting: `bandit -r . -x ./tests`.
+
+3. **Validate input**:
    - Sanitize all user inputs.
    - Validate file paths.
    - Limit query sizes.
 
-3. **Handle errors**:
+4. **Handle errors**:
    - Obfuscate sensitive paths in error messages.
    - Log securely without exposing sensitive data.
    - Use appropriate log levels.

@@ -1,4 +1,4 @@
-name: Tests & Linting
+name: Tests, Linting & Security
 permissions:
   contents: read
 
@@ -43,6 +43,14 @@ jobs:
     - name: Format check with ruff
       run: |
         ruff format --check .
+
+    - name: Type check with mypy
+      run: |
+        mypy --ignore-missing-imports .
+
+    - name: Security scan with Bandit
+      run: |
+        bandit -r . -x ./tests
 
     - name: Import verification
       run: |

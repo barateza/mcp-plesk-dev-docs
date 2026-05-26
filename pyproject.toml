@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-plesk-dev-docs"
-version = "0.5.1.post0"
+version = "0.5.2"
 description = "A unified MCP server that indexes and retrieves Plesk documentation using vector embeddings and semantic search with reranking"
 readme = "README.md"
 license = "MIT"
@@ -66,6 +66,8 @@ dev = [
     "requests>=2.32.0",
     "ruff>=0.3.0",
     "pre-commit>=3.6.0",
+    "mypy>=1.15.0",
+    "bandit>=1.8.0",
 ]
 test = [
     "pytest>=8.0.0",

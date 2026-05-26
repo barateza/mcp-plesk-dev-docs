@@ -153,6 +153,7 @@ uv.lock
 .gemini/
 .specs/
 .claude/
+.reasonix/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

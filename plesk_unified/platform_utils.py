@@ -70,7 +70,7 @@ def get_platform_info() -> dict:
                     info["vram_free_mb"] = free_vram // (1024**2)
                     info["vram_total_mb"] = total_vram // (1024**2)
                 except Exception:
-                    pass
+                    logger.debug("Failed to read VRAM info")
 
     except ImportError:
         info["torch_available"] = False
@@ -101,7 +101,7 @@ def get_optimal_device() -> str:
             if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                 return "mps"
         except Exception:
-            pass
+            logger.debug("MPS not available, falling back to CPU")
         return "cpu"
 
     # Windows/Linux: Check for CUDA
@@ -111,7 +111,7 @@ def get_optimal_device() -> str:
             if torch.cuda.is_available():
                 return "cuda"
         except Exception:
-            pass
+            logger.debug("CUDA check failed, falling back to CPU")
 
     return "cpu"
 

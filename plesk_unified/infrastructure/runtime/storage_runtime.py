@@ -1,11 +1,29 @@
 import lancedb
 import logging
 import numpy as np
-import pickle
+import json
+import base64
 from pathlib import Path
 from typing import Any, Optional, Tuple
 from plesk_unified.tq_index import TurboQuantIndex
 from plesk_unified import platform_utils
+
+
+def _encode_ndarray(arr: np.ndarray) -> dict:
+    """Encode a numpy ndarray as a JSON-serialisable dict."""
+    return {
+        "__ndarray__": True,
+        "data": base64.b64encode(arr.tobytes()).decode("ascii"),
+        "dtype": str(arr.dtype),
+        "shape": list(arr.shape),
+    }
+
+
+def _decode_ndarray(obj: dict) -> np.ndarray:
+    """Reconstruct a numpy ndarray from the dict produced by _encode_ndarray."""
+    arr = np.frombuffer(base64.b64decode(obj["data"]), dtype=np.dtype(obj["dtype"]))
+    return arr.reshape(obj["shape"])
+
 
 logger = logging.getLogger("plesk_unified")
 
@@ -52,7 +70,7 @@ class StorageRuntime:
                 try:
                     db.drop_table("plesk_knowledge")
                 except Exception:
-                    pass
+                    logger.debug("Failed to drop table on overwrite")
                 table = db.create_table(
                     "plesk_knowledge",
                     schema=self.model_runtime.get_schema(),
@@ -69,7 +87,7 @@ class StorageRuntime:
             try:
                 db.drop_table("plesk_knowledge")
             except Exception:
-                pass
+                logger.debug("Failed to drop table on recovery")
             table = db.create_table(
                 "plesk_knowledge", schema=self.model_runtime.get_schema(), mode="create"
             )
@@ -89,23 +107,34 @@ class StorageRuntime:
         """Return the path to the TurboQuant index file for the active profile."""
         profile = self.model_runtime.get_profile()
         self.tq_dir.mkdir(parents=True, exist_ok=True)
-        return self.tq_dir / f"{profile.name}.pkl"
+        return self.tq_dir / f"{profile.name}.tqcache"
 
     def save_tq_index(self, tq_index: TurboQuantIndex) -> None:
-        """Serialize and save the TurboQuant index to disk."""
+        """Serialize and save the TurboQuant index to disk in JSON format."""
         data = {
-            "compressed_db": tq_index.compressed_db,
+            "compressed_db": _encode_ndarray(tq_index.compressed_db),
             "meta": tq_index._meta,
             "category_to_indices": tq_index._category_to_indices,
             "bits": tq_index.bits,
             "dim": tq_index.dim,
         }
-        with self.get_tq_index_path().open("wb") as fh:
-            pickle.dump(data, fh)
+        with self.get_tq_index_path().open("w") as fh:
+            json.dump(data, fh)
 
     def load_tq_index(self) -> Optional[TurboQuantIndex]:
         """Load the TurboQuant index from disk if it exists."""
         path = self.get_tq_index_path()
+
+        # Detect stale pickle files from previous format versions
+        old_pkl = path.with_suffix(".pkl")
+        if old_pkl.exists():
+            logger.warning(
+                "Found legacy pickle file %s. Ignoring it so the index "
+                "gets rebuilt in the new JSON format.",
+                old_pkl,
+            )
+            return None
+
         if not path.exists():
             return None
 
@@ -128,9 +157,9 @@ class StorageRuntime:
             else:
                 raise
 
-        with path.open("rb") as fh:
-            data = pickle.load(fh)
-        tq_index.compressed_db = data.get("compressed_db")
+        with path.open("r") as fh:
+            data = json.load(fh)
+        tq_index.compressed_db = _decode_ndarray(data["compressed_db"])
         tq_index._meta = data.get("meta", [])
         tq_index._category_to_indices = data.get("category_to_indices", {})
         return tq_index

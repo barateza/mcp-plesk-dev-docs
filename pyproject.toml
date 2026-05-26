@@ -114,6 +114,11 @@ max-statements = 50
 "tests/*" = ["PLR", "C4"]
 "scripts/*" = ["PLR"]
 
+[tool.bandit]
+# Exclude test directory — B101 (assert_used) is the standard pytest assertion
+# pattern and not a security issue in test files.
+exclude_dirs = ["tests", ".venv", ".beads", ".git"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

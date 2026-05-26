@@ -59,7 +59,7 @@ def _rss_mb() -> float:
                 if line.startswith("VmRSS:"):
                     return int(line.split()[1]) / 1024
         except Exception:
-            pass
+            pass  # nosec — /proc may not exist on non-Linux or in containers
     return 0.0
 
 

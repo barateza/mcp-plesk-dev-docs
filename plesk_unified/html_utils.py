@@ -56,7 +56,7 @@ def _normalize_table_with_llm(
         if res and res != "Description unavailable.":
             return res
     except Exception:
-        pass
+        logger.debug("Description generation failed, returning empty string")
 
     return ""
 

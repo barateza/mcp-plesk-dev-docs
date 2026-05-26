@@ -18,7 +18,7 @@ class SummaryCache:
 
     def _get_file_hash(self, file_path: Path) -> str:
         """Computes MD5 hash of file content."""
-        hasher = hashlib.md5()
+        hasher = hashlib.md5(usedforsecurity=False)
         with open(file_path, "rb") as f:
             for chunk in iter(lambda: f.read(4096), b""):
                 hasher.update(chunk)

@@ -24,5 +24,7 @@ repos:
     rev: 1.9.4
     hooks:
       - id: bandit
-        args: [-r]
+        # Scan staged files (fast). Skip B101 globally — asserts in test files
+        # are intentional pytest patterns, and production code already has none.
+        args: [-r, --skip, B101]
         stages: [pre-commit]

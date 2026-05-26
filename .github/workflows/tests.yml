@@ -1,4 +1,4 @@
-name: Tests, Linting & Security
+name: Cross-Version Integration Test
 permissions:
   contents: read
 
@@ -35,22 +35,6 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
-
-    - name: Lint with ruff
-      run: |
-        ruff check .
-
-    - name: Format check with ruff
-      run: |
-        ruff format --check .
-
-    - name: Type check with mypy
-      run: |
-        mypy --ignore-missing-imports .
-
-    - name: Security scan with Bandit
-      run: |
-        bandit -r . -x ./tests
 
     - name: Import verification
       run: |

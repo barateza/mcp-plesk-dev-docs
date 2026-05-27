@@ -28,11 +28,11 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "fastmcp>=3.2.4",
     "lancedb>=0.29.1",
-    "pylance>=0.23.0",
     "numpy>=1.26.0",  # used directly in server.py, tq_index.py, and scripts
     "psutil>=6.1.1",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.1",
+    "requests>=2.32.0",  # used in ai_client.py (runtime LLM calls) and enrich_html_toc.py
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
@@ -72,9 +72,15 @@ dev = [
 test = [
     "pytest>=8.0.0",
 ]
-tools = [
-    "requests>=2.32.0",
+parsing = [
+    # Tree-sitter code parsing for chunking.py — gracefully degrades if missing.
+    # tree-sitter-languages is unmaintained and lacks cp313+ wheels.
+    # tree-sitter-language-pack is its maintained replacement (same API).
+    "tree-sitter>=0.23.0",
+    "tree-sitter-language-pack>=0.1.0",
+    "tree-sitter-languages==1.10.2",
 ]
+
 
 # --- NEW CONFIGURATION BELOW ---
 

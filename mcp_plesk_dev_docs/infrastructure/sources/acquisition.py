@@ -95,7 +95,7 @@ def _get_git_path() -> str:
     return _GIT_PATH
 
 
-_SAFE_GIT_RE = re.compile(r"^https://([\w.-]+\.)+[\w-]+(:\d+)?/[\w\-._~/]+(\.git)?$")
+_SAFE_GIT_RE = re.compile(r"^https://([\w-]+\.)+[\w-]+(:\d+)?/[\w\-._~/]+(\.git)?$")
 
 
 def _validate_repo_url(url: str) -> None:

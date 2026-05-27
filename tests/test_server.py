@@ -6,19 +6,19 @@ import concurrent.futures
 
 # New imports from the service-based architecture
 from fastmcp import Context
-from plesk_unified.server.mcp_app import create_mcp_app
-from plesk_unified.application.services.container import AppContainer
-from plesk_unified.settings import PleskSettings as Settings
-from plesk_unified.types import CategoryEnum
-from plesk_unified.types import VALID_CATEGORIES  # FIX: Corrected import path
+from mcp_plesk_dev_docs.server.mcp_app import create_mcp_app
+from mcp_plesk_dev_docs.application.services.container import AppContainer
+from mcp_plesk_dev_docs.settings import PleskSettings as Settings
+from mcp_plesk_dev_docs.domain.models import CategoryEnum
+from mcp_plesk_dev_docs.domain.models import VALID_CATEGORIES
 
 # New tool imports
-from plesk_unified.server.tools.search_tools import search_plesk_unified
-from plesk_unified.server.tools.admin_tools import (
+from mcp_plesk_dev_docs.server.tools.search_tools import search_mcp_plesk_dev_docs
+from mcp_plesk_dev_docs.server.tools.admin_tools import (
     warmup_server,
     daemon_health,
 )
-from plesk_unified.server.tools.indexing_tools import (
+from mcp_plesk_dev_docs.server.tools.indexing_tools import (
     refresh_knowledge,
 )
 
@@ -137,9 +137,12 @@ async def mock_server_dependencies():
 
     # --- Mock tool_error_boundary dependencies ---
     with (
-        patch("plesk_unified.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE", True),
         patch(
-            "plesk_unified.error_handling.lancedb_exc", new=MagicMock()
+            "mcp_plesk_dev_docs.server.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE",
+            True,
+        ),
+        patch(
+            "mcp_plesk_dev_docs.server.error_handling.lancedb_exc", new=MagicMock()
         ) as mock_lancedb_exc,
     ):
         mock_lancedb_exc.TableNotFoundError = MockTableNotFoundError
@@ -163,15 +166,15 @@ def test_category_enum_has_five_values():
 
 
 @pytest.mark.asyncio
-async def test_search_plesk_unified_schema_exposes_category_enum_with_five_values(
+async def test_search_mcp_plesk_dev_docs_schema_exposes_category_enum_with_five_values(
     mcp_app_fixture,
 ):
     """
-    Tests that search_plesk_unified tool schema exposes the CategoryEnum
+    Tests that search_mcp_plesk_dev_docs tool schema exposes the CategoryEnum
     with its values.
     """
     mcp_instance, _, _ = mcp_app_fixture
-    tool = await mcp_instance.get_tool("search_plesk_unified")
+    tool = await mcp_instance.get_tool("search_mcp_plesk_dev_docs")
 
     params = tool.parameters
     category_schema = params["properties"]["category"]
@@ -216,31 +219,35 @@ async def test_refresh_knowledge_schema_exposes_category_enum_plus_all(
 
 
 @pytest.mark.asyncio
-async def test_search_plesk_unified_rejects_invalid_category_string(
+async def test_search_mcp_plesk_dev_docs_rejects_invalid_category_string(
     mock_server_dependencies,
 ):
     """
-    Tests that search_plesk_unified returns an error string for an
+    Tests that search_mcp_plesk_dev_docs returns an error string for an
     invalid category string, now that tool_error_boundary intercepts.
     """
     mock_ctx, _ = mock_server_dependencies
     # The validation happens before the tool body, so we expect tool_error_boundary
     # to catch this. The tool itself might not even be called if validation fails.
     # However, since the FastMCP runtime handles this, we just call the tool as usual.
-    result = await search_plesk_unified(mock_ctx, query="test", category="invalid-cat")
+    result = await search_mcp_plesk_dev_docs(
+        mock_ctx, query="test", category="invalid-cat"
+    )
     assert result.startswith(
         "[ERROR] Invalid argument: Invalid category: 'invalid-cat'."
     )
 
 
 @pytest.mark.asyncio
-async def test_search_plesk_unified_rejects_all_as_category(mock_server_dependencies):
+async def test_search_mcp_plesk_dev_docs_rejects_all_as_category(
+    mock_server_dependencies,
+):
     """
-    Tests that search_plesk_unified returns an error string when 'all'
+    Tests that search_mcp_plesk_dev_docs returns an error string when 'all'
     is passed as category, now that tool_error_boundary intercepts.
     """
     mock_ctx, _ = mock_server_dependencies
-    result = await search_plesk_unified(mock_ctx, query="test", category="all")
+    result = await search_mcp_plesk_dev_docs(mock_ctx, query="test", category="all")
     assert result.startswith("[ERROR] Invalid argument: Invalid category: 'all'.")
 
 
@@ -291,7 +298,7 @@ async def test_refresh_knowledge_rejects_invalid_category_string(
 # Add a fixture to capture logs for the server logger
 @pytest.fixture
 def caplog_for_server(caplog):
-    caplog.set_level(logging.INFO, logger="plesk_unified")
+    caplog.set_level(logging.INFO, logger="mcp_plesk_dev_docs")
     yield caplog
 
 
@@ -312,11 +319,11 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
 
     with (
         patch(
-            "plesk_unified.platform_utils.get_optimal_device",
+            "mcp_plesk_dev_docs.platform_utils.get_optimal_device",
             return_value="cuda",
         ),
         patch(
-            "plesk_unified.platform_utils.log_hardware_degradation"
+            "mcp_plesk_dev_docs.platform_utils.log_hardware_degradation"
         ) as mock_log_degradation,
     ):
         # Mock the embedding registry's create method to fail on first attempt (cuda)
@@ -340,7 +347,9 @@ async def test_hardware_degradation_warning_logged_for_embedding_model(
             # which will call container.model_runtime.get_embedding_model.
             # So, we need to mock the entire warmup sequence for this test.
 
-            from plesk_unified.infrastructure.runtime.model_runtime import ModelRuntime
+            from mcp_plesk_dev_docs.infrastructure.runtime.model_runtime import (
+                ModelRuntime,
+            )
 
             real_runtime = ModelRuntime()
 

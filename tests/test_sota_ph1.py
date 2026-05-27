@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock
-from plesk_unified.application.services.search_service import SearchService
-from plesk_unified.server.tools.search_tools import SearchTools
-from plesk_unified.types import CategoryEnum
+from mcp_plesk_dev_docs.application.services.search_service import SearchService
+from mcp_plesk_dev_docs.server.tools.search_tools import SearchTools
+from mcp_plesk_dev_docs.domain.models import CategoryEnum
 from fastmcp import Context
 
 
@@ -47,12 +47,8 @@ async def test_synthesize_answer_with_citations(search_service_mock):
     ctx.sample = AsyncMock()
 
     # Mock a sample result
-    class MockContent:
-        def __init__(self, text):
-            self.text = text
-
     mock_result = MagicMock()
-    mock_result.content = MockContent("Answer with [1].")
+    mock_result.text = "Answer with [1]."
     ctx.sample.return_value = mock_result
 
     tools = SearchTools(search_service_mock)

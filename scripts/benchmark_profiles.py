@@ -3,7 +3,7 @@
 CLI entry point for running retrieval benchmarks across Plesk model profiles.
 
 Delegates to:
-    - ``plesk_unified.benchmark_runner.run_benchmark`` for execution logic.
+    - ``mcp_plesk_dev_docs.benchmark_runner.run_benchmark`` for execution logic.
     - ``scripts.benchmark_reporting`` for terminal output formatting.
 """
 
@@ -14,22 +14,22 @@ import json
 from pathlib import Path
 from typing import Any
 
-from plesk_unified.benchmark_engines import (
+from mcp_plesk_dev_docs.benchmark_engines import (
     DEFAULT_PILOT_CONFIG,
     StructurePilotConfig,
     get_pilot_configs,
     list_routing_policies,
 )
-from plesk_unified.benchmark_gates import (
+from mcp_plesk_dev_docs.benchmark_gates import (
     evaluate_quality_gates,
     format_gate_report,
     load_baseline,
     load_gate_config,
     write_baseline,
 )
-from plesk_unified.benchmark_suites import BENCHMARK_SUITES
-from plesk_unified.benchmark_runner import run_benchmark
-from plesk_unified.benchmark_reporting import (
+from mcp_plesk_dev_docs.benchmark_suites import BENCHMARK_SUITES
+from mcp_plesk_dev_docs.benchmark_runner import run_benchmark
+from mcp_plesk_dev_docs.benchmark_reporting import (
     print_autoresearch_summary,
     print_result,
     print_summary_table,

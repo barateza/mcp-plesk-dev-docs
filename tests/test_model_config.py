@@ -1,11 +1,11 @@
 """
-Tests for plesk_unified.model_config
-
-All tests are pure-unit (no model downloads, no LanceDB, no torch).
+Tests for model profile resolution (split across domain/models.py and
+application/services/profile_service.py after package restructure).
 """
 
 import importlib
 import os
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -14,11 +14,11 @@ import os
 
 def reload_config(env: dict):
     """
-    Reload model_config with a clean environment.
+    Reload profile_service with a clean environment.
     Returns the module so tests can call get_active_profile() on it.
     """
-    import plesk_unified.model_config as mc  # noqa: F401
-    import plesk_unified.settings as ps
+    import mcp_plesk_dev_docs.settings as ps
+    import mcp_plesk_dev_docs.application.services.profile_service as psvc
 
     for k in list(os.environ):
         if k.startswith("PLESK_"):
@@ -27,11 +27,11 @@ def reload_config(env: dict):
     os.environ["PLESK_ENV_FILE"] = ""  # Suppress .env loading
 
     importlib.reload(ps)
-    importlib.reload(mc)
+    importlib.reload(psvc)
     # Re-import after reload so we get the fresh module object
-    import plesk_unified.model_config as mc2
+    import mcp_plesk_dev_docs.application.services.profile_service as psvc2
 
-    return mc2
+    return psvc2
 
 
 # ---------------------------------------------------------------------------
@@ -69,11 +69,11 @@ class TestProfileSelection:
         assert p.embed_model == "BAAI/bge-m3"
         assert p.reranker_model == "BAAI/bge-reranker-base"
 
-    def test_unknown_profile_falls_back_to_medium(self, caplog):
+    def test_unknown_profile_falls_back_to_full_tq(self, caplog):
         mc = reload_config({"PLESK_MODEL_PROFILE": "nonexistent"})
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="plesk_unified"):
+        with caplog.at_level(logging.WARNING, logger="mcp_plesk_dev_docs"):
             p = mc.get_active_profile()
         assert p.name == "full-tq"
         assert "Unknown PLESK_MODEL_PROFILE" in caplog.text
@@ -113,7 +113,7 @@ class TestComponentOverrides:
         )
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="plesk_unified"):
+        with caplog.at_level(logging.WARNING, logger="mcp_plesk_dev_docs"):
             p = mc.get_active_profile()
         assert p.embed_dim == 384  # light profile default
         assert "PLESK_EMBED_DIM" in caplog.text

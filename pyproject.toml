@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-plesk-dev-docs"
-version = "0.6.0"
+version = "0.7.0"
 description = "A unified MCP server that indexes and retrieves Plesk documentation using vector embeddings and semantic search with reranking"
 readme = "README.md"
 license = "MIT"
@@ -50,12 +50,12 @@ Repository = "https://github.com/barateza/mcp-plesk-dev-docs.git"
 "Bug Tracker" = "https://github.com/barateza/mcp-plesk-dev-docs/issues"
 
 [tool.setuptools]
-packages = ["plesk_unified"]
+packages = ["mcp_plesk_dev_docs"]
 
 
 [project.scripts]
 # Console script to run the MCP server
-mcp-plesk-dev-docs = "plesk_unified.server:main"
+mcp-plesk-dev-docs = "mcp_plesk_dev_docs.server:main"
 
 [project.optional-dependencies]
 # Note: torch is already a dependency of sentence-transformers
@@ -74,11 +74,8 @@ test = [
 ]
 parsing = [
     # Tree-sitter code parsing for chunking.py — gracefully degrades if missing.
-    # tree-sitter-languages is unmaintained and lacks cp313+ wheels.
-    # tree-sitter-language-pack is its maintained replacement (same API).
     "tree-sitter>=0.23.0",
     "tree-sitter-language-pack>=0.1.0",
-    "tree-sitter-languages==1.10.2",
 ]
 
 
@@ -117,8 +114,8 @@ max-args = 6
 max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["PLR", "C4"]
-"scripts/*" = ["PLR"]
+"tests/*" = ["PLR", "C4", "E501"]
+"scripts/*" = ["PLR", "E501"]
 
 [tool.bandit]
 # Exclude test directory — B101 (assert_used) is the standard pytest assertion

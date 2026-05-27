@@ -6,18 +6,18 @@ import concurrent.futures
 
 # New imports from the service-based architecture
 from fastmcp import Context
-from plesk_unified.application.services.container import AppContainer
-from plesk_unified.settings import PleskSettings as Settings
-import plesk_unified.chunking
+from mcp_plesk_dev_docs.application.services.container import AppContainer
+from mcp_plesk_dev_docs.settings import PleskSettings as Settings
+import mcp_plesk_dev_docs.infrastructure.parsers.chunking
 
 # New tool imports
-from plesk_unified.server.tools.search_tools import search_plesk_unified
-from plesk_unified.server.tools.admin_tools import (
+from mcp_plesk_dev_docs.server.tools.search_tools import search_mcp_plesk_dev_docs
+from mcp_plesk_dev_docs.server.tools.admin_tools import (
     warmup_server,
     daemon_health,
     list_model_profiles,
 )
-from plesk_unified.server.tools.indexing_tools import (
+from mcp_plesk_dev_docs.server.tools.indexing_tools import (
     refresh_knowledge,
     trigger_index_sync,
     check_sync_status,
@@ -86,7 +86,9 @@ async def mock_all_ml_and_io_calls():
             "cli": {
                 # Matching fingerprint and chunk_version for "cli" category
                 "fingerprint": "mock_fingerprint",
-                "chunk_version": plesk_unified.chunking.CHUNK_VERSION,
+                "chunk_version": (
+                    mcp_plesk_dev_docs.infrastructure.parsers.chunking.CHUNK_VERSION
+                ),
                 "file_count": 1,
                 "indexed_at": "2023-01-01T00:00:00Z",
             }
@@ -181,7 +183,7 @@ TOOL_HANDLERS = [
     trigger_index_sync,
     check_sync_status,
     requantize_knowledge,
-    search_plesk_unified,
+    search_mcp_plesk_dev_docs,
 ]
 
 
@@ -200,7 +202,7 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
     mock_all_ml_and_io_calls: AsyncMock,  # Type hint for clarity
 ):
     """
-    Test that 3 concurrent calls to search_plesk_unified and refresh_knowledge
+    Test that 3 concurrent calls to search_mcp_plesk_dev_docs and refresh_knowledge
     via asyncio.gather complete without deadlock.
     """
     mock_ctx = mock_all_ml_and_io_calls
@@ -222,7 +224,7 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
     # Indexing service already configured to return "SKIPPED cli"
 
     async def mock_search_task():
-        return await search_plesk_unified(mock_ctx, query="test query")
+        return await search_mcp_plesk_dev_docs(mock_ctx, query="test query")
 
     async def mock_refresh_task():
         return await refresh_knowledge(mock_ctx, category="cli")

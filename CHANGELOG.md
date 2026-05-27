@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-26
+
+### Changed
+
+- **Package renamed `plesk_unified` → `mcp_plesk_dev_docs`.** The compatibility
+  shim package was removed and replaced with the real package. All imports,
+  entry points, and CI workflows updated. 67 files touched, 238 occurrences.
+- **Package restructure for legibility.** Reorganized the package tree:
+  - Deleted dead `summary_cache.py` (duplicate of `SummaryCacheRepository`).
+  - Split `model_config.py`: `ModelProfile` → `domain/models.py`, resolution
+    logic → `application/services/profile_service.py`.
+  - Split `io_utils.py` (734 lines) into `infrastructure/sources/acquisition.py`
+    and `infrastructure/sources/discovery.py`.
+  - Moved `ai_client.py` → `infrastructure/ai_client.py`, `tq_index.py` →
+    `infrastructure/turboquant_index.py`.
+  - Moved `chunking.py`, `html_utils.py` → `infrastructure/parsers/`.
+  - Moved `error_handling.py` → `server/error_handling.py`.
+  - Renamed `indexing.py` → `infrastructure/jobs/job_registry.py`.
+  - Merged `types.py` into `domain/models.py`.
+  - Removed dead `DEFAULT_SOURCES` singleton from `config/sources.py`.
+- **Dependency fix.** Replaced unmaintained `tree-sitter-languages` with
+  `tree-sitter-language-pack` (same API, supports cp313+) to fix `uv` resolution.
+
+### Added
+
+- **pytest in pre-commit.** Test suite (160 tests, ~3s) now runs on every commit
+  via the pre-commit hook.
+
 ## [0.5.1] - 2026-05-23
 
 ### Added
@@ -234,6 +262,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[0.7.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.7.0
 [0.5.2]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.2
 [0.5.1]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.1
 [0.5.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.0

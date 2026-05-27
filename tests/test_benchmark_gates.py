@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from plesk_unified.benchmark_gates import (
+from mcp_plesk_dev_docs.benchmark_gates import (
     aggregate_runs,
     evaluate_quality_gates,
     format_gate_report,

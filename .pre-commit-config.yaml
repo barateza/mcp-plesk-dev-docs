@@ -31,6 +31,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: pytest
+        name: pytest
+        description: "Run test suite"
+        entry: .venv/bin/python3 -m pytest tests/ -q
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
       - id: quality-gate
         name: quality gate
         description: "Run light-profile control benchmark against golden baseline"

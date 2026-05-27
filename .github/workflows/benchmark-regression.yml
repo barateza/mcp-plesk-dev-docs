@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [ main, master ]
     paths:
-      - 'plesk_unified/**'
+      - 'mcp_plesk_dev_docs/**'
       - 'scripts/benchmark_profiles.py'
       - 'benchmarks/**'
   workflow_dispatch:

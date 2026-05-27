@@ -72,7 +72,7 @@ Sources with `repo_url` trigger automatic Git cloning if the source directory is
 - Logs progress via stderr (`[LOG]` prefixed messages)
 - Silent failures on individual file parse errors
 
-### `search_plesk_unified(query, category)`
+### `search_mcp_plesk_dev_docs(query, category)`
 **Purpose**: Semantic search with reranking over indexed documentation.
 
 **Parameters:**
@@ -129,7 +129,7 @@ mcp.refresh_knowledge(target_category="cli", reset_db=False)
 
 ### Query Flow: Search & Interpret Results
 ```python
-results = search_plesk_unified(
+results = search_mcp_plesk_dev_docs(
     query="How do I create a custom extension button?",
     category="api"
 )
@@ -161,11 +161,11 @@ refresh_knowledge(target_category="all", reset_db=True)
 ### Multi-Category vs. Single-Category Trade-offs
 ```python
 # Broad search (all categories):
-search_plesk_unified(query="button", category=None)
+search_mcp_plesk_dev_docs(query="button", category=None)
 # Returns: Mixes results from guide, cli, api—good for discovery
 
 # Targeted search (API only):
-search_plesk_unified(query="button", category="api")
+search_mcp_plesk_dev_docs(query="button", category="api")
 # Returns: Higher precision, narrower scope—good for API devs
 
 # Tip: Use category filter when user context is known

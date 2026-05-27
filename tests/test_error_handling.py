@@ -1,6 +1,9 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from plesk_unified.error_handling import tool_error_boundary, _classify_error
+from mcp_plesk_dev_docs.server.error_handling import (
+    _classify_error,
+    tool_error_boundary,
+)
 import logging
 import asyncio
 
@@ -14,9 +17,12 @@ class MockTableNotFoundError(Exception):
 def mock_lancedb_exceptions():
     """Mocks lancedb.exceptions for consistent testing."""
     with (
-        patch("plesk_unified.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE", True),
         patch(
-            "plesk_unified.error_handling.lancedb_exc", new=MagicMock()
+            "mcp_plesk_dev_docs.server.error_handling.LANCEDB_EXCEPTIONS_AVAILABLE",
+            True,
+        ),
+        patch(
+            "mcp_plesk_dev_docs.server.error_handling.lancedb_exc", new=MagicMock()
         ) as mock_lancedb_exc,
     ):
         mock_lancedb_exc.TableNotFoundError = MockTableNotFoundError
@@ -80,7 +86,9 @@ def test_tool_error_boundary_returns_error_string_for_lancedb_table_not_found():
     def bad_tool():
         raise MockTableNotFoundError("Table 'plesk_knowledge' not found")
 
-    with patch.object(logging.getLogger("plesk_unified"), "error") as mock_logger_error:
+    with patch.object(
+        logging.getLogger("mcp_plesk_dev_docs"), "error"
+    ) as mock_logger_error:
         result = bad_tool()
         assert result == (
             "[ERROR] Knowledge base not indexed. "
@@ -104,7 +112,9 @@ def test_tool_error_boundary_returns_error_string_for_runtime_model_error():
     def bad_tool():
         raise RuntimeError("Embedding model could not be initialized.")
 
-    with patch.object(logging.getLogger("plesk_unified"), "error") as mock_logger_error:
+    with patch.object(
+        logging.getLogger("mcp_plesk_dev_docs"), "error"
+    ) as mock_logger_error:
         result = bad_tool()
         assert result == "[ERROR] Embedding model not loaded. Call warmup_server first."
         mock_logger_error.assert_called_once()
@@ -121,7 +131,9 @@ def test_tool_error_boundary_returns_error_string_for_permission_error():
     def bad_tool():
         raise PermissionError("Permission denied: '/etc/passwd'")
 
-    with patch.object(logging.getLogger("plesk_unified"), "error") as mock_logger_error:
+    with patch.object(
+        logging.getLogger("mcp_plesk_dev_docs"), "error"
+    ) as mock_logger_error:
         result = bad_tool()
         assert result == "[ERROR] Path traversal detected. Operation rejected."
         mock_logger_error.assert_called_once()
@@ -138,7 +150,9 @@ def test_tool_error_boundary_returns_error_string_for_generic_exception():
     def bad_tool():
         raise ValueError("Some unexpected value.")
 
-    with patch.object(logging.getLogger("plesk_unified"), "error") as mock_logger_error:
+    with patch.object(
+        logging.getLogger("mcp_plesk_dev_docs"), "error"
+    ) as mock_logger_error:
         result = bad_tool()
         assert result == (
             "[ERROR] Unexpected server error. "
@@ -169,7 +183,9 @@ async def test_tool_error_boundary_async_function_returns_error_string():
     async def async_bad_tool():
         raise RuntimeError("Async model error.")
 
-    with patch.object(logging.getLogger("plesk_unified"), "error") as mock_logger_error:
+    with patch.object(
+        logging.getLogger("mcp_plesk_dev_docs"), "error"
+    ) as mock_logger_error:
         result = await async_bad_tool()
         assert result == "[ERROR] Embedding model not loaded. Call warmup_server first."
         mock_logger_error.assert_called_once()

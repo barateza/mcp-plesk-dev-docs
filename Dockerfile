@@ -58,5 +58,5 @@ EXPOSE 8000
 
 # Set the entrypoint to run the MCP server using the human-facing package
 # name. The `mcp_plesk_dev_docs` package is a compatibility shim mapping to
-# the internal `plesk_unified` package so this is non-breaking.
+# the internal `mcp_plesk_dev_docs` package so this is non-breaking.
 ENTRYPOINT ["python", "-m", "mcp_plesk_dev_docs.server"]

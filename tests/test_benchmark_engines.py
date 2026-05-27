@@ -1,9 +1,9 @@
-from plesk_unified.benchmark_engines import (
+from mcp_plesk_dev_docs.benchmark_engines import (
     bucket_query,
     rerank_with_structure,
     route_query,
 )
-from plesk_unified.benchmark_suites import BENCHMARK_SUITES
+from mcp_plesk_dev_docs.benchmark_suites import BENCHMARK_SUITES
 
 
 def test_bucket_query_classifies_structural_and_lookup_queries():

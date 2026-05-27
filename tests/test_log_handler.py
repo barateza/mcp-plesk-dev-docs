@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-from plesk_unified.log_handler import _SYSLOG_IDENT
+from mcp_plesk_dev_docs.log_handler import _SYSLOG_IDENT
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,7 +26,7 @@ def _call_factory(
     tmp_path: Path, env_overrides: dict | None = None
 ) -> list[logging.Handler]:
     """Call create_os_handlers with a temp log file and optional env overrides."""
-    from plesk_unified.log_handler import create_os_handlers
+    from mcp_plesk_dev_docs.log_handler import create_os_handlers
 
     log_file = str(tmp_path / "test_server.log")
     formatter = _make_formatter()
@@ -207,7 +207,7 @@ class TestDefaultMode:
             patch("platform.system", return_value="Darwin"),
             patch("os.path.exists", return_value=True),
         ):
-            from plesk_unified.log_handler import create_os_handlers
+            from mcp_plesk_dev_docs.log_handler import create_os_handlers
 
             log_file = str(tmp_path / "test_server.log")
             handlers = create_os_handlers(logging.INFO, _make_formatter(), log_file)
@@ -225,7 +225,7 @@ class TestHandlerConfig:
         assert handlers[0].formatter is not None
 
     def test_level_is_applied(self, tmp_path):
-        from plesk_unified.log_handler import create_os_handlers
+        from mcp_plesk_dev_docs.log_handler import create_os_handlers
 
         log_file = str(tmp_path / "test_server.log")
         formatter = _make_formatter()

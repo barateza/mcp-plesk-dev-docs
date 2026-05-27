@@ -3,7 +3,7 @@ import os
 import time
 from pathlib import Path
 
-from plesk_unified.ai_client import AIClient
+from mcp_plesk_dev_docs.infrastructure.ai_client import AIClient
 
 # --- Configuration ---
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")

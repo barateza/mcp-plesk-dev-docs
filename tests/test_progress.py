@@ -1,9 +1,9 @@
 import pytest
 import concurrent.futures
 from unittest.mock import AsyncMock, MagicMock
-from plesk_unified.server.tools import warmup_server as tool_warmup_server
-from plesk_unified.server.tools import refresh_knowledge as tool_refresh_knowledge
-from plesk_unified.types import CategoryEnum
+from mcp_plesk_dev_docs.server.tools import warmup_server as tool_warmup_server
+from mcp_plesk_dev_docs.server.tools import refresh_knowledge as tool_refresh_knowledge
+from mcp_plesk_dev_docs.domain.models import CategoryEnum
 from fastmcp import Context
 
 

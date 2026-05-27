@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
-from plesk_unified import tq_index
+from mcp_plesk_dev_docs.infrastructure import turboquant_index
 from tq_search import LloydMaxCodebook, TurboQuantMSE, TurboQuantProd
 
 
@@ -53,9 +53,9 @@ def test_turboquant_index_normalizes_and_filters_by_category(monkeypatch):
         ) -> torch.Tensor:
             return compressed["score"]
 
-    monkeypatch.setattr(tq_index, "TurboQuantProd", DummyTurboQuantProd)
+    monkeypatch.setattr(turboquant_index, "TurboQuantProd", DummyTurboQuantProd)
 
-    index = tq_index.TurboQuantIndex(dim=3, bits=3, device="cpu")
+    index = turboquant_index.TurboQuantIndex(dim=3, bits=3, device="cpu")
     vecs = np.asarray(
         [
             [3.0, 0.0, 0.0],

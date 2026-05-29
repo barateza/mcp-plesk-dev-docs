@@ -8,12 +8,12 @@ import concurrent.futures
 from pathlib import Path
 
 # New imports
-from plesk_unified.settings import PleskSettings as Settings
-from plesk_unified.application.services.search_service import SearchService
-from plesk_unified.config.sources import SourceCatalog
-from plesk_unified.domain.models import SourceDefinition
-from plesk_unified.types import CategoryEnum
-from plesk_unified.formatting.search_formatter import SearchFormatter
+from mcp_plesk_dev_docs.settings import PleskSettings as Settings
+from mcp_plesk_dev_docs.application.services.search_service import SearchService
+from mcp_plesk_dev_docs.config.sources import SourceCatalog
+from mcp_plesk_dev_docs.domain.models import SourceDefinition
+from mcp_plesk_dev_docs.domain.models import CategoryEnum
+from mcp_plesk_dev_docs.formatting.search_formatter import SearchFormatter
 
 
 # Helper to create a completed Future
@@ -296,7 +296,7 @@ def test_source_catalog_default_covers_all_html_sources():
 
 
 # ---------------------------------------------------------------------------
-# SearchService.search integration tests (formerly legacy_server.search_plesk_unified)
+# SearchService.search integration tests (formerly legacy_server.search_mcp_plesk_dev_docs)
 # ---------------------------------------------------------------------------
 
 
@@ -317,6 +317,7 @@ async def test_search_returns_fallback_when_top_relevance_is_low(
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25
+        rerank_candidates = 50
 
     mock_model_runtime.get_profile.return_value = DummyProfile()
     mock_settings.plesk_min_relevance_threshold = 0.55
@@ -377,6 +378,7 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
         use_turboquant = False
         reranker_enabled = False
         tq_top_k = 25
+        rerank_candidates = 50
 
     mock_model_runtime.get_profile.return_value = DummyProfile()
     mock_settings.plesk_min_relevance_threshold = 0.55

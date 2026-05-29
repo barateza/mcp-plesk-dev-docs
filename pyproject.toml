@@ -3,11 +3,11 @@ requires = ["setuptools>=70.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "plesk-unified"
-version = "0.4.2"
+name = "mcp-plesk-dev-docs"
+version = "0.7.0"
 description = "A unified MCP server that indexes and retrieves Plesk documentation using vector embeddings and semantic search with reranking"
 readme = "README.md"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Gilson Siqueira", email = "gilson@example.com"}
 ]
@@ -16,43 +16,46 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",  # 3.14 support is early — remove if unstable
     "Topic :: Documentation",
     "Topic :: System :: Monitoring",
     "Topic :: Utilities",
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "fastmcp>=3.2.4",
     "lancedb>=0.29.1",
-    "pylance>=0.23.0",
     "numpy>=1.26.0",  # used directly in server.py, tq_index.py, and scripts
     "psutil>=6.1.1",
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.1",
+    "requests>=2.32.0",  # used in ai_client.py (runtime LLM calls) and enrich_html_toc.py
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
     "tantivy>=0.22.0",
     "lance-namespace==0.6.1",
+    "tq-search",
 ]
 
+
+
 [project.urls]
-Homepage = "https://github.com/barateza/mcp-plesk-unified"
-Documentation = "https://github.com/barateza/mcp-plesk-unified#readme"
-Repository = "https://github.com/barateza/mcp-plesk-unified.git"
-"Bug Tracker" = "https://github.com/barateza/mcp-plesk-unified/issues"
+Homepage = "https://github.com/barateza/mcp-plesk-dev-docs"
+Documentation = "https://github.com/barateza/mcp-plesk-dev-docs#readme"
+Repository = "https://github.com/barateza/mcp-plesk-dev-docs.git"
+"Bug Tracker" = "https://github.com/barateza/mcp-plesk-dev-docs/issues"
 
 [tool.setuptools]
-packages = ["plesk_unified", "plesk_unified.turboquant"]
+packages = ["mcp_plesk_dev_docs"]
+
 
 [project.scripts]
 # Console script to run the MCP server
-plesk-unified-mcp = "plesk_unified.server:main"
+mcp-plesk-dev-docs = "mcp_plesk_dev_docs.server:main"
 
 [project.optional-dependencies]
 # Note: torch is already a dependency of sentence-transformers
@@ -63,13 +66,18 @@ dev = [
     "requests>=2.32.0",
     "ruff>=0.3.0",
     "pre-commit>=3.6.0",
+    "mypy>=1.15.0",
+    "bandit>=1.8.0",
 ]
 test = [
     "pytest>=8.0.0",
 ]
-tools = [
-    "requests>=2.32.0",
+parsing = [
+    # Tree-sitter code parsing for chunking.py — gracefully degrades if missing.
+    "tree-sitter>=0.23.0",
+    "tree-sitter-language-pack>=0.1.0",
 ]
+
 
 # --- NEW CONFIGURATION BELOW ---
 
@@ -79,7 +87,9 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [tool.uv.sources]
+tq-search = { path = "/Users/gilsonsiqueira/tq-search", editable = true }
 torch = [
+
   { index = "pytorch-cu124", marker = "sys_platform == 'win32'" },
 ]
 torchvision = [
@@ -104,8 +114,13 @@ max-args = 6
 max-statements = 50
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["PLR", "C4"]
-"scripts/*" = ["PLR"]
+"tests/*" = ["PLR", "C4", "E501"]
+"scripts/*" = ["PLR", "E501"]
+
+[tool.bandit]
+# Exclude test directory — B101 (assert_used) is the standard pytest assertion
+# pattern and not a security issue in test files.
+exclude_dirs = ["tests", ".venv", ".beads", ".git"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,4 +1,4 @@
-from plesk_unified.chunking import (
+from mcp_plesk_dev_docs.infrastructure.parsers.chunking import (
     build_doc_records,
     chunk_by_chars,
     chunk_by_sentence_window,
@@ -48,7 +48,7 @@ def test_build_doc_records_with_summary_and_endpoint():
 
 
 def test_chunk_hash_changes_with_version(monkeypatch):
-    from plesk_unified import chunking
+    from mcp_plesk_dev_docs.infrastructure.parsers import chunking
 
     chunks = ["content"]
     meta = {"title": "T", "category": "cat", "breadcrumb": "B"}
@@ -100,3 +100,13 @@ export function second() {
     assert len(chunks) >= 2
     assert any("first" in c for c in chunks)
     assert any("second" in c for c in chunks)
+
+
+def test_chunk_by_ast_returns_none_when_no_tree_sitter(monkeypatch):
+    from mcp_plesk_dev_docs.infrastructure.parsers import chunking
+
+    # Mock _get_ts_lang to return None
+    monkeypatch.setattr(chunking, "_get_ts_lang", lambda x: None)
+
+    res = chunking.chunk_by_ast("text", "php")
+    assert res is None

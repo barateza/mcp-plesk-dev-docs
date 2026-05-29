@@ -1,11 +1,11 @@
 """
-Tests for plesk_unified.model_config
-
-All tests are pure-unit (no model downloads, no LanceDB, no torch).
+Tests for model profile resolution (split across domain/models.py and
+application/services/profile_service.py after package restructure).
 """
 
 import importlib
 import os
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -14,11 +14,11 @@ import os
 
 def reload_config(env: dict):
     """
-    Reload model_config with a clean environment.
+    Reload profile_service with a clean environment.
     Returns the module so tests can call get_active_profile() on it.
     """
-    import plesk_unified.model_config as mc  # noqa: F401
-    import plesk_unified.settings as ps
+    import mcp_plesk_dev_docs.settings as ps
+    import mcp_plesk_dev_docs.application.services.profile_service as psvc
 
     for k in list(os.environ):
         if k.startswith("PLESK_"):
@@ -27,11 +27,11 @@ def reload_config(env: dict):
     os.environ["PLESK_ENV_FILE"] = ""  # Suppress .env loading
 
     importlib.reload(ps)
-    importlib.reload(mc)
+    importlib.reload(psvc)
     # Re-import after reload so we get the fresh module object
-    import plesk_unified.model_config as mc2
+    import mcp_plesk_dev_docs.application.services.profile_service as psvc2
 
-    return mc2
+    return psvc2
 
 
 # ---------------------------------------------------------------------------
@@ -40,49 +40,48 @@ def reload_config(env: dict):
 
 
 class TestProfileSelection:
-    def test_default_profile_is_pro(self):
+    def test_default_profile_is_full_tq(self):
         mc = reload_config({})
         p = mc.get_active_profile()
-        assert p.name == "pro"
-        assert p.embed_model == "snowflake/snowflake-arctic-embed-m-v1.5"
-        assert p.embed_dim == 768
+        assert p.name == "full-tq"
+        assert p.embed_model == "BAAI/bge-m3"
+        assert p.embed_dim == 1024
 
-    def test_local_profile(self):
-        mc = reload_config({"PLESK_MODEL_PROFILE": "local"})
+    def test_light_profile(self):
+        mc = reload_config({"PLESK_MODEL_PROFILE": "light"})
         p = mc.get_active_profile()
-        assert p.name == "local"
-        assert p.embed_model == "snowflake/snowflake-arctic-embed-s"
+        assert p.name == "light"
+        assert p.embed_model == "BAAI/bge-small-en-v1.5"
         assert p.embed_dim == 384
-        assert p.reranker_model == "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        assert p.reranker_model == "cross-encoder/ms-marco-MiniLM-L4-v2"
         assert p.reranker_enabled is True
 
-    def test_pro_profile(self):
-        mc = reload_config({"PLESK_MODEL_PROFILE": "pro"})
+    def test_medium_profile(self):
+        mc = reload_config({"PLESK_MODEL_PROFILE": "medium"})
         p = mc.get_active_profile()
-        assert p.name == "pro"
+        assert p.name == "medium"
         assert p.embed_dim == 768
 
-    def test_sandbox_profile(self):
-        mc = reload_config({"PLESK_MODEL_PROFILE": "sandbox"})
+    def test_full_profile(self):
+        mc = reload_config({"PLESK_MODEL_PROFILE": "full"})
         p = mc.get_active_profile()
-        assert p.name == "sandbox"
-        assert p.embed_model == "Alibaba-NLP/gte-large-en-v1.5"
+        assert p.name == "full"
+        assert p.embed_model == "BAAI/bge-m3"
         assert p.reranker_model == "BAAI/bge-reranker-base"
-        assert p.use_turboquant is True
 
-    def test_unknown_profile_falls_back_to_pro(self, caplog):
+    def test_unknown_profile_falls_back_to_full_tq(self, caplog):
         mc = reload_config({"PLESK_MODEL_PROFILE": "nonexistent"})
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="plesk_unified"):
+        with caplog.at_level(logging.WARNING, logger="mcp_plesk_dev_docs"):
             p = mc.get_active_profile()
-        assert p.name == "pro"
+        assert p.name == "full-tq"
         assert "Unknown PLESK_MODEL_PROFILE" in caplog.text
 
     def test_profile_name_is_case_insensitive(self):
-        mc = reload_config({"PLESK_MODEL_PROFILE": "LOCAL"})
+        mc = reload_config({"PLESK_MODEL_PROFILE": "LIGHT"})
         p = mc.get_active_profile()
-        assert p.name == "local"
+        assert p.name == "light"
 
 
 # ---------------------------------------------------------------------------
@@ -94,35 +93,35 @@ class TestComponentOverrides:
     def test_embed_model_override(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "local",
-                "PLESK_EMBED_MODEL": "snowflake/snowflake-arctic-embed-m-v1.5",
+                "PLESK_MODEL_PROFILE": "light",
+                "PLESK_EMBED_MODEL": "BAAI/bge-base-en-v1.5",
                 "PLESK_EMBED_DIM": "768",
             }
         )
         p = mc.get_active_profile()
-        assert p.embed_model == "snowflake/snowflake-arctic-embed-m-v1.5"
+        assert p.embed_model == "BAAI/bge-base-en-v1.5"
         assert p.embed_dim == 768
 
     def test_embed_dim_override_without_model_uses_profile_dim(self, caplog):
         """Changing model without setting dim should warn and use profile default."""
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "local",
+                "PLESK_MODEL_PROFILE": "light",
                 "PLESK_EMBED_MODEL": "some/custom-model",
                 # No PLESK_EMBED_DIM
             }
         )
         import logging
 
-        with caplog.at_level(logging.WARNING, logger="plesk_unified"):
+        with caplog.at_level(logging.WARNING, logger="mcp_plesk_dev_docs"):
             p = mc.get_active_profile()
-        assert p.embed_dim == 384  # local profile default
+        assert p.embed_dim == 384  # light profile default
         assert "PLESK_EMBED_DIM" in caplog.text
 
     def test_reranker_model_override(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "pro",
+                "PLESK_MODEL_PROFILE": "full",
                 "PLESK_RERANKER_MODEL": "cross-encoder/ms-marco-MiniLM-L-6-v2",
             }
         )
@@ -132,7 +131,7 @@ class TestComponentOverrides:
     def test_disable_reranker_via_env_false(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "pro",
+                "PLESK_MODEL_PROFILE": "full",
                 "PLESK_RERANKER_ENABLED": "false",
             }
         )
@@ -142,7 +141,7 @@ class TestComponentOverrides:
     def test_disable_reranker_via_env_zero(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "pro",
+                "PLESK_MODEL_PROFILE": "full",
                 "PLESK_RERANKER_ENABLED": "0",
             }
         )
@@ -152,7 +151,7 @@ class TestComponentOverrides:
     def test_enable_reranker_via_env_true(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "pro",
+                "PLESK_MODEL_PROFILE": "full",
                 "PLESK_RERANKER_ENABLED": "true",
             }
         )
@@ -162,7 +161,7 @@ class TestComponentOverrides:
     def test_reranker_disabled_when_model_is_empty(self):
         mc = reload_config(
             {
-                "PLESK_MODEL_PROFILE": "pro",
+                "PLESK_MODEL_PROFILE": "full",
                 "PLESK_RERANKER_MODEL": "",
             }
         )
@@ -180,7 +179,7 @@ class TestListProfiles:
     def test_list_profiles_returns_all_profiles(self):
         mc = reload_config({})
         profiles = mc.list_profiles()
-        assert set(profiles.keys()) == {"local", "pro", "sandbox"}
+        assert set(profiles.keys()) == {"light", "medium", "full", "full-tq"}
 
     def test_list_profiles_has_required_keys(self):
         mc = reload_config({})
@@ -194,5 +193,5 @@ class TestListProfiles:
     def test_ram_estimates_are_ordered(self):
         mc = reload_config({})
         profiles = mc.list_profiles()
-        assert profiles["local"]["approx_ram_mb"] < profiles["pro"]["approx_ram_mb"]
-        assert profiles["pro"]["approx_ram_mb"] < profiles["sandbox"]["approx_ram_mb"]
+        assert profiles["light"]["approx_ram_mb"] < profiles["medium"]["approx_ram_mb"]
+        assert profiles["medium"]["approx_ram_mb"] < profiles["full"]["approx_ram_mb"]

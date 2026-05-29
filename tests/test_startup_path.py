@@ -1,9 +1,9 @@
 import pytest
 import concurrent.futures
 from unittest.mock import AsyncMock, MagicMock, patch
-from plesk_unified.server.tools import warmup_server as tool_warmup_server
-from plesk_unified.server.tools import daemon_health as tool_daemon_health
-from plesk_unified.server.lifecycle import (
+from mcp_plesk_dev_docs.server.tools import warmup_server as tool_warmup_server
+from mcp_plesk_dev_docs.server.tools import daemon_health as tool_daemon_health
+from mcp_plesk_dev_docs.server.lifecycle import (
     maybe_start_background_warmup,
     maybe_refresh_changed_sources,
 )

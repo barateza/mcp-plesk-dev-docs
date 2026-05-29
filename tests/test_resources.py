@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import MagicMock
-from plesk_unified.server.mcp_app import create_mcp_app
-from plesk_unified.application.services.container import AppContainer
-from plesk_unified.server.resources import get_toc_resource
+from mcp_plesk_dev_docs.server.mcp_app import create_mcp_app
+from mcp_plesk_dev_docs.application.services.container import AppContainer
+from mcp_plesk_dev_docs.server.resources import get_toc_resource
 
 
 @pytest.fixture

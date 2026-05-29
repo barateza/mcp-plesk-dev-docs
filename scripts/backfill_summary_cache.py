@@ -3,7 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Optional
-from plesk_unified.settings import settings
+from mcp_plesk_dev_docs.settings import settings
 
 
 def get_file_hash(file_path: Path) -> str:

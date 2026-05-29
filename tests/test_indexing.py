@@ -7,16 +7,16 @@ import concurrent.futures
 
 # New imports from the service-based architecture
 from fastmcp import Context
-from plesk_unified.application.services.container import AppContainer
-from plesk_unified.settings import PleskSettings as Settings
+from mcp_plesk_dev_docs.application.services.container import AppContainer
+from mcp_plesk_dev_docs.settings import PleskSettings as Settings
 
 # New tool imports
-from plesk_unified.server.tools.indexing_tools import (
+from mcp_plesk_dev_docs.server.tools.indexing_tools import (
     trigger_index_sync,
 )
-from plesk_unified.indexing import (
+from mcp_plesk_dev_docs.infrastructure.jobs.job_registry import (
     JobRegistry,
-)  # Assuming this is still the core JobRegistry
+)
 
 
 # Helper to create a completed Future

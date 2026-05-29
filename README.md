@@ -1,91 +1,217 @@
-# mcp-plesk-unified
+# mcp-plesk-dev-docs
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)](https://www.python.org/downloads/)
+[![PyPI Version](https://img.shields.io/pypi/v/mcp-plesk-dev-docs?style=flat-square&color=blue)](https://pypi.org/project/mcp-plesk-dev-docs/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/mcp-plesk-dev-docs?style=flat-square&color=blue)](https://pypi.org/project/mcp-plesk-dev-docs/)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-listed-green?style=flat-square)](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.barateza/mcp-plesk-dev-docs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-green?style=flat-square)](https://modelcontextprotocol.io/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square)](https://github.com/astral-sh/ruff)
+[![MCP Badge](https://lobehub.com/badge/mcp/barateza-mcp-plesk-unified)](https://lobehub.com/mcp/barateza-mcp-plesk-unified)
 
-**Unified semantic search across the entire Plesk documentation surface (Admin Guide, API, CLI, PHP/JS SDKs) exposed as an MCP tool.**
+> [!NOTE]
+> This MCP server provides unified documentation search for extension developers. If you are looking to manage your live Plesk server via AI, please see the [official Plesk MCP Server](https://talk.plesk.com/threads/mcp-server-extension-for-plesk-wp-toolkit.389895/).
+
+**State-of-the-Art (SOTA) semantic search across the entire Plesk documentation surface, optimized for sub-second latency on Apple Silicon.**
 
 ---
 
 ## Why this exists
 
-Answering Plesk extension development questions typically requires manual cross-referencing across five separate, fragmented documentation sources. This server ingests all five, embeds them with multilingual models, and provides a single `search_plesk_unified` tool that returns reranked, context-expanded results in seconds.
+Plesk documentation is spread across five separate sources: an admin guide, a REST API reference, a CLI reference, a PHP SDK, and a JS SDK. Answering a single extension development question often means searching all of them manually, cross-referencing results, and still missing the relevant section.
+
+This server ingests all five sources, embeds them with a multilingual model, and exposes a single `search_plesk_unified` MCP tool. It uses hybrid search (Vector + FTS), Reciprocal Rank Fusion (RRF), and Cross-Encoder reranking to deliver high-precision results in milliseconds.
 
 ---
 
-## Architecture
+## Architecture & Performance
 
 ```mermaid
 flowchart TD
-    Client["MCP Client\n(Claude / Cursor)"] -->|"search(query)"| Server
-    subgraph Server["FastMCP Server"]
+    Client["MCP Client\n(Claude Desktop / Cursor / etc.)"]
+
+    Client -->|"search_plesk_unified(query)"| Server
+
+    subgraph Server["FastMCP Server · Modular Architecture"]
         direction TB
-        Main["Bootstrap"] --> Life["Lifecycle"] --> Tools["MCP Tools"]
+        Main["Bootstrap · server/main.py"]
+        Life["Lifecycle Hooks · server/lifecycle.py"]
+        Tools["MCP Tools · server/mcp_app.py"]
+
+        Main --> Life --> Tools
     end
+
     subgraph Pipeline["Retrieval Pipeline"]
         direction TB
-        E["Embed"] --> S["Hybrid Search\n(Vector + FTS)"] --> R["RRF + Rerank"] --> N["Neighbor Expansion"] --> A["AI Synthesis"]
+        E["1 · Embed query\n(Hardware-accelerated)"]
+        S["2 · Hybrid Search\nVector (LanceDB) + FTS (Tantivy)"]
+        R["3 · RRF Merge + Rerank\n(MiniLM-L4-v2)"]
+        N["4 · Neighbor Expansion\n(Context Enrichment)"]
+        A["5 · AI Synthesis\n(sampling-enabled)"]
+        E --> S --> R --> N --> A
     end
-    subgraph Store["LanceDB Store"]
-        G["Guide"] & A_["API"] & C["CLI"] & P["PHP"] & J["JS"]
+
+    subgraph Store["LanceDB Vector & FTS Store"]
+        direction LR
+        G["Guide"]
+        A_["API"]
+        C["CLI"]
+        P["PHP Stubs"]
+        J["JS SDK"]
     end
+
     Tools --> Pipeline
     S <--> Store
 ```
 
-### Core Technologies
-- **Embeddings**: Arctic-S / ModernBERT / GTE-Large (profile-dependent).
-- **Reranker**: ms-marco-MiniLM / bge-reranker-base (cross-encoder).
-- **Vector DB**: LanceDB (Apache Arrow-based ANN + FTS).
-- **Ingestion**: Document-aware chunkers (hierarchical & sentence-window).
+### Performance Benchmarks (2026-05-04)
+Optimized for Apple Silicon (M2/M3) using MPS acceleration and memory-resident table caching.
 
-**Stats**: ~830 files · ~2,200 chunks · ~0.4s–1.3s latency.
+| Profile | Embed Model | HR@5 | MRR@5 | Avg Latency | Est. RAM |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`light`** | BAAI/bge-small | **100.0%** | **0.917** | **1.007 s** | ~200 MB |
+| **`medium`** | BAAI/bge-base | **100.0%** | **0.917** | **~0.60s** | ~600 MB |
+| **`full-tq`** | BAAI/bge-m3 | 75.0% | 0.750 | **~0.40s** | ~1300 MB |
 
----
-
-## Features & Configuration
-
-- **Hybrid Search**: RRF-merged Vector + BM25/Tantivy. Disable via `PLESK_ENABLE_FTS=false`.
-- **AI Synthesis**: sampling-based answers via LLM (requires `PLESK_ENABLE_SAMPLING=true`).
-- **Context Awareness**: Table-to-Prose normalization, Neighborhood Retrieval, and Macro-context Summaries.
-- **TurboQuant**: 4-bit quantized acceleration for high-speed CUDA searches (`full-tq` profile).
+*Metrics measured on Apple M2 Pro with LanceDB connection caching enabled.*
 
 ---
 
-## Usage
+## Key Features
 
-### MCP Components
-Provides tools like `search_plesk_unified`, `refresh_knowledge`, and `warmup_server`, plus language-specific prompts and TOC resources. **See [docs/mcp-components.md](docs/mcp-components.md) for full reference.**
+- **Single-Instance Lock:** PID-based lock prevents concurrent LanceDB access when multiple MCP clients or IDE sessions try to launch the server simultaneously.
+- **Sub-Second Hybrid Search:** Combined Vector + Tantivy FTS with **RAM-cached table connections** for instant retrieval.
+- **AST-Aware Chunking:** Uses `tree-sitter` to respect class and method boundaries in PHP, JS, and TS documentation.
+- **TurboQuant Acceleration:** Fast 4-bit quantized search for the `full-tq` profile, delivering 10x lower latency for large models.
+- **Neighborhood Retrieval:** Automatically fetches adjacent chunks (prev/next) to provide complete context for grounding.
+- **Macro-Context Summaries:** Injects file-level purpose summaries into every chunk using the `SummaryCache`.
+- **AI-Synthesized Answers:** Generates concise answers from search results with structured inline citations `[1]`, `[2]`.
 
-### Quickstart
-```bash
-git clone https://github.com/barateza/mcp-plesk-unified.git && cd mcp-plesk-unified
-uv pip install -e .
-uv run python -m plesk_unified.server.main refresh_knowledge # Initial index
-uv run python -m plesk_unified.server.main                 # Run server
+---
+
+## MCP Components
+
+This server provides tools, prompts, and resources. See **[docs/mcp-components.md](docs/mcp-components.md)** for a full reference.
+
+### Primary Tools
+
+| Tool | Description |
+|---|---|
+| `search_plesk_unified` | Hybrid search with RRF and Cross-Encoder reranking. |
+| `get_file_content` | Retrieve the full content of a specific documentation file. |
+| `resolve_references` | Find all files referencing a specific symbol or topic. |
+| `refresh_knowledge` | Re-fetch sources and update the index (incremental). |
+| `trigger_index_sync` | Start a background indexing job. |
+| `daemon_health` | Check readiness, hardware acceleration (MPS/CUDA), and latency stats. |
+
+### Resources
+
+- `plesk://toc/api` - Table of Contents for API documentation.
+- `plesk://toc/cli` - Table of Contents for CLI reference.
+- `plesk://toc/guide` - Table of Contents for Extensions Guide.
+- `plesk://toc/php-stubs` - Hierarchical list of PHP classes.
+
+---
+
+## 🚀 Installation & Setup
+
+Because this server is published to [PyPI](https://pypi.org/project/mcp-plesk-dev-docs/) and listed on the [MCP Registry](https://registry.modelcontextprotocol.io), you don't even need to clone the repository to run it!
+
+### Option 1: Run instantly via `uvx` (Recommended)
+
+You can run or integrate the server in seconds.
+
+#### 1. Add to Claude Desktop
+Add the server config to your `claude_desktop_config.json` (typically at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS, or `%APPDATA%\Claude\claude_desktop_config.json` on Windows):
+
+```json
+{
+  "mcpServers": {
+    "plesk-dev-docs": {
+      "command": "uvx",
+      "args": ["mcp-plesk-dev-docs"]
+    }
+  }
+}
 ```
 
-### Model Profiles
-Set `PLESK_MODEL_PROFILE` (default: `pro`):
-- `local`: arctic-s (130MB RAM) - Ultra-fast, low footprint.
-- `pro`: arctic-m (500MB RAM) - Optimized for macOS/Windows parity.
-- `sandbox`: gte-large (1.3GB RAM) - Experimental research profile.
-
-**Detailed benchmarks in [docs/benchmarks.md](docs/benchmarks.md).**
+#### 2. Configure in Cursor
+Go to **Settings > Features > MCP**, click **+ Add New MCP Server**:
+- **Name:** `plesk-dev-docs`
+- **Type:** `command`
+- **Command:** `uvx mcp-plesk-dev-docs`
 
 ---
 
-## Maintainance & Maintenance
+### Option 2: Local Developer Setup (Manual Build)
 
-- **Logging**: macOS (`log stream`), Linux (`journalctl`), Windows (Event Viewer).
-- **Utilities**: `verify_refresh.py` (fingerprint check), `scripts/enrich_toc.py` (LLM-descriptions).
+If you want to modify the source code, run benchmarks, or manage database migrations:
+
+**Quick bootstrap (recommended):**
+```bash
+git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+cd mcp-plesk-dev-docs
+./install.sh          # Linux / macOS
+# powershell -ExecutionPolicy Bypass -File install.ps1   # Windows
+```
+
+**Manual setup:**
+```bash
+git clone https://github.com/barateza/mcp-plesk-dev-docs.git
+cd mcp-plesk-dev-docs
+uv pip install -e ".[dev]"
+```
+
+2. **Run Initial Indexing:**
+   Generate the offline vector database and full-text search indexes:
+   ```bash
+   uv run python -m mcp_plesk_dev_docs.server.main refresh_knowledge
+   ```
+
+3. **Start the Server:**
+   ```bash
+   uv run python -m mcp_plesk_dev_docs.server.main
+   ```
+
+---
+
+## Configuration
+
+Set environment variables in `.env`:
+
+```env
+PLESK_MODEL_PROFILE=light       # light | medium | full-tq
+PLESK_ENABLE_SAMPLING=true     # AI-Synthesized answers
+PLESK_DAEMON_AUTO_WARMUP=true  # Preload models on startup
+PLESK_INDEX_SUMMARIES=true     # Enable file-level summaries
+OPENROUTER_API_KEY=sk-or-v1-...
+```
+
+---
+
+## Documentation
+
+- **[docs/benchmarks.md](docs/benchmarks.md)** - Detailed latency and quality reports.
+- **[docs/mcp-components.md](docs/mcp-components.md)** - Full tool and resource reference.
+- **[docs/turboquant.md](docs/turboquant.md)** - 4-bit quantization internals.
 
 ---
 
 ## License
+
 MIT. See [LICENSE](LICENSE).
 
+## Ownership & Disclaimer
+
+This is a personal project by Gilson Siqueira. It is not officially affiliated with, endorsed by, or supported by Plesk or WebPros International GmbH. Plesk is a trademark of WebPros International GmbH.
+
+### Important notice about Plesk-owned deliverables
+
+Portions of this repository were developed under contract for Plesk International GmbH ("Plesk") only if specifically identified as such. The MIT license above applies only to material the repository owner is authorized to license. Files or directories owned by Plesk, if any, are listed in [NOTICE](NOTICE). If you need assurance about licensing for a particular file, contact Plesk or seek legal counsel before relying on the MIT License for Plesk-owned files.
+
+---
+
 *Built to make Plesk extension development faster.*
+
+<!-- mcp-name: io.github.barateza/mcp-plesk-dev-docs -->

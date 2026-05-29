@@ -2,7 +2,7 @@ import os
 import pytest
 from pydantic import ValidationError
 from unittest.mock import patch
-from plesk_unified.settings import PleskSettings
+from mcp_plesk_dev_docs.settings import PleskSettings
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +61,7 @@ def test_settings_loads_defaults_when_env_absent(cleanup_plesk_env_vars):
     assert settings.plesk_daemon_auto_warmup is False
     assert settings.openrouter_api_key == ""
     assert settings.tqdm_disable is True
-    assert settings.plesk_auto_refresh_on_startup is True
+    assert settings.plesk_auto_refresh_on_startup is False
     assert settings.plesk_index_summaries is False
     assert settings.plesk_rerank_candidates == 50
     assert settings.plesk_html_llm_table_normalize is False
@@ -147,8 +147,10 @@ def test_effective_log_file_generates_default_path_and_creates_dir(
         log_file_path = settings.effective_log_file
 
         # Check that it attempts to create a directory
-        # and returns a path ending with plesk_unified.log
-        expected_path_segment = os.path.join("storage", "logs", "plesk_unified.log")
+        # and returns a path ending with mcp_plesk_dev_docs.log
+        expected_path_segment = os.path.join(
+            "storage", "logs", "mcp_plesk_dev_docs.log"
+        )
         assert log_file_path.endswith(expected_path_segment)
         assert (
             expected_path_segment in log_file_path

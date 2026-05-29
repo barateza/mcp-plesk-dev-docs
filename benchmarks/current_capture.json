@@ -1,0 +1,761 @@
+[
+  {
+    "profile": "medium",
+    "n_queries": 20,
+    "hit_rate": 1.0,
+    "mrr": 0.9166666666666666,
+    "avg_latency_s": 1.1283484770989163,
+    "model_rss_mb": 186.09375,
+    "engine": "baseline",
+    "pilot_config": "base",
+    "routing_policy": "baseline-only",
+    "bucket_metrics": {
+      "php-stubs": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 0.75,
+        "avg_latency_s": 1.7672674167479272
+      },
+      "cli": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.940364375252102
+      },
+      "api": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.8722272999963024
+      },
+      "guide": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.7366178539959947
+      },
+      "js-sdk": {
+        "n": 3,
+        "hit_rate": 1.0,
+        "mrr": 0.7777777777777778,
+        "avg_latency_s": 1.3208100413370023
+      },
+      "mixed": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.969820020996849
+      }
+    },
+    "per_query": [
+      {
+        "query": "how to define default config settings for a Plesk extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 3.4793722500035074,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "retrieve extension configuration values",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.9533813749876572,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "hook interface for Plesk modules",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.8322550419979962,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "restart Plesk service from command line",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.131046583992429,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "create a new subscription via CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8935310420056339,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all domains via Plesk XML API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9923045829928014,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "authenticate with Plesk API using secret key",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9807527090015355,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "add a custom button to Plesk panel",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7671161249891156,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "package a Plesk extension for distribution",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7061195830028737,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "register a new page in Plesk JS SDK",
+        "hit": true,
+        "rr": 0.3333333333333333,
+        "latency_s": 1.7989039160020184,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "SSL certificate management",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8846719169960124,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "backup and restore Plesk",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.0549681249976857,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "handle errors returned by the Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8311588749929797,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all databases for a domain via API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9402783749974333,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "enable or disable a Plesk extension from CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.5371153750020312,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "emit and listen to custom events in the Plesk JS SDK",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.203824958007317,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what PHP version is required to use pm_Config",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.804061000002548,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "show DNS records for a domain via Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.6166419579967624,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "how to display a notification in the Plesk panel from an extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9597012500016717,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what happens if you call plesk bin subscription on a non-existent domain",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.199764500008314,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      }
+    ],
+    "suite": "control",
+    "repeat": 1
+  },
+  {
+    "profile": "medium",
+    "n_queries": 20,
+    "hit_rate": 1.0,
+    "mrr": 0.9166666666666666,
+    "avg_latency_s": 0.8754501979012275,
+    "model_rss_mb": -47.953125,
+    "engine": "baseline",
+    "pilot_config": "base",
+    "routing_policy": "baseline-only",
+    "bucket_metrics": {
+      "php-stubs": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 0.75,
+        "avg_latency_s": 1.0312156562504242
+      },
+      "cli": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.792166593750153
+      },
+      "api": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.8011483668029541
+      },
+      "guide": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.7666825209962553
+      },
+      "js-sdk": {
+        "n": 3,
+        "hit_rate": 1.0,
+        "mrr": 0.7777777777777778,
+        "avg_latency_s": 0.9363115553375488
+      },
+      "mixed": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.9337167080011568
+      }
+    },
+    "per_query": [
+      {
+        "query": "how to define default config settings for a Plesk extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.5355309590086108,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "retrieve extension configuration values",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.4026716660009697,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "hook interface for Plesk modules",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.8646343339933082,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "restart Plesk service from command line",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.1900234579952667,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "create a new subscription via CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9060485000081826,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all domains via Plesk XML API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.2336203340091743,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "authenticate with Plesk API using secret key",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7443203750008252,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "add a custom button to Plesk panel",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.907866459005163,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "package a Plesk extension for distribution",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.6254985829873476,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "register a new page in Plesk JS SDK",
+        "hit": true,
+        "rr": 0.3333333333333333,
+        "latency_s": 1.168099375005113,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "SSL certificate management",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8868041660025483,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "backup and restore Plesk",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9806292499997653,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "handle errors returned by the Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8205693750060163,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all databases for a domain via API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.6690985839959467,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "enable or disable a Plesk extension from CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.40006645799439866,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "emit and listen to custom events in the Plesk JS SDK",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7313637080078479,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what PHP version is required to use pm_Config",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.322025665998808,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "show DNS records for a domain via Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.5381331660028081,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "how to display a notification in the Plesk panel from an extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9094715829996858,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what happens if you call plesk bin subscription on a non-existent domain",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.672527959002764,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      }
+    ],
+    "suite": "control",
+    "repeat": 2
+  },
+  {
+    "profile": "medium",
+    "n_queries": 20,
+    "hit_rate": 1.0,
+    "mrr": 0.9166666666666666,
+    "avg_latency_s": 0.7187128103512805,
+    "model_rss_mb": -2.59375,
+    "engine": "baseline",
+    "pilot_config": "base",
+    "routing_policy": "baseline-only",
+    "bucket_metrics": {
+      "php-stubs": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 0.75,
+        "avg_latency_s": 0.7797207397561579
+      },
+      "cli": {
+        "n": 4,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.6285598957547336
+      },
+      "api": {
+        "n": 5,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.7356917663972127
+      },
+      "guide": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.5918999994974001
+      },
+      "js-sdk": {
+        "n": 3,
+        "hit_rate": 1.0,
+        "mrr": 0.7777777777777778,
+        "avg_latency_s": 0.8645530139959495
+      },
+      "mixed": {
+        "n": 2,
+        "hit_rate": 1.0,
+        "mrr": 1.0,
+        "avg_latency_s": 0.6426078960066661
+      }
+    },
+    "per_query": [
+      {
+        "query": "how to define default config settings for a Plesk extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.2743191250046948,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "retrieve extension configuration values",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.3138057090109214,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "hook interface for Plesk modules",
+        "hit": true,
+        "rr": 0.5,
+        "latency_s": 0.29447887500282377,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "restart Plesk service from command line",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.32506179199845064,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "create a new subscription via CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.47938333300407976,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all domains via Plesk XML API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.9726971249911003,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "authenticate with Plesk API using secret key",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.561569249999593,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "add a custom button to Plesk panel",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7340821660036454,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "package a Plesk extension for distribution",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.44971783299115486,
+        "bucket": "guide",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "register a new page in Plesk JS SDK",
+        "hit": true,
+        "rr": 0.3333333333333333,
+        "latency_s": 0.993320291992859,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "SSL certificate management",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.6690688750095433,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "backup and restore Plesk",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.616146917003789,
+        "bucket": "mixed",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "handle errors returned by the Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7836397909995867,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "list all databases for a domain via API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.8555869580013677,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "enable or disable a Plesk extension from CLI",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.5967681250040187,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "emit and listen to custom events in the Plesk JS SDK",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.837074124996434,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what PHP version is required to use pm_Config",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.2362792500061914,
+        "bucket": "php-stubs",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "show DNS records for a domain via Plesk REST API",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.5049657079944154,
+        "bucket": "api",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "how to display a notification in the Plesk panel from an extension",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 0.7632646249985555,
+        "bucket": "js-sdk",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      },
+      {
+        "query": "what happens if you call plesk bin subscription on a non-existent domain",
+        "hit": true,
+        "rr": 1.0,
+        "latency_s": 1.1130263330123853,
+        "bucket": "cli",
+        "selected_engine": "baseline",
+        "selected_pilot_config": "base",
+        "routing_reason": "manual-engine"
+      }
+    ],
+    "suite": "control",
+    "repeat": 3
+  }
+]

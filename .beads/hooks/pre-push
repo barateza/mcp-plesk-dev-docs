@@ -31,7 +31,7 @@ if [ ! -f "$PYTHON_CMD" ]; then
   PYTHON_CMD="python3"
 fi
 
-$PYTHON_CMD scripts/benchmark_profiles.py   --suite control   --profile pro   --baseline-file benchmarks/baselines/control-pro.json   --gate-config benchmarks/gates/default.json   --fail-on-gate
+$PYTHON_CMD scripts/benchmark_profiles.py   --suite control   --profile light   --baseline-file benchmarks/baselines/light.json   --gate-config benchmarks/gates/default.json   --fail-on-gate
 
 if [ $? -ne 0 ]; then
   echo "CRITICAL: Quality regression detected. Push aborted."

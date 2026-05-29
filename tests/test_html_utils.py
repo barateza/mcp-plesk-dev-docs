@@ -1,11 +1,14 @@
 from pathlib import Path
 
-from plesk_unified.html_utils import clean_html_for_markdown, parse_html_file
+from mcp_plesk_dev_docs.infrastructure.parsers.html_utils import (
+    clean_html_for_markdown,
+    parse_html,
+)
 
 
 def test_parse_html_file(tmp_path):
     src = Path("tests/fixtures/sample.html")
-    title, breadcrumb, text, endpoint = parse_html_file(src)
+    _, title, breadcrumb, text, endpoint = parse_html(src)
     assert "Sample Page" in title
     assert "Heading" in text
     assert "Navigation" not in text
@@ -22,7 +25,7 @@ def test_parse_html_file_extracts_endpoint(tmp_path):
     )
     src = tmp_path / "mixed.html"
     src.write_text(html, encoding="utf-8")
-    _, _, _, endpoint = parse_html_file(src)
+    _, _, _, _, endpoint = parse_html(src)
     assert "GET /api/v2/domains" in endpoint
     assert "POST /api/v2/clients" in endpoint
     assert "XML: cform_buttons_list" in endpoint
@@ -47,7 +50,7 @@ def test_parse_html_file_preserves_code_blocks(tmp_path):
     )
     src = tmp_path / "code.html"
     src.write_text(html, encoding="utf-8")
-    _, _, text, _ = parse_html_file(src)
+    _, _, _, text, _ = parse_html(src)
     assert "```" in text
     assert "pm_Config::get" in text
 
@@ -64,7 +67,7 @@ def test_parse_html_file_converts_table_rows_to_prose(tmp_path):
     src = tmp_path / "table.html"
     src.write_text(html, encoding="utf-8")
 
-    _, _, text, _ = parse_html_file(src)
+    _, _, _, text, _ = parse_html(src)
     assert "Parameter: timeout" in text
     assert "Type: integer" in text
     assert "Default: 60" in text

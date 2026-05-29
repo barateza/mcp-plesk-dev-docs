@@ -151,6 +151,9 @@ uv.lock
 .agents/
 .cline/
 .gemini/
+.specs/
+.claude/
+.reasonix/
 
 # Beads / Dolt files (added by bd init)
 .dolt/

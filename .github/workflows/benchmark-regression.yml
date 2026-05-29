@@ -7,7 +7,7 @@ on:
   pull_request:
     branches: [ main, master ]
     paths:
-      - 'plesk_unified/**'
+      - 'mcp_plesk_dev_docs/**'
       - 'scripts/benchmark_profiles.py'
       - 'benchmarks/**'
   workflow_dispatch:
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: '3.13'
           cache: 'pip'
 
       - name: Install dependencies
@@ -36,7 +36,7 @@ jobs:
           # Create storage dir
           mkdir -p storage/lancedb
           # Run indexing for light profile
-          PLESK_MODEL_PROFILE=light python -c "from plesk_unified.server import refresh_knowledge; print(refresh_knowledge(target_category='all', reset_db=True))"
+          PLESK_MODEL_PROFILE=light python -c "from mcp_plesk_dev_docs.server import refresh_knowledge; print(refresh_knowledge(target_category='all', reset_db=True))"
 
       - name: Run quality benchmark
         run: |

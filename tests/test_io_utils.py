@@ -1,10 +1,12 @@
 import json
 from unittest.mock import patch
 
-from plesk_unified.io_utils import (
+from mcp_plesk_dev_docs.infrastructure.sources.acquisition import (
+    ensure_source_exists,
+)
+from mcp_plesk_dev_docs.infrastructure.sources.discovery import (
     collect_files_for_source,
     compute_source_fingerprint,
-    ensure_source_exists,
     load_toc_map,
     parse_toc_recursive,
 )
@@ -17,36 +19,37 @@ def test_ensure_source_exists_already_there(tmp_path):
     assert ensure_source_exists(source)
 
 
-@patch("plesk_unified.io_utils.subprocess.run")
+@patch("subprocess.run")
 def test_ensure_source_exists_clones(mock_run, tmp_path):
     mock_run.return_value.returncode = 0
     source = {
         "path": tmp_path / "new_repo",
-        "repo_url": "http://example.com/repo.git",
+        "repo_url": "https://example.com/repo.git",
         "cat": "test",
     }
     assert ensure_source_exists(source)
-    mock_run.assert_called_once_with(
-        [
-            "git",
-            "clone",
-            "--",
-            "http://example.com/repo.git",
-            str(tmp_path / "new_repo"),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    # _get_git_path() resolves to the absolute git path; don't assert exact arg[0]
+    call_args, call_kwargs = mock_run.call_args
+    assert call_args[0][1:] == [
+        "clone",
+        "--",
+        "https://example.com/repo.git",
+        str(tmp_path / "new_repo"),
+    ]
+    assert call_kwargs == {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+    }
 
 
-@patch("plesk_unified.io_utils.subprocess.run")
+@patch("subprocess.run")
 def test_ensure_source_exists_clone_fails(mock_run, tmp_path):
     mock_run.return_value.returncode = 1
     mock_run.return_value.stderr = "Failed"
     source = {
         "path": tmp_path / "new_repo",
-        "repo_url": "http://example.com/repo.git",
+        "repo_url": "https://example.com/repo.git",
         "cat": "test",
     }
     assert not ensure_source_exists(source)

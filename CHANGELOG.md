@@ -5,7 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-05-26
+
+### Changed
+
+- **Package renamed `plesk_unified` → `mcp_plesk_dev_docs`.** The compatibility
+  shim package was removed and replaced with the real package. All imports,
+  entry points, and CI workflows updated. 67 files touched, 238 occurrences.
+- **Package restructure for legibility.** Reorganized the package tree:
+  - Deleted dead `summary_cache.py` (duplicate of `SummaryCacheRepository`).
+  - Split `model_config.py`: `ModelProfile` → `domain/models.py`, resolution
+    logic → `application/services/profile_service.py`.
+  - Split `io_utils.py` (734 lines) into `infrastructure/sources/acquisition.py`
+    and `infrastructure/sources/discovery.py`.
+  - Moved `ai_client.py` → `infrastructure/ai_client.py`, `tq_index.py` →
+    `infrastructure/turboquant_index.py`.
+  - Moved `chunking.py`, `html_utils.py` → `infrastructure/parsers/`.
+  - Moved `error_handling.py` → `server/error_handling.py`.
+  - Renamed `indexing.py` → `infrastructure/jobs/job_registry.py`.
+  - Merged `types.py` into `domain/models.py`.
+  - Removed dead `DEFAULT_SOURCES` singleton from `config/sources.py`.
+- **Dependency fix.** Replaced unmaintained `tree-sitter-languages` with
+  `tree-sitter-language-pack` (same API, supports cp313+) to fix `uv` resolution.
+
+### Added
+
+- **pytest in pre-commit.** Test suite (160 tests, ~3s) now runs on every commit
+  via the pre-commit hook.
+
+## [0.5.1] - 2026-05-23
+
+### Added
+- **Instant Installation Guide.** Added `uvx mcp-plesk-dev-docs` quick-run section to the `README.md` and detailed integration steps for Claude Desktop and Cursor.
+- **Reference Alert.** Added clarification distinguishing the developer-focused documentation search MCP server from the operational server-management server.
+
+## [0.5.0] - 2026-05-23
+
+### Fixed
+- **Retrieval Quality for Full Profile.** Fixed `source_state.json` key isolation per-profile in `indexing_service.py` to prevent state collision, and resolved `max_rerank` candidate truncation in `search_service.py` (fixed at 35).
+- **Apple Silicon MPS Deadlocks.** Bypassed thread executor during document persistence on `mps` to avoid multi-threaded PyTorch deadlocks and reduce memory footprints (eliminating the 19GB memory bloat).
+- **PyTorch CPU Contention.** Added process-wide CPU threading environment variables in `bootstrap.py` to optimize macOS PyTorch execution.
+- **MCP Publisher server.json Versioning.** Bumped `server.json` version metadata to `0.5.0` to fix the duplicate version error during MCP Registry publishing.
+
+### Added
+- **GitHub Actions Publish Workflow.** Configured `.github/workflows/publish.yml` to support PyPI Trusted Publishing (OIDC).
+
 ## [0.4.4] - 2026-04-21
+
 
 ### Added
 - **`verify_refresh.py` utility.** A new helper script to verify that documentation indexing correctly skips unchanged sources based on fingerprinting.
@@ -182,6 +228,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.5.2] - 2026-05-23
+
+### Added
+
+- **Single-instance lock.** New `server/lock.py` module prevents concurrent LanceDB access when multiple MCP clients or IDE sessions launch the server simultaneously. Uses a PID file with cross-platform liveness checks via `psutil`.
+- **CI: mypy type checking.** Added `mypy --ignore-missing-imports .` step to the `tests.yml` workflow to catch type errors on every push and PR.
+- **CI: Bandit SAST.** Added `bandit -r . -x ./tests` step to the `tests.yml` workflow for automated security scanning of the codebase.
+- **Bootstrap scripts.** Added `install.sh` (Linux/macOS) and `install.ps1` (Windows) that auto-install `uv`, create a venv, and install the project and dev dependencies in editable mode.
+- **Dev dependencies.** Added `mypy>=1.15.0` and `bandit>=1.8.0` to `[project.optional-dependencies] dev`.
+
+### Changed
+
+- **Benchmark baseline updated:** `benchmarks/baselines/light.json` updated to HR@5=1.0, MRR@5=0.917, `avg_latency_s`=1.007 after a verified re-run; the benchmark gate was re-run and accepted the new baseline.
+- **Docs synchronized:** Updated `README.md`, `docs/benchmarks.md`, and `GEMINI.md` to reflect the accepted light-profile baseline and latency measurements.
+- **Pre-push gate adjusted:** `.beads/hooks/pre-push` now runs the `light` profile against `benchmarks/baselines/light.json` to align the local pre-push quality gate with the active benchmark profile.
+- **Human-facing rename & shim:** Added compatibility shim package `mcp_plesk_dev_docs` and updated human-facing references to `mcp-plesk-dev-docs` across README, Dockerfile, CI workflows, and CONTRIBUTING.
+- **Settings & tests fixes:** Resolved Pydantic `PleskSettings` issues (`embedding_model_dimensions`, explicit `model_config` usage) and updated related tests — full test-suite and `ruff` passed locally.
+
 ## Unreleased
 
 ### Planned
@@ -198,12 +262,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[0.4.4]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.4
-[0.4.3]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.3
-[0.4.2]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.2
-[0.4.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.1
-[0.4.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.4.0
-[0.3.1]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.1
-[0.3.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.3.0
-[0.2.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.2.0
-[0.1.0]: https://github.com/barateza/mcp-plesk-unified/releases/tag/v0.1.0
+[0.7.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.7.0
+[0.5.2]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.2
+[0.5.1]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.1
+[0.5.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.5.0
+[0.4.4]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.4
+[0.4.3]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.3
+[0.4.2]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.2
+[0.4.1]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.1
+[0.4.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.4.0
+[0.3.1]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.3.1
+[0.3.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.3.0
+[0.2.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.2.0
+[0.1.0]: https://github.com/barateza/mcp-plesk-dev-docs/releases/tag/v0.1.0

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from plesk_unified.ai_client import DEFAULT_MODELS, AIClient
+from mcp_plesk_dev_docs.infrastructure.ai_client import DEFAULT_MODELS, AIClient
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def test_generate_description_empty_text(ai_client):
     assert ai_client.generate_description("   ") == "File unreadable."
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_generate_description_success_first_model(mock_post, ai_client):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -34,7 +34,7 @@ def test_generate_description_success_first_model(mock_post, ai_client):
     assert call_args["model"] == DEFAULT_MODELS[0]
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_generate_description_fallback(mock_post, ai_client):
     # First model fails (500), second succeeds (200)
     mock_fail = MagicMock()
@@ -60,7 +60,7 @@ def test_generate_description_fallback(mock_post, ai_client):
     assert call_args["model"] == DEFAULT_MODELS[1]
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_generate_description_all_fail(mock_post, ai_client):
     mock_fail = MagicMock()
     mock_fail.status_code = 500
@@ -72,7 +72,7 @@ def test_generate_description_all_fail(mock_post, ai_client):
     assert mock_post.call_count == len(DEFAULT_MODELS)
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_evaluate_ragas_score_success(mock_post, ai_client):
     mock_response = MagicMock()
     mock_response.status_code = 200
@@ -85,7 +85,7 @@ def test_evaluate_ragas_score_success(mock_post, ai_client):
     assert mock_post.call_count == 1
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_evaluate_ragas_score_parsing(mock_post, ai_client):
     # Tests parsing float out of text
     mock_response = MagicMock()
@@ -100,7 +100,7 @@ def test_evaluate_ragas_score_parsing(mock_post, ai_client):
     assert score == 0.95
 
 
-@patch("plesk_unified.ai_client.requests.post")
+@patch("mcp_plesk_dev_docs.infrastructure.ai_client.requests.post")
 def test_evaluate_ragas_score_fail(mock_post, ai_client):
     mock_fail = MagicMock()
     mock_fail.status_code = 500

@@ -41,10 +41,13 @@ class SearchService:
         texts = [r.get("text", "") for r in candidates]
         raw_scores = reranker.predict([(query, t) for t in texts])
 
+        # Vectorized sigmoid application
+        probabilities = self._sigmoid(raw_scores)
+
         scored = []
-        for r, raw in zip(candidates, raw_scores, strict=True):
+        for r, prob in zip(candidates, probabilities.tolist(), strict=True):
             result = dict(r)
-            result["_relevance"] = float(self._sigmoid(float(raw)))
+            result["_relevance"] = float(prob)
             scored.append(result)
 
         scored.sort(key=lambda x: x["_relevance"], reverse=True)

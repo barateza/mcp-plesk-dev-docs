@@ -24,7 +24,7 @@ class PleskSettings(BaseSettings):
     log_handler: Literal["os", "file", "both"] = "os"
 
     # Model Profile & Overrides
-    plesk_model_profile: str = "pro"
+    plesk_model_profile: str = "full-tq"
     plesk_embed_model: Optional[str] = None
     plesk_reranker_model: Optional[str] = None
     plesk_reranker_enabled: Optional[bool] = None

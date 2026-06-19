@@ -83,6 +83,7 @@ def get_active_profile() -> ModelProfile:
         use_turboquant=base.use_turboquant,
         tq_bits=base.tq_bits,
         tq_top_k=base.tq_top_k,
+        relevance_gate=base.relevance_gate,
     )
 
     # VRAM Auto-tuning check

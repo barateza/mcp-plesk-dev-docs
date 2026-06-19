@@ -45,6 +45,7 @@ class ModelProfile:
     description: str
     approx_ram_mb: int
     rerank_candidates: int = 35
+    relevance_gate: float = 0.55
     use_turboquant: bool = False
     tq_bits: int = 5
     tq_top_k: int = 25
@@ -62,6 +63,7 @@ _PROFILES: dict[str, ModelProfile] = {
         ),
         approx_ram_mb=200,
         rerank_candidates=35,
+        relevance_gate=0.50,
     ),
     "medium": ModelProfile(
         name="medium",
@@ -72,6 +74,7 @@ _PROFILES: dict[str, ModelProfile] = {
         description="~600 MB total. Good quality with moderate memory use.",
         approx_ram_mb=600,
         rerank_candidates=35,
+        relevance_gate=0.55,
     ),
     "full": ModelProfile(
         name="full",
@@ -83,6 +86,7 @@ _PROFILES: dict[str, ModelProfile] = {
             "~1.8 GB total. Maximum quality. Recommended for RTX 4070 Super / CUDA."
         ),
         approx_ram_mb=1800,
+        relevance_gate=0.60,
     ),
     "full-tq": ModelProfile(
         name="full-tq",
@@ -96,6 +100,7 @@ _PROFILES: dict[str, ModelProfile] = {
         ),
         approx_ram_mb=1300,
         use_turboquant=True,
+        relevance_gate=0.60,
         tq_bits=4,
         tq_top_k=25,
     ),

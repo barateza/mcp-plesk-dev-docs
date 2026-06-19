@@ -57,7 +57,7 @@ def test_settings_loads_defaults_when_env_absent(cleanup_plesk_env_vars):
     settings = PleskSettings(_env_file=None)
 
     assert settings.log_level == "INFO"
-    assert settings.plesk_model_profile == "pro"
+    assert settings.plesk_model_profile == "full-tq"
     assert settings.plesk_daemon_auto_warmup is False
     assert settings.openrouter_api_key == ""
     assert settings.tqdm_disable is True

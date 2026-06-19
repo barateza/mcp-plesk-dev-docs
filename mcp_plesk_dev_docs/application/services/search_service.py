@@ -5,6 +5,8 @@ from typing import Any, List, Optional, Dict, Tuple
 
 import numpy as np
 
+from mcp_plesk_dev_docs.infrastructure.repositories.protocols import ISearchRepository
+
 logger = logging.getLogger("mcp_plesk_dev_docs")
 
 
@@ -14,8 +16,7 @@ class SearchService:
         settings: Any,
         model_runtime: Any,
         storage_runtime: Any,
-        lancedb_repo: Any,
-        turboquant_repo: Any,
+        lancedb_repo: ISearchRepository,
         search_formatter: Any,
         executor: Any,
     ):
@@ -23,13 +24,12 @@ class SearchService:
         self.model_runtime = model_runtime
         self.storage_runtime = storage_runtime
         self.lancedb_repo = lancedb_repo
-        self.turboquant_repo = turboquant_repo
         self.search_formatter = search_formatter
         self.executor = executor
 
-    def _sigmoid(self, x: float) -> float:
-        """Map a raw logit to a [0, 1] probability using the sigmoid function."""
-        return 1.0 / (1.0 + np.exp(-x))
+    def _sigmoid(self, x: np.ndarray | list[float] | float) -> np.ndarray | float:
+        """Map raw logit(s) to [0, 1] probability using the sigmoid function."""
+        return 1.0 / (1.0 + np.exp(-np.asarray(x, dtype=np.float64)))
 
     def _rerank_and_score(
         self, query: str, candidates: List[dict], reranker: Any
@@ -119,7 +119,7 @@ class SearchService:
                 )[0],
                 dtype=np.float32,
             )
-            tq_results = self.turboquant_repo.get_tq_index().search(
+            tq_results = self.storage_runtime.get_tq_index().search(
                 query_vec,
                 top_k=max(profile.tq_top_k, n_candidates),
                 category=category,
@@ -191,13 +191,9 @@ class SearchService:
             return "I could not find a reliable answer."
 
         profile = self.model_runtime.get_profile()
-        default_threshold = 0.55
-        if profile.name == "local":
-            default_threshold = 0.50
-        elif profile.name == "pro":
-            default_threshold = 0.60
-
-        min_relevance = self.settings.plesk_min_relevance_threshold or default_threshold
+        min_relevance = (
+            self.settings.plesk_min_relevance_threshold or profile.relevance_gate
+        )
 
         if results[0].get("_relevance", 0.0) < min_relevance:
             logger.info(
@@ -256,30 +252,7 @@ class SearchService:
         self, query: str, category: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Run the search pipeline and return raw results."""
-        safe_query = query or ""
-        loop = asyncio.get_running_loop()
-
-        def _sync_pipeline():
-            # 1. Retrieve candidates
-            profile = self.model_runtime.get_profile()
-            n_candidates = profile.rerank_candidates
-            candidates = self._get_search_candidates(safe_query, category, n_candidates)
-
-            # 2. Rerank only top candidates to avoid cross-encoder bottleneck
-            max_rerank = 35
-            reranker = self.model_runtime.get_reranker()
-            results = self._rerank_and_score(
-                safe_query, candidates[:max_rerank], reranker
-            )
-
-            # 3. Deduplicate
-            results = self._deduplicate_by_filename(results, max_per_file=1)
-
-            # 4. Expand context
-            expanded_results = self._expand_context_with_neighbors(results)
-            return expanded_results
-
-        return await loop.run_in_executor(self.executor, _sync_pipeline)
+        return await self._run_search_pipeline(query, category)
 
     async def search(
         self, query: str, category: Optional[str] = None
@@ -291,32 +264,47 @@ class SearchService:
         safe_query = query or ""
         loop = asyncio.get_running_loop()
 
-        def _sync_pipeline():
-            # 1. Retrieve candidates
-            profile = self.model_runtime.get_profile()
-            n_candidates = profile.rerank_candidates
-            candidates = self._get_search_candidates(safe_query, category, n_candidates)
-
-            # 2. Rerank only top candidates to avoid cross-encoder bottleneck
-            max_rerank = 35
-            reranker = self.model_runtime.get_reranker()
-            results = self._rerank_and_score(
-                safe_query, candidates[:max_rerank], reranker
-            )
-
-            # 3. Deduplicate
-            results = self._deduplicate_by_filename(results, max_per_file=1)
-
+        def _sync_search():
+            results = self._search_core(safe_query, category)
             # 4. Relevance Gate
             error_msg = self._apply_relevance_gate(results)
             if error_msg:
                 return [], error_msg
+            return results, None
 
-            # 5. Expand context
-            expanded_results = self._expand_context_with_neighbors(results)
-            return expanded_results, None
+        return await loop.run_in_executor(self.executor, _sync_search)
 
-        return await loop.run_in_executor(self.executor, _sync_pipeline)
+    def _search_core(
+        self, safe_query: str, category: Optional[str]
+    ) -> List[Dict[str, Any]]:
+        """Shared core of the search pipeline.
+        Candidates -> rerank -> dedup -> expand.
+        """
+        profile = self.model_runtime.get_profile()
+        n_candidates = profile.rerank_candidates
+        candidates = self._get_search_candidates(safe_query, category, n_candidates)
+
+        # 2. Rerank only top candidates to avoid cross-encoder bottleneck
+        max_rerank = 35
+        reranker = self.model_runtime.get_reranker()
+        results = self._rerank_and_score(safe_query, candidates[:max_rerank], reranker)
+
+        # 3. Deduplicate
+        results = self._deduplicate_by_filename(results, max_per_file=1)
+
+        # 4. Expand context
+        expanded = self._expand_context_with_neighbors(results)
+        return expanded
+
+    async def _run_search_pipeline(
+        self, query: str, category: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Run _search_core inside the executor."""
+        safe_query = query or ""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            self.executor, self._search_core, safe_query, category
+        )
 
     async def get_file_content(self, filename: str, category: str) -> str:
         """Retrieve the full content of a specific documentation file."""

@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 from unittest.mock import AsyncMock
 
-import numpy as np
-
 from mcp_plesk_dev_docs.infrastructure.ai_client import AIClient
 from mcp_plesk_dev_docs.benchmark_engines import (
     DEFAULT_PILOT_CONFIG,
@@ -32,8 +30,6 @@ from mcp_plesk_dev_docs.benchmark_engines import (
     rerank_with_structure,
     route_query,
 )
-from mcp_plesk_dev_docs.platform_utils import get_optimal_device
-from mcp_plesk_dev_docs.infrastructure.turboquant_index import TurboQuantIndex
 from mcp_plesk_dev_docs.domain.models import CategoryEnum
 
 if TYPE_CHECKING:
@@ -165,12 +161,13 @@ def _add_ragas_summary(
 
 def _load_container_for_profile(profile_name: str) -> AppContainer:
     """Load an AppContainer instance configured for the given profile."""
-    from mcp_plesk_dev_docs.settings import settings as global_settings
-    from mcp_plesk_dev_docs.server.bootstrap import create_app
+    from mcp_plesk_dev_docs.server.bootstrap import (
+        create_app,
+        build_settings_for_profile,
+    )
 
-    # Force the global settings singleton to use the requested profile.
-    global_settings.plesk_model_profile = profile_name
-    container = create_app(Path(os.getcwd()), global_settings)
+    settings = build_settings_for_profile(profile_name)
+    container = create_app(Path(os.getcwd()), settings)
     return container
 
 
@@ -223,27 +220,6 @@ def _perform_retrieval(  # noqa: PLR0913
 
 
 # ---------------------------------------------------------------------------
-# TurboQuant
-# ---------------------------------------------------------------------------
-
-
-def _init_tq_index(container: AppContainer) -> TurboQuantIndex:
-    """Initialise TQ index for the full-tq profile using AppContainer services."""
-    tq_bits = int(os.getenv("TQ_BITS", "4"))
-    tq_index = TurboQuantIndex(
-        dim=container.settings.embedding_model_dimensions,
-        bits=tq_bits,
-        device=get_optimal_device(),
-    )
-    all_docs = container.lancedb_repo.get_table().search().limit(100000).to_list()
-    if all_docs:
-        corpus_vecs = np.array([doc["vector"] for doc in all_docs], dtype=np.float32)
-        tq_index.add(corpus_vecs, all_docs)
-    return tq_index
-
-
-# ---------------------------------------------------------------------------
-# Main benchmark entry point
 # ---------------------------------------------------------------------------
 
 
@@ -303,7 +279,7 @@ def run_benchmark(  # noqa: PLR0913, PLR0915
     model_rss = rss_after - rss_before
 
     if container.model_runtime.get_profile().use_turboquant:
-        _init_tq_index(container)
+        _ = container.storage_runtime.get_tq_index()
 
     ai_client = AIClient() if ragas else None
 

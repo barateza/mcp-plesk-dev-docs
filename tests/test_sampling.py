@@ -58,7 +58,6 @@ async def mock_search_sampling_dependencies():
         model_runtime=mock_container.model_runtime,
         storage_runtime=MagicMock(),
         lancedb_repo=MagicMock(),
-        turboquant_repo=MagicMock(),
         search_formatter=MagicMock(),
         executor=mock_container.executor,
     )

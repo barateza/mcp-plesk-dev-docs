@@ -14,9 +14,6 @@ from mcp_plesk_dev_docs.formatting.toc_formatter import TocFormatter
 from mcp_plesk_dev_docs.infrastructure.repositories.lancedb_repository import (
     LanceDbRepository,
 )
-from mcp_plesk_dev_docs.infrastructure.repositories.turboquant_repository import (
-    TurboQuantRepository,
-)
 from mcp_plesk_dev_docs.infrastructure.repositories.source_state_repository import (
     SourceStateRepository,
 )
@@ -43,7 +40,6 @@ class AppContainer:
     search_formatter: SearchFormatter
     toc_formatter: TocFormatter
     lancedb_repo: LanceDbRepository
-    turboquant_repo: TurboQuantRepository
     source_state_repo: SourceStateRepository
     summary_cache_repo: SummaryCacheRepository
     search_service: SearchService

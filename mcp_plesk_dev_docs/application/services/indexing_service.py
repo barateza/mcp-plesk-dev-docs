@@ -5,6 +5,7 @@ from typing import Any, List, Set, Optional, Dict, Callable
 from pathlib import Path
 
 from mcp_plesk_dev_docs.infrastructure.parsers import chunking
+from mcp_plesk_dev_docs.infrastructure.repositories.protocols import IDocumentStore
 from mcp_plesk_dev_docs.infrastructure.sources import acquisition, discovery
 from mcp_plesk_dev_docs.infrastructure.ai_client import AIClient
 
@@ -17,8 +18,7 @@ class IndexingService:
         settings: Any,
         model_runtime: Any,
         storage_runtime: Any,
-        lancedb_repo: Any,
-        turboquant_repo: Any,
+        lancedb_repo: IDocumentStore,
         source_state_repo: Any,
         summary_cache_repo: Any,
         processor_registry: Any,
@@ -29,7 +29,6 @@ class IndexingService:
         self.model_runtime = model_runtime
         self.storage_runtime = storage_runtime
         self.lancedb_repo = lancedb_repo
-        self.turboquant_repo = turboquant_repo
         self.source_state_repo = source_state_repo
         self.summary_cache_repo = summary_cache_repo
         self.processor_registry = processor_registry
@@ -349,7 +348,7 @@ class IndexingService:
         if getattr(profile, "use_turboquant", False):
             try:
                 await loop.run_in_executor(
-                    self.executor, self.turboquant_repo.build_from_table
+                    self.executor, self.storage_runtime.build_tq_index_from_table
                 )
                 report.append("TurboQuant index rebuilt and persisted.")
             except Exception:

@@ -74,10 +74,6 @@ async def mock_all_ml_and_io_calls():
     mock_table.delete.return_value = None
     mock_container.lancedb_repo.get_table.return_value = mock_table
 
-    # --- Mock TurboQuantRepository ---
-    mock_container.turboquant_repo = MagicMock()
-    mock_container.turboquant_repo.get_tq_index.return_value = None
-
     # --- Mock SourceStateRepository ---
     mock_container.source_state_repo = MagicMock()
     mock_container.source_state_repo.load.return_value = {

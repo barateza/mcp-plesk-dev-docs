@@ -3,6 +3,7 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 from mcp_plesk_dev_docs.log_handler import create_os_handlers
 from mcp_plesk_dev_docs.application.services.container import AppContainer
@@ -15,9 +16,6 @@ from mcp_plesk_dev_docs.formatting.search_formatter import SearchFormatter
 from mcp_plesk_dev_docs.formatting.toc_formatter import TocFormatter
 from mcp_plesk_dev_docs.infrastructure.repositories.lancedb_repository import (
     LanceDbRepository,
-)
-from mcp_plesk_dev_docs.infrastructure.repositories.turboquant_repository import (
-    TurboQuantRepository,
 )
 from mcp_plesk_dev_docs.infrastructure.repositories.source_state_repository import (
     SourceStateRepository,
@@ -98,6 +96,13 @@ def create_executor(max_workers: int = 4) -> ThreadPoolExecutor:
     return ThreadPoolExecutor(max_workers=max_workers)
 
 
+def build_settings_for_profile(profile_name: str) -> Any:
+    """Create settings for a profile without mutating global state."""
+    from mcp_plesk_dev_docs.settings import PleskSettings
+
+    return PleskSettings(_env_file=None, plesk_model_profile=profile_name)
+
+
 def create_app(base_dir: Path, settings) -> AppContainer:
     """Composition root: create and wire all application services."""
     setup_directories(base_dir)
@@ -117,7 +122,6 @@ def create_app(base_dir: Path, settings) -> AppContainer:
     toc_formatter = TocFormatter(sources)
 
     lancedb_repo = LanceDbRepository(storage_runtime)
-    turboquant_repo = TurboQuantRepository(storage_runtime)
     source_state_repo = SourceStateRepository(
         base_dir / "storage" / "source_state.json"
     )
@@ -132,7 +136,6 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         model_runtime=model_runtime,
         storage_runtime=storage_runtime,
         lancedb_repo=lancedb_repo,
-        turboquant_repo=turboquant_repo,
         search_formatter=search_formatter,
         executor=executor,
     )
@@ -142,7 +145,6 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         model_runtime=model_runtime,
         storage_runtime=storage_runtime,
         lancedb_repo=lancedb_repo,
-        turboquant_repo=turboquant_repo,
         source_state_repo=source_state_repo,
         summary_cache_repo=summary_cache_repo,
         processor_registry=processor_registry,
@@ -164,7 +166,6 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         search_formatter=search_formatter,
         toc_formatter=toc_formatter,
         lancedb_repo=lancedb_repo,
-        turboquant_repo=turboquant_repo,
         source_state_repo=source_state_repo,
         summary_cache_repo=summary_cache_repo,
         search_service=search_service,

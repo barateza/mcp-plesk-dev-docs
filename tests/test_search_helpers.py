@@ -43,7 +43,6 @@ def search_service_fixture():
 
     mock_storage_runtime = MagicMock()
     mock_lancedb_repo = MagicMock()
-    mock_turboquant_repo = MagicMock()
     mock_search_formatter = MagicMock(spec=SearchFormatter)
     mock_search_formatter.format_markdown.return_value = "Formatted results."
 
@@ -61,7 +60,6 @@ def search_service_fixture():
         mock_model_runtime,
         mock_storage_runtime,
         mock_lancedb_repo,
-        mock_turboquant_repo,
         mock_search_formatter,
         mock_executor,
     )

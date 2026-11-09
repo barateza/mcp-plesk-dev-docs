@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 import logging
 import time
 from typing import Any, List, Optional, Dict, Tuple
@@ -27,6 +28,12 @@ class SearchService:
         self.lancedb_repo = lancedb_repo
         self.search_formatter = search_formatter
         self.executor = executor
+        # Dedicated pool for the two retrieval legs. `_search_core` already runs
+        # inside the shared `executor`; submitting the legs to it from a worker
+        # thread would deadlock once that pool is saturated.
+        self._retrieval_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="search-legs"
+        )
 
         # Bounded LRU for expanded results; see _build_cache_key for the key.
         cache_size = getattr(settings, "plesk_query_cache_size", 256)
@@ -194,10 +201,38 @@ class SearchService:
     def _get_search_candidates(
         self, query: str, category: Optional[str], n_candidates: int
     ) -> List[Dict[str, Any]]:
-        """Retrieve candidate pool using Hybrid Search (Vector + FTS)."""
-        vector_candidates = self._get_vector_candidates(query, category, n_candidates)
-        fts_candidates = self._get_fts_candidates(query, category, n_candidates)
+        """Retrieve the candidate pool from the vector and FTS legs concurrently.
+
+        The legs are independent scans, so running them back to back doubled
+        query latency. They use a dedicated two-thread pool instead of
+        ``self.executor`` because this method runs *inside* a worker of that
+        shared pool: submitting to it from there deadlocks at saturation.
+        """
+        # TODO(#99): fuse the legs with a single native hybrid query
+        # (query_type="hybrid" + RRFReranker) instead of _rrf_merge. The local
+        # light index was empty (0 rows) when this landed, so the ranking change
+        # could not be validated against MRR@5 / HR@5; do it behind the quality
+        # gate (#84) before switching the hot path.
+        vector_future = self._retrieval_executor.submit(
+            self._get_vector_candidates, query, category, n_candidates
+        )
+        fts_future = self._retrieval_executor.submit(
+            self._get_fts_candidates, query, category, n_candidates
+        )
+
+        vector_candidates = vector_future.result()
+        try:
+            fts_candidates = fts_future.result()
+        except Exception:
+            logger.warning(
+                "FTS leg failed; continuing with vector results.", exc_info=True
+            )
+            fts_candidates = []
         return self._rrf_merge(vector_candidates, fts_candidates)
+
+    def shutdown(self) -> None:
+        """Release the retrieval-leg pool owned by this service."""
+        self._retrieval_executor.shutdown(wait=False)
 
     def _apply_relevance_gate(self, results: List[Dict[str, Any]]) -> Optional[str]:
         """Check top result against profile threshold. Returns error if below."""

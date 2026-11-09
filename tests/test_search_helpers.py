@@ -5,11 +5,15 @@ Unit tests for search-pipeline helper functions.
 from unittest.mock import MagicMock
 import pytest
 import concurrent.futures
+import threading
 from pathlib import Path
 
 # New imports
 from mcp_plesk_dev_docs.settings import PleskSettings as Settings
 from mcp_plesk_dev_docs.application.services.search_service import SearchService
+from mcp_plesk_dev_docs.infrastructure.repositories.lancedb_repository import (
+    LanceDbRepository,
+)
 from mcp_plesk_dev_docs.config.sources import SourceCatalog
 from mcp_plesk_dev_docs.domain.models import SourceDefinition
 from mcp_plesk_dev_docs.domain.models import CategoryEnum
@@ -484,3 +488,107 @@ async def test_invalidate_forces_pipeline_rerun(search_service_fixture):
     await service.search("query")
 
     assert service._get_search_candidates.call_count == 2
+# Concurrent retrieval legs
+# ---------------------------------------------------------------------------
+
+
+def test_get_search_candidates_runs_both_legs(search_service_fixture):
+    search_service, _, _, mock_lancedb_repo, _ = search_service_fixture
+    mock_lancedb_repo.search_vector.return_value = [{"filename": "a.htm", "text": "a"}]
+    mock_lancedb_repo.search_fts.return_value = [{"filename": "b.htm", "text": "b"}]
+
+    results = search_service._get_search_candidates("q", "guide", 10)
+
+    assert {r["filename"] for r in results} == {"a.htm", "b.htm"}
+    mock_lancedb_repo.search_vector.assert_called_once_with(
+        "q", limit=10, filter_expr="category = 'guide'"
+    )
+    mock_lancedb_repo.search_fts.assert_called_once_with(
+        "q", limit=10, filter_expr="category = 'guide'"
+    )
+
+
+def test_get_search_candidates_runs_legs_concurrently(search_service_fixture):
+    search_service, _, _, mock_lancedb_repo, _ = search_service_fixture
+    barrier = threading.Barrier(2, timeout=5)
+
+    def _meet_at_barrier(*args, **kwargs):
+        barrier.wait()  # Raises if the other leg is not running concurrently.
+        return []
+
+    mock_lancedb_repo.search_vector.side_effect = _meet_at_barrier
+    mock_lancedb_repo.search_fts.side_effect = _meet_at_barrier
+
+    assert search_service._get_search_candidates("q", None, 10) == []
+    # The legs must not be submitted to the shared executor: this method runs
+    # inside one of its workers, so that would deadlock at saturation.
+    assert search_service._retrieval_executor is not search_service.executor
+    search_service.executor.submit.assert_not_called()
+
+
+def test_get_search_candidates_survives_fts_leg_failure(search_service_fixture):
+    search_service, _, _, mock_lancedb_repo, _ = search_service_fixture
+    mock_lancedb_repo.search_vector.return_value = [{"filename": "a.htm", "text": "a"}]
+    mock_lancedb_repo.search_fts.side_effect = RuntimeError("fts down")
+
+    results = search_service._get_search_candidates("q", None, 10)
+
+    assert [r["filename"] for r in results] == ["a.htm"]
+
+
+def test_shutdown_stops_the_retrieval_executor(search_service_fixture):
+    search_service, _, _, _, _ = search_service_fixture
+
+    search_service.shutdown()
+
+    with pytest.raises(RuntimeError):
+        search_service._retrieval_executor.submit(lambda: None)
+
+
+# ---------------------------------------------------------------------------
+# LanceDbRepository query shape
+# ---------------------------------------------------------------------------
+
+
+def _repository_for(table):
+    storage = MagicMock()
+    storage.get_table.return_value = table
+    return LanceDbRepository(storage)
+
+
+def test_search_vector_applies_the_filter_as_a_prefilter():
+    table = MagicMock()
+    rows = [{"filename": "a.htm"}]
+    table.search.return_value.limit.return_value.where.return_value.to_list.return_value = rows
+    repo = _repository_for(table)
+
+    assert (
+        repo.search_vector([0.1, 0.2], limit=5, filter_expr="category = 'guide'")
+        == rows
+    )
+    table.search.assert_called_once_with([0.1, 0.2])
+    table.search.return_value.limit.return_value.where.assert_called_once_with(
+        "category = 'guide'", prefilter=True
+    )
+
+
+def test_search_fts_applies_the_filter_as_a_prefilter():
+    table = MagicMock()
+    rows = [{"filename": "a.htm"}]
+    table.search.return_value.limit.return_value.where.return_value.to_list.return_value = rows
+    repo = _repository_for(table)
+
+    assert repo.search_fts("plesk", limit=5, filter_expr="category = 'guide'") == rows
+    table.search.assert_called_once_with("plesk", query_type="fts")
+    table.search.return_value.limit.return_value.where.assert_called_once_with(
+        "category = 'guide'", prefilter=True
+    )
+
+
+def test_search_vector_without_a_filter_does_not_prefilter():
+    table = MagicMock()
+    table.search.return_value.limit.return_value.to_list.return_value = []
+    repo = _repository_for(table)
+
+    assert repo.search_vector([0.1], limit=5) == []
+    table.search.return_value.limit.return_value.where.assert_not_called()

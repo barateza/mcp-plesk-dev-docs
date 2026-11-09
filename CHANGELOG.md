@@ -44,6 +44,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the default response drops from 30,051 characters of markdown to 4,285
   (9,065 once the structured block is included).
 
+## [Unreleased]
+
+### Performance
+
+- **Retrieval stops scanning the table twice, unindexed.** The table now gets an
+  IVF_PQ index on `vector` (metric `l2`, so the existing `1/(1+distance)`
+  relevance scale is unchanged), a BITMAP index on `category` and a BTREE index
+  on `filename`. `LanceDbRepository.ensure_indexes()` is idempotent and skips
+  whatever `table.list_indices()` already reports.
+- **Category filters apply before the limit.** Filtered vector and FTS queries
+  pass `prefilter=True`; previously the predicate was applied after the limit,
+  so a category-filtered query could return fewer than the requested candidates.
+- **Ingest compacts fragments and folds new rows into the indexes.**
+  `IndexingService._rebuild_indices` calls `table.optimize()` after ingest
+  (which also covers `requantize_knowledge`) before rebuilding the FTS index.
+- **The vector and FTS legs run concurrently** on a dedicated two-thread pool
+  owned by `SearchService`, so the two independent scans overlap instead of
+  running back to back. They are not submitted to the shared executor from one
+  of its workers, which could deadlock once that pool saturates.
+
 ## [0.7.1] - 2026-11-09
 
 ### Fixed

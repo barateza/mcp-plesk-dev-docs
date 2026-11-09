@@ -331,6 +331,33 @@ class IndexingService:
         loop = asyncio.get_running_loop()
         report = []
 
+        # Ingest appends one fragment per batch, so without compaction the table
+        # accumulates files and every scan opens more of them. optimize() also
+        # folds rows added since the last index build into the existing indexes.
+        table = self.lancedb_repo.get_table()
+        try:
+            await loop.run_in_executor(self.executor, table.optimize)
+            report.append("Table optimized (compaction + index folding).")
+        except Exception:
+            logger.warning("Table optimize failed; continuing.", exc_info=True)
+            report.append("ERROR optimizing the table.")
+
+        # ANN (IVF_PQ) + scalar (BITMAP/BTREE) indexes. Best-effort: a missing
+        # index costs latency, not correctness, so this never fails the refresh.
+        ensure_indexes = getattr(self.lancedb_repo, "ensure_indexes", None)
+        if ensure_indexes is not None:
+            try:
+                created = list(
+                    await loop.run_in_executor(self.executor, ensure_indexes) or []
+                )
+                if created:
+                    report.append(f"Search indexes created: {', '.join(created)}.")
+                else:
+                    report.append("Search indexes already present.")
+            except Exception:
+                logger.warning("Could not ensure search indexes.", exc_info=True)
+                report.append("ERROR creating search indexes.")
+
         # Native LanceDB FTS. Tantivy-backed FTS was removed in lancedb 0.40
         # (`use_tantivy=True` now raises), and a native index covers exactly one
         # field, so only `text` is indexed: filenames are opaque such as
@@ -340,7 +367,6 @@ class IndexingService:
         # "job completed, error: null" while no FTS index existed at all, which
         # silently degraded hybrid search to vector-only.
         try:
-            table = self.lancedb_repo.get_table()
             await loop.run_in_executor(
                 self.executor,
                 lambda: table.create_index(

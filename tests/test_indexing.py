@@ -5,10 +5,16 @@ import threading
 from unittest.mock import MagicMock, AsyncMock
 import concurrent.futures
 
+from lancedb.index import Bitmap, BTree, IvfPq
+
 # New imports from the service-based architecture
 from fastmcp import Context
 from mcp_plesk_dev_docs.application.services.container import AppContainer
 from mcp_plesk_dev_docs.settings import PleskSettings as Settings
+from mcp_plesk_dev_docs.application.services.indexing_service import IndexingService
+from mcp_plesk_dev_docs.infrastructure.repositories.lancedb_repository import (
+    LanceDbRepository,
+)
 
 # New tool imports
 from mcp_plesk_dev_docs.server.tools.indexing_tools import (
@@ -54,7 +60,7 @@ async def mock_indexing_dependencies(job_registry_instance):
     # --- Mock LanceDbRepository and its table ---
     mock_container.lancedb_repo = MagicMock()
     mock_table = MagicMock()
-    mock_table.create_fts_index.return_value = None
+    mock_table.create_index.return_value = None
     mock_container.lancedb_repo.get_table.return_value = mock_table
 
     # --- Mock SourceStateRepository ---
@@ -86,7 +92,7 @@ async def mock_indexing_dependencies(job_registry_instance):
     )  # For trigger_index_sync
     mock_container.indexing_service.persist_batch = AsyncMock()
     mock_container.indexing_service.persist_batch.return_value = None
-    mock_container.indexing_service.create_fts_index.return_value = None
+    mock_container.indexing_service.create_index.return_value = None
     mock_container.indexing_service.delete_source.return_value = None
 
     # --- Mock JobService to be the JobRegistry instance ---
@@ -229,3 +235,112 @@ async def test_10_concurrent_submits_are_thread_safe(
 
     for _job_id, final_status in completed_jobs_info:
         assert final_status["status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# LanceDbRepository.ensure_indexes
+# ---------------------------------------------------------------------------
+
+
+def _make_index_table(rows=100, dim=384, indexed_columns=()):
+    table = MagicMock()
+    table.count_rows.return_value = rows
+    table.schema.field.return_value.type.list_size = dim
+    table.list_indices.return_value = [
+        MagicMock(columns=[column]) for column in indexed_columns
+    ]
+    return table
+
+
+def _repository_for(table):
+    storage = MagicMock()
+    storage.get_table.return_value = table
+    return LanceDbRepository(storage)
+
+
+def test_ensure_indexes_creates_vector_and_scalar_indexes():
+    table = _make_index_table(rows=100, dim=384)
+    repo = _repository_for(table)
+
+    created = repo.ensure_indexes()
+
+    assert created == ["IVF_PQ(vector)", "BITMAP(category)", "BTREE(filename)"]
+    table.create_index.assert_any_call(
+        "vector",
+        config=IvfPq(distance_type="l2", num_partitions=10, num_sub_vectors=24),
+    )
+    table.create_index.assert_any_call("category", config=Bitmap())
+    table.create_index.assert_any_call("filename", config=BTree())
+
+
+def test_ensure_indexes_is_idempotent():
+    table = _make_index_table(indexed_columns=("vector", "category", "filename"))
+    repo = _repository_for(table)
+
+    assert repo.ensure_indexes() == []
+    table.create_index.assert_not_called()
+
+
+def test_ensure_indexes_skips_an_empty_table():
+    table = _make_index_table(rows=0)
+    repo = _repository_for(table)
+
+    assert repo.ensure_indexes() == []
+    table.create_index.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# IndexingService._rebuild_indices
+# ---------------------------------------------------------------------------
+
+
+def _run_now(fn, *args, **kwargs):
+    future = concurrent.futures.Future()
+    try:
+        future.set_result(fn(*args, **kwargs))
+    except Exception as exc:  # pragma: no cover - defensive
+        future.set_exception(exc)
+    return future
+
+
+@pytest.mark.asyncio
+async def test_rebuild_indices_optimizes_creates_indexes_then_rebuilds_fts():
+    order = []
+    table = MagicMock()
+    table.optimize.side_effect = lambda: order.append("optimize")
+    table.create_index.side_effect = lambda *args, **kwargs: order.append("fts")
+
+    repo = MagicMock()
+    repo.get_table.return_value = table
+
+    def _ensure_indexes():
+        order.append("ensure_indexes")
+        return ["IVF_PQ(vector)"]
+
+    repo.ensure_indexes.side_effect = _ensure_indexes
+
+    profile = MagicMock()
+    profile.use_turboquant = False
+    model_runtime = MagicMock()
+    model_runtime.get_profile.return_value = profile
+
+    executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    executor.submit.side_effect = _run_now
+
+    service = IndexingService(
+        settings=MagicMock(),
+        model_runtime=model_runtime,
+        storage_runtime=MagicMock(),
+        lancedb_repo=repo,
+        source_state_repo=MagicMock(),
+        summary_cache_repo=MagicMock(),
+        processor_registry=MagicMock(),
+        source_catalog=MagicMock(),
+        executor=executor,
+    )
+
+    report = await service._rebuild_indices()
+
+    assert order == ["optimize", "ensure_indexes", "fts"]
+    assert "Search indexes created: IVF_PQ(vector)." in report
+    assert "FTS index rebuilt successfully." in report

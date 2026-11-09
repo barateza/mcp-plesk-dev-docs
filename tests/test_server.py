@@ -80,7 +80,7 @@ async def mock_server_dependencies():
     (
         mock_table.search.return_value.where.return_value.limit.return_value.to_list.return_value
     ) = []
-    mock_table.create_fts_index.return_value = None
+    mock_table.create_index.return_value = None
     mock_table.delete.return_value = None
     mock_container.lancedb_repo.get_table.return_value = mock_table
 

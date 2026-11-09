@@ -33,7 +33,7 @@ class PleskSettings(BaseSettings):
     plesk_embed_dim: Optional[int] = None
 
     # Operational Behaviors
-    plesk_daemon_auto_warmup: bool = False
+    plesk_daemon_auto_warmup: bool = True
     plesk_auto_refresh_on_startup: bool = False
     plesk_index_summaries: bool = False
     plesk_enable_fts: bool = True

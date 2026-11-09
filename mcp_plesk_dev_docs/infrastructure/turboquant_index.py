@@ -15,8 +15,11 @@ class TurboQuantIndex:
         self.device = device
         self.quantizer = TurboQuantProd(dim, bits, device=device)
 
-        # Batched tensors for compressed vectors.
+        # Batched tensors for compressed vectors. `add` only buffers the
+        # per-batch quantizer output; `flush` concatenates it once, which keeps
+        # ingest linear in the number of batches.
         self.compressed_db: dict[str, torch.Tensor] | None = None
+        self._pending: dict[str, list[torch.Tensor]] = {}
         self._meta: list[dict] = []
         self._category_to_indices: dict[str, list[int]] = {}
 
@@ -29,14 +32,9 @@ class TurboQuantIndex:
         x = torch.from_numpy(vecs_normalized).to(self.device)
         compressed = self.quantizer.quantize(x)
 
-        # 3. Store or append to the batched tensors in CPU memory
-        if self.compressed_db is None:
-            self.compressed_db = {k: v.cpu() for k, v in compressed.items()}
-        else:
-            for k in self.compressed_db:
-                self.compressed_db[k] = torch.cat(
-                    [self.compressed_db[k], compressed[k].cpu()], dim=0
-                )
+        # 3. Buffer the batch on CPU memory; one concat happens in flush()
+        for key, tensor in compressed.items():
+            self._pending.setdefault(key, []).append(tensor.cpu())
 
         start_idx = len(self._meta)
         self._meta.extend(metas)
@@ -46,9 +44,43 @@ class TurboQuantIndex:
                 index = start_idx + offset
                 self._category_to_indices.setdefault(category, []).append(index)
 
+    def flush(self) -> None:
+        """Concatenate buffered batch tensors into ``compressed_db``.
+
+        One ``torch.cat`` per tensor key per flush instead of one per ``add``
+        call, so ingest is linear in the number of batches.
+        """
+        if not self._pending:
+            return
+
+        pending, self._pending = self._pending, {}
+        merged: dict[str, torch.Tensor] = {}
+        for key, chunks in pending.items():
+            merged[key] = chunks[0] if len(chunks) == 1 else torch.cat(chunks, dim=0)
+
+        if self.compressed_db is None:
+            self.compressed_db = merged
+            return
+
+        for key, tensor in merged.items():
+            existing = self.compressed_db.get(key)
+            if existing is None:
+                self.compressed_db[key] = tensor
+            else:
+                self.compressed_db[key] = torch.cat(
+                    [existing, tensor.to(existing.device)], dim=0
+                )
+
+    def __len__(self) -> int:
+        """Return the number of indexed documents, flushing pending batches."""
+        self.flush()
+        return len(self._meta)
+
     def search(
         self, query_vec: np.ndarray, top_k: int = 25, category: str | None = None
     ):
+        self.flush()
+
         if self.compressed_db is None:
             return []
 

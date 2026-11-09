@@ -41,6 +41,9 @@ dependencies = [
     # breaks every fresh install.
     "httpx>=0.27.0",
     "sentence-transformers>=5.2.2",
+    # The TurboQuant cache is written and read directly as safetensors (mmap),
+    # so it must be declared even though it used to arrive transitively.
+    "safetensors>=0.4.0",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
     # NOTE: tantivy was only ever needed by lancedb's removed Tantivy FTS path;

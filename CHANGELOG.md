@@ -41,6 +41,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Dropped the `tantivy` dependency and raised the `lancedb` floor to
   `>=0.40.0`.** Nothing in the package imports tantivy; it existed only for the
   removed Tantivy FTS path.
+- **Daemon warmup is now on by default.** `PLESK_DAEMON_AUTO_WARMUP` defaults to
+  `True`, so the embedding model, reranker and LanceDB table are warmed in a
+  background thread before `mcp.run()` serves the first request. The env var still
+  overrides it, and a failed warmup is logged and never blocks serving.
+- **The TurboQuant cache is now safetensors v2 instead of JSON+base64.** The
+  compressed tensors are memory-mapped with `safe_open(..., device="cpu")` and a
+  JSON header (`format`, `chunk_version`, `table_version`, `model`, `bits`, `dim`)
+  records the corpus generation. Missing or mismatched headers rebuild from the
+  LanceDB table and overwrite the cache; legacy `.tqcache` JSON is treated as
+  stale and legacy `.pkl` files are still refused. `safetensors>=0.4.0` is now a
+  declared dependency.
+- **`TurboQuantIndex.add` no longer re-concatenates the whole tensor per batch.**
+  Batches are buffered and concatenated once on flush (`search`, save, `__len__`),
+  making ingest linear in the number of batches.
 
 ## [0.7.0] - 2026-05-26
 

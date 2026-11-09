@@ -64,9 +64,10 @@ class WarmupService:
 
         if getattr(profile, "use_turboquant", False):
             tq_path = self.storage_runtime.get_tq_index_path()
-            if tq_path.exists():
+            legacy_path = self.storage_runtime.get_legacy_tq_index_path()
+            if tq_path.exists() or legacy_path.exists():
                 self.storage_runtime.get_tq_index()
-                parts.append(f"TurboQuant index loaded from {tq_path.name}.")
+                parts.append(f"TurboQuant index ready from {tq_path.name}.")
             else:
                 parts.append(
                     "TurboQuant index not present; skipped build during warmup."

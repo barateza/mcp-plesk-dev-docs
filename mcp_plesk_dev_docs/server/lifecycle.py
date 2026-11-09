@@ -40,5 +40,8 @@ def maybe_refresh_changed_sources(container: AppContainer) -> None:
 
 
 def maybe_start_background_warmup(container: AppContainer) -> None:
-    """Start background warmup if enabled."""
-    container.warmup_service.maybe_start_background_warmup()
+    """Start background warmup if enabled, never blocking server startup."""
+    try:
+        container.warmup_service.maybe_start_background_warmup()
+    except Exception:
+        logger.exception("Could not start background warmup; serving without it.")

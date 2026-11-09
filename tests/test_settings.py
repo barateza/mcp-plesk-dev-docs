@@ -58,7 +58,7 @@ def test_settings_loads_defaults_when_env_absent(cleanup_plesk_env_vars):
 
     assert settings.log_level == "INFO"
     assert settings.plesk_model_profile == "light"
-    assert settings.plesk_daemon_auto_warmup is False
+    assert settings.plesk_daemon_auto_warmup is True
     assert settings.openrouter_api_key == ""
     assert settings.tqdm_disable is True
     assert settings.plesk_auto_refresh_on_startup is False
@@ -89,6 +89,13 @@ def test_settings_parses_valid_env_vars(cleanup_plesk_env_vars):
         assert settings.tqdm_disable is False
         assert settings.plesk_embed_dim == 768
         assert settings.plesk_min_relevance_threshold == 0.75
+
+
+def test_daemon_auto_warmup_env_override_wins_over_default(cleanup_plesk_env_vars):
+    """The new default is True, but an explicit env var must still win."""
+    with patch.dict(os.environ, {"PLESK_DAEMON_AUTO_WARMUP": "False"}):
+        settings = PleskSettings(_env_file=None)
+        assert settings.plesk_daemon_auto_warmup is False
 
 
 def test_invalid_log_level_raises_validation_error(cleanup_plesk_env_vars):

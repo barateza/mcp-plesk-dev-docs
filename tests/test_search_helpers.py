@@ -5,6 +5,7 @@ Unit tests for search-pipeline helper functions.
 from unittest.mock import MagicMock
 import pytest
 import concurrent.futures
+import logging
 import threading
 from pathlib import Path
 
@@ -594,3 +595,74 @@ def test_search_vector_without_a_filter_does_not_prefilter():
 
     assert repo.search_vector([0.1], limit=5) == []
     table.search.return_value.limit.return_value.where.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _apply_relevance_gate threshold resolution
+# ---------------------------------------------------------------------------
+
+
+class _GateProfile:
+    """Minimal profile stub carrying a relevance gate."""
+
+    name = "pro"
+    use_turboquant = False
+    reranker_enabled = False
+    tq_top_k = 25
+    rerank_candidates = 50
+
+    def __init__(self, relevance_gate: float) -> None:
+        self.relevance_gate = relevance_gate
+
+
+def _service_with_gate(search_service_fixture, gate: float, threshold):
+    service, settings, model_runtime, _, _ = search_service_fixture
+    model_runtime.get_profile.return_value = _GateProfile(gate)
+    settings.plesk_min_relevance_threshold = threshold
+    return service
+
+
+def test_relevance_gate_unset_falls_back_to_the_profile(search_service_fixture, caplog):
+    service = _service_with_gate(search_service_fixture, gate=0.55, threshold=None)
+
+    with caplog.at_level(logging.INFO, logger="mcp_plesk_dev_docs"):
+        error = service._apply_relevance_gate([{"_relevance": 0.40}])
+
+    assert error == "I could not find a reliable answer."
+    assert "threshold=0.5500 source=profile" in caplog.text
+
+
+def test_relevance_gate_explicit_zero_disables_the_gate(search_service_fixture, caplog):
+    # The profile gate (0.55) would reject this result; explicit 0.0 must win.
+    service = _service_with_gate(search_service_fixture, gate=0.55, threshold=0.0)
+
+    with caplog.at_level(logging.INFO, logger="mcp_plesk_dev_docs"):
+        error = service._apply_relevance_gate([{"_relevance": 0.01}])
+
+    assert error is None
+    assert "threshold=0.0000 source=env" in caplog.text
+
+
+def test_relevance_gate_positive_setting_overrides_the_profile(
+    search_service_fixture, caplog
+):
+    # The profile gate (0.10) would accept this result; the setting rejects it.
+    service = _service_with_gate(search_service_fixture, gate=0.10, threshold=0.90)
+
+    with caplog.at_level(logging.INFO, logger="mcp_plesk_dev_docs"):
+        error = service._apply_relevance_gate([{"_relevance": 0.60}])
+
+    assert error == "I could not find a reliable answer."
+    assert "threshold=0.9000 source=env" in caplog.text
+
+
+def test_relevance_gate_accepts_a_result_at_the_threshold(
+    search_service_fixture, caplog
+):
+    service = _service_with_gate(search_service_fixture, gate=0.55, threshold=0.75)
+
+    with caplog.at_level(logging.INFO, logger="mcp_plesk_dev_docs"):
+        error = service._apply_relevance_gate([{"_relevance": 0.75}])
+
+    assert error is None
+    assert "threshold=0.7500 source=env" in caplog.text

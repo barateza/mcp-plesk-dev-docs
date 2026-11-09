@@ -48,6 +48,9 @@ class PleskSettings(BaseSettings):
     # Default number of candidates to send to the reranker when not overridden.
     # Historically this default was 50; keep that default for backward compatibility.
     plesk_rerank_candidates: Optional[int] = 50
+    # Minimum reranker probability a result must reach to be accepted.
+    # Unset (None) falls back to the active profile's `relevance_gate`;
+    # 0.0 disables the gate entirely (any result passes).
     plesk_min_relevance_threshold: Optional[float] = None
     plesk_indexing_batch_size: Optional[int] = None
 

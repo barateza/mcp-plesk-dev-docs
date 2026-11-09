@@ -96,6 +96,17 @@ def create_executor(max_workers: int = 4) -> ThreadPoolExecutor:
     return ThreadPoolExecutor(max_workers=max_workers)
 
 
+def create_indexing_executor(max_workers: int = 2) -> ThreadPoolExecutor:
+    """Create the ingest-only thread pool.
+
+    Refresh work (parse, chunk, embed, ``table.add``) used to share the query
+    pool, so a refresh put thousands of ingest jobs in front of the next
+    search and query latency tracked ingest progress. Two workers match the
+    windowed fan-out in ``IndexingService`` and keep the executor queue short.
+    """
+    return ThreadPoolExecutor(max_workers=max_workers)
+
+
 def build_settings_for_profile(profile_name: str) -> Any:
     """Create settings for a profile without mutating global state."""
     from mcp_plesk_dev_docs.settings import PleskSettings
@@ -109,6 +120,7 @@ def create_app(base_dir: Path, settings) -> AppContainer:
     configure_environment(settings)
     logger = configure_logging(settings)
     executor = create_executor()
+    indexing_executor = create_indexing_executor()
     sources = SourceCatalog.default(base_dir / "knowledge_base")
 
     model_runtime = ModelRuntime()
@@ -149,7 +161,7 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         summary_cache_repo=summary_cache_repo,
         processor_registry=processor_registry,
         source_catalog=sources,
-        executor=executor,
+        executor=indexing_executor,
     )
 
     job_service = JobRegistry()
@@ -158,6 +170,7 @@ def create_app(base_dir: Path, settings) -> AppContainer:
         settings=settings,
         logger=logger,
         executor=executor,
+        indexing_executor=indexing_executor,
         sources=sources,
         model_runtime=model_runtime,
         storage_runtime=storage_runtime,

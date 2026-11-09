@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any, List, Set, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from lancedb.index import Bitmap, BTree, IvfPq
 
@@ -164,6 +164,40 @@ class LanceDbRepository:
         except Exception:
             logger.warning("Could not read the vector dimension.", exc_info=True)
             return None
+
+    def get_chunk_hash_map(self, category: str) -> Dict[str, List[str]]:
+        """Return ``{filename: [chunk_hash, ...]}`` for a category.
+
+        One projected scan replaces the per-file ``filename = ...`` lookups the
+        ingest used to run: a category with N already-indexed files cost N
+        filtered scans, each of them deserialising the 1024-float ``vector``
+        column. Selecting only ``filename`` and ``chunk_hash`` keeps the scan
+        to the columns the diff actually needs.
+        """
+        table = self.get_table()
+        try:
+            rows = (
+                table.search()
+                .where(f"category = '{category}'")
+                .select(["filename", "chunk_hash"])
+                .limit(1000000)
+                .to_list()
+            )
+        except Exception:
+            logger.warning(
+                "Could not fetch the chunk hash map for category '%s'.",
+                category,
+                exc_info=True,
+            )
+            return {}
+
+        hash_map: Dict[str, List[str]] = {}
+        for row in rows:
+            filename = row.get("filename")
+            chunk_hash = row.get("chunk_hash")
+            if filename and chunk_hash:
+                hash_map.setdefault(filename, []).append(chunk_hash)
+        return hash_map
 
     def get_existing_hashes(self, category: str) -> Set[str]:
         """Return all chunk hashes currently in the database for a category."""

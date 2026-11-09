@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from typing import Any, Optional
 
 from mcp_plesk_dev_docs.settings import PleskSettings as Settings
 from mcp_plesk_dev_docs.config.sources import SourceCatalog
@@ -46,6 +46,9 @@ class AppContainer:
     indexing_service: IndexingService
     processor_registry: ProcessorRegistry
 
+    # Ingest-only pool: refresh work must not queue ahead of searches on the
+    # shared executor, so `IndexingService` gets its own two threads.
+    indexing_executor: Optional[ThreadPoolExecutor] = None
     # These will be added as we extract more services
     job_service: Any = None
 
@@ -58,6 +61,8 @@ class AppContainer:
         if shutdown_search is not None:
             shutdown_search()
         self.executor.shutdown(wait=True)
+        if self.indexing_executor is not None:
+            self.indexing_executor.shutdown(wait=True)
         # Clear model caches if possible
         if hasattr(self.model_runtime, "_embedding_model"):
             self.model_runtime._embedding_model = None

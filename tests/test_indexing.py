@@ -2,8 +2,9 @@ import pytest
 import time
 import asyncio
 import threading
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 import concurrent.futures
+from pathlib import Path
 
 from lancedb.index import Bitmap, BTree, IvfPq
 
@@ -11,7 +12,11 @@ from lancedb.index import Bitmap, BTree, IvfPq
 from fastmcp import Context
 from mcp_plesk_dev_docs.application.services.container import AppContainer
 from mcp_plesk_dev_docs.settings import PleskSettings as Settings
-from mcp_plesk_dev_docs.application.services.indexing_service import IndexingService
+from mcp_plesk_dev_docs.application.services.indexing_service import (
+    FILE_WINDOW_SIZE,
+    IndexingService,
+)
+from mcp_plesk_dev_docs.infrastructure.parsers import chunking
 from mcp_plesk_dev_docs.infrastructure.repositories.lancedb_repository import (
     LanceDbRepository,
 )
@@ -342,5 +347,239 @@ async def test_rebuild_indices_optimizes_creates_indexes_then_rebuilds_fts():
     report = await service._rebuild_indices()
 
     assert order == ["optimize", "ensure_indexes", "fts"]
+    table.optimize.assert_called_once()
     assert "Search indexes created: IVF_PQ(vector)." in report
     assert "FTS index rebuilt successfully." in report
+
+
+# ---------------------------------------------------------------------------
+# Issue #90: one hash map per category, bounded fan-out, isolated executor
+# ---------------------------------------------------------------------------
+
+FILES_BY_CATEGORY = {
+    "guide": [Path("a.htm"), Path("b.htm"), Path("d.htm"), Path("e.htm")],
+    "cli": [Path("c.htm"), Path("f.htm")],
+}
+
+HASH_ROWS_BY_CATEGORY = {
+    "guide": [
+        {"filename": "a.htm", "chunk_hash": "a1"},
+        {"filename": "a.htm", "chunk_hash": "a2"},
+        {"filename": "b.htm", "chunk_hash": "b1"},
+        {"filename": "d.htm", "chunk_hash": "d1"},
+        {"filename": "e.htm", "chunk_hash": "e1"},
+    ],
+    "cli": [
+        {"filename": "c.htm", "chunk_hash": "c1"},
+        {"filename": "f.htm", "chunk_hash": "f1"},
+    ],
+}
+
+
+class _HashScanTable:
+    """Table double that records the shape of every hash scan it receives."""
+
+    def __init__(self, rows_by_category, row_count=100):
+        self.rows_by_category = rows_by_category
+        self.row_count = row_count
+        self.search_calls = 0
+        self.selected = []
+        self.filters = []
+        self._filter = None
+
+    def count_rows(self):
+        return self.row_count
+
+    def search(self, *args, **kwargs):
+        self.search_calls += 1
+        return self
+
+    def where(self, expr, **kwargs):
+        self.filters.append(expr)
+        self._filter = expr
+        return self
+
+    def select(self, columns):
+        self.selected.append(list(columns))
+        return self
+
+    def limit(self, _limit):
+        return self
+
+    def to_list(self):
+        category = self._filter.split("'")[1]
+        return self.rows_by_category.get(category, [])
+
+    def delete(self, *_args, **_kwargs):  # pragma: no cover - guard only
+        raise AssertionError("a refresh with no removed files must not delete")
+
+
+def _source(category, source_type="html"):
+    source = MagicMock()
+    source.category.value = category
+    source.path = Path("/dev/null") / category
+    source.source_type = source_type
+    source.repo_url = None
+    source.zip_url = None
+    return source
+
+
+def _indexing_service(repo=None, device="cpu", summaries=False):
+    settings = MagicMock()
+    settings.plesk_index_summaries = summaries
+    model_runtime = MagicMock()
+    model_runtime.detect_device.return_value = device
+    executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+    executor.submit.side_effect = _run_now
+    return IndexingService(
+        settings=settings,
+        model_runtime=model_runtime,
+        storage_runtime=MagicMock(),
+        lancedb_repo=repo if repo is not None else MagicMock(),
+        source_state_repo=MagicMock(),
+        summary_cache_repo=MagicMock(),
+        processor_registry=MagicMock(),
+        source_catalog=MagicMock(),
+        executor=executor,
+    )
+
+
+@pytest.mark.asyncio
+async def test_hash_lookups_are_one_per_category_not_per_file():
+    table = _HashScanTable(HASH_ROWS_BY_CATEGORY)
+    service = _indexing_service(_repository_for(table))
+    # A matching chunk version lets the run reuse stored hashes; the stale
+    # fingerprint still forces the refresh to do its work.
+    entries = {
+        category: {"chunk_version": chunking.CHUNK_VERSION, "fingerprint": "old"}
+        for category in FILES_BY_CATEGORY
+    }
+
+    def _files(legacy_source):
+        return FILES_BY_CATEGORY[legacy_source["cat"]]
+
+    with (
+        patch(
+            "mcp_plesk_dev_docs.infrastructure.sources.acquisition"
+            ".ensure_source_exists",
+            return_value=True,
+        ),
+        patch(
+            "mcp_plesk_dev_docs.infrastructure.sources.discovery"
+            ".compute_source_fingerprint",
+            return_value=("fresh", 6),
+        ),
+        patch(
+            "mcp_plesk_dev_docs.infrastructure.sources.discovery"
+            ".collect_files_for_source",
+            side_effect=_files,
+        ),
+        patch(
+            "mcp_plesk_dev_docs.infrastructure.sources.discovery.load_toc_map",
+            return_value={},
+        ),
+    ):
+        for category in FILES_BY_CATEGORY:
+            await service._sync_single_source(_source(category), False, entries)
+
+    # Six files across two categories. The per-file path issued one filtered
+    # scan per file; the hash map issues one per category and projects only
+    # the two columns the diff needs.
+    assert len(FILES_BY_CATEGORY) == 2
+    assert table.search_calls == 2
+    assert table.selected == [["filename", "chunk_hash"]] * 2
+
+
+@pytest.mark.asyncio
+async def test_process_single_file_never_searches_the_table():
+    table = _HashScanTable({})
+    service = _indexing_service(_repository_for(table))
+
+    result = await service._process_single_file(
+        Path("a.htm"),
+        _source("guide"),
+        {},
+        {"a.htm": ["h1", "h2"]},
+        None,
+        asyncio.Semaphore(10),
+    )
+
+    assert result == ["h1", "h2"]
+    assert table.search_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_file_fan_out_is_bounded_by_the_window():
+    service = _indexing_service()
+    files = [Path(f"f{i}.htm") for i in range(200)]
+    in_flight = 0
+    peak = 0
+
+    async def _tracked(*_args, **_kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.002)
+        in_flight -= 1
+        return []
+
+    service._process_single_file = _tracked
+
+    results = await service._run_sync_tasks(_source("guide"), files, {}, {})
+
+    assert len(results) == 200
+    assert peak > 1
+    assert peak <= FILE_WINDOW_SIZE
+
+
+@pytest.mark.asyncio
+async def test_cpu_flushes_four_thousand_chunk_batches():
+    repo = MagicMock()
+    service = _indexing_service(repo)
+    records = [{"chunk_hash": f"h{i}"} for i in range(5000)]
+
+    active = await service._handle_indexing_results([records], set(), "guide")
+
+    sizes = [len(call.args[0]) for call in repo.persist_batch.call_args_list]
+    assert sizes == [4096, 904]
+    assert len(active) == 5000
+
+
+@pytest.mark.asyncio
+async def test_mps_keeps_the_small_batch_for_stability():
+    repo = MagicMock()
+    service = _indexing_service(repo, device="mps")
+    records = [{"chunk_hash": f"h{i}"} for i in range(300)]
+
+    await service._handle_indexing_results([records], set(), "guide")
+
+    sizes = [len(call.args[0]) for call in repo.persist_batch.call_args_list]
+    assert sizes == [256, 44]
+
+
+def test_container_shutdown_stops_the_indexing_executor():
+    indexing_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+    container = AppContainer(
+        settings=MagicMock(),
+        logger=MagicMock(),
+        executor=MagicMock(),
+        sources=MagicMock(),
+        model_runtime=MagicMock(),
+        storage_runtime=MagicMock(),
+        warmup_service=MagicMock(),
+        health_service=MagicMock(),
+        search_formatter=MagicMock(),
+        toc_formatter=MagicMock(),
+        lancedb_repo=MagicMock(),
+        source_state_repo=MagicMock(),
+        summary_cache_repo=MagicMock(),
+        search_service=MagicMock(),
+        indexing_service=MagicMock(),
+        processor_registry=MagicMock(),
+        indexing_executor=indexing_executor,
+    )
+
+    container.shutdown()
+
+    with pytest.raises(RuntimeError):
+        indexing_executor.submit(lambda: None)

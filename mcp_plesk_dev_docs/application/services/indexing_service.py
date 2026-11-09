@@ -14,6 +14,19 @@ from mcp_plesk_dev_docs.infrastructure.ai_client import AIClient
 logger = logging.getLogger("mcp_plesk_dev_docs")
 
 
+# Files per ingest window. The old `_run_sync_tasks` built one coroutine per
+# file and gathered them all, so a multi-thousand-file source had every file in
+# flight at once and queued the lot on the executor.
+FILE_WINDOW_SIZE = 64
+
+# Chunks per `table.add()`. 4096 appends one fragment per few thousand rows
+# instead of one per 256-1000, which is what lets `table.optimize()` keep the
+# fragment count flat across refreshes. MPS keeps the small batch: large
+# batches there trip multi-threaded PyTorch deadlocks (see `_persist_docs`).
+BATCH_SIZE_CHUNKS_CPU = 4096
+BATCH_SIZE_CHUNKS_MPS = 256
+
+
 class IndexingService:
     def __init__(  # noqa: PLR0913
         self,
@@ -82,30 +95,18 @@ class IndexingService:
         f: Path,
         source: Any,
         toc_map: Dict[str, Any],
-        existing_files: Set[str],
+        existing_map: Dict[str, List[str]],
         ai_client: Optional[AIClient],
         semaphore: asyncio.Semaphore,
-    ) -> List[Dict[str, Any]]:
-        """Process a single file and return records or existing hashes."""
-        if f.name in existing_files:
+    ) -> List[Any]:
+        """Return new records for a file, or the hashes already stored for it.
 
-            def _fetch_hashes():
-                table = self.lancedb_repo.get_table()
-                rows = (
-                    table.search()
-                    .where(
-                        f"filename = '{f.name}' AND "
-                        f"category = '{source.category.value}'"
-                    )
-                    .select(["chunk_hash"])
-                    .limit(1000)
-                    .to_list()
-                )
-                return [row["chunk_hash"] for row in rows]
-
-            return await asyncio.get_running_loop().run_in_executor(
-                self.executor, _fetch_hashes
-            )
+        Hash lookups happen once per category before this runs, so the
+        already-indexed branch is a dict lookup: no scan and no per-file round
+        trip into LanceDB.
+        """
+        if f.name in existing_map:
+            return list(existing_map[f.name])
 
         processor = self.processor_registry.get(source.source_type)
 
@@ -150,9 +151,10 @@ class IndexingService:
         pending_docs = []
         active_hashes = set()
 
-        # Optimize batch size for device (MPS is inefficient with very large batches)
+        # MPS trips multi-threaded PyTorch deadlocks on very large batches, so
+        # it keeps the small one; CPU/CUDA flush ~16x fewer fragments.
         device = self.model_runtime.detect_device()
-        BATCH_SIZE_CHUNKS = 256 if device == "mps" else 1000
+        batch_size = BATCH_SIZE_CHUNKS_MPS if device == "mps" else BATCH_SIZE_CHUNKS_CPU
 
         for result in results:
             if not result:
@@ -166,11 +168,15 @@ class IndexingService:
                     active_hashes.add(h)
                     if h not in existing_hashes:
                         pending_docs.append(r)
-
-            if len(pending_docs) >= BATCH_SIZE_CHUNKS:
-                logger.info("Embedding/Saving batch of %d chunks...", len(pending_docs))
-                await self._persist_docs(list(pending_docs))
-                pending_docs = []
+                    # Flush at the chunk boundary, not the file boundary: one
+                    # large file must not produce an unbounded embedding batch.
+                    if len(pending_docs) >= batch_size:
+                        logger.info(
+                            "Embedding/Saving batch of %d chunks...",
+                            len(pending_docs),
+                        )
+                        await self._persist_docs(list(pending_docs))
+                        pending_docs = []
 
         if pending_docs:
             logger.info(
@@ -197,7 +203,7 @@ class IndexingService:
         source: Any,
         files: List[Path],
         toc_map: Dict[str, Any],
-        existing_files: Set[str],
+        existing_map: Dict[str, List[str]],
     ) -> List[Any]:
         semaphore = asyncio.Semaphore(10)
         ai_client = (
@@ -206,17 +212,25 @@ class IndexingService:
             else None
         )
 
-        tasks = []
-        for f in files:
-            if f.name.startswith("_") or f.name == "toc.json":
-                continue
-            tasks.append(
-                self._process_single_file(
-                    f, source, toc_map, existing_files, ai_client, semaphore
+        targets = [
+            f for f in files if not (f.name.startswith("_") or f.name == "toc.json")
+        ]
+
+        # Bounded fan-out: windows keep the pending coroutine count and the
+        # executor queue flat, so a 2 000-file source no longer queues 2 000
+        # parse/chunk jobs before the first one finishes.
+        results: List[Any] = []
+        for start in range(0, len(targets), FILE_WINDOW_SIZE):
+            window = targets[start : start + FILE_WINDOW_SIZE]
+            window_results = await asyncio.gather(
+                *(
+                    self._process_single_file(
+                        f, source, toc_map, existing_map, ai_client, semaphore
+                    )
+                    for f in window
                 )
             )
-
-        results = await asyncio.gather(*tasks)
+            results.extend(window_results)
         if ai_client:
             await ai_client.close()
         self.summary_cache_repo.save()
@@ -270,17 +284,18 @@ class IndexingService:
             return f"SKIPPED {source.category.value} (No source changes detected)"
 
         try:
-            existing_hashes = self.lancedb_repo.get_existing_hashes(
-                source.category.value
-            )
-            existing_files = set()
+            # One projected scan per category feeds both the diff set and the
+            # per-file hash map; the vector column never leaves LanceDB.
+            hash_map = self.lancedb_repo.get_chunk_hash_map(source.category.value)
+            existing_hashes = {h for hashes in hash_map.values() for h in hashes}
+            # A chunker version bump must rechunk every file, but the old rows
+            # are still needed below to delete the hashes this run replaces.
+            reusable_map: Dict[str, List[str]] = {}
             if (
                 not reset_db
                 and prev_meta.get("chunk_version") == chunking.CHUNK_VERSION
             ):
-                existing_files = self.lancedb_repo.get_existing_filenames(
-                    source.category.value
-                )
+                reusable_map = hash_map
 
             toc_map = await loop.run_in_executor(
                 self.executor,
@@ -292,7 +307,7 @@ class IndexingService:
             )
             files = discovery.collect_files_for_source(legacy_source)
 
-            results = await self._run_sync_tasks(source, files, toc_map, existing_files)
+            results = await self._run_sync_tasks(source, files, toc_map, reusable_map)
 
             active_hashes = await self._handle_indexing_results(
                 results, existing_hashes, source.category.value

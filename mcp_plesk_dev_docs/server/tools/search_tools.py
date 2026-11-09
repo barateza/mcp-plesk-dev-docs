@@ -17,6 +17,9 @@ logger = logging.getLogger("mcp_plesk_dev_docs")
 
 DEFAULT_LIMIT = 5
 MAX_LIMIT = 10
+# `resolve_references` is a keyword lookup, so it can afford more hits than the
+# exploratory search tool; each hit is flattened to one bounded line below.
+REFERENCE_LIMIT = 10
 
 # Declared when the tool is registered so clients receive `structuredContent`
 # next to the markdown text block.
@@ -76,6 +79,11 @@ def _coerce_score(value: Any) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _one_line_snippet(text: str, max_chars: int = DEFAULT_SNIPPET_CHARS) -> str:
+    """Collapse a chunk to one bounded line for a compact reference hit."""
+    return " ".join(format_snippet(text, max_chars).split())
 
 
 def _structured_row(formatter: Any, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -222,13 +230,30 @@ class SearchTools:
 
     async def resolve_references(self, query: str, category: CategoryEnum) -> str:
         """Find other files that reference a specific symbol or topic."""
-        # Use FTS for exact keyword matching on references
-        results = await self.search_service.search_raw(query, category.value)
-        if not results:
+        # Exact keyword lookup (issue #95): FTS only. The vector leg, the
+        # cross-encoder and neighbour expansion added latency for a query the
+        # inverted index answers exactly, and could reorder exact symbol
+        # matches by semantic score. There is deliberately no vector fallback:
+        # a semantic near-miss is a wrong answer for this tool.
+        hits = await self.search_service.search_fts_only(
+            query, category=category.value, limit=REFERENCE_LIMIT
+        )
+        if not hits:
             return f"No references found for '{query}' in {category.value}."
 
-        formatter = self.search_service.search_formatter
-        return formatter.format_markdown(results)
+        # Keep FTS order; only skip a row that repeats an already-shown
+        # (filename, chunk_id), which a re-index can leave in the table.
+        lines: List[str] = [f"References for '{query}' in {category.value}:", ""]
+        seen: set[tuple[str, Optional[int]]] = set()
+        for hit in hits:
+            filename = str(hit.get("filename") or "")
+            chunk_id = _coerce_chunk_id(hit.get("chunk_id"))
+            if (filename, chunk_id) in seen:
+                continue
+            seen.add((filename, chunk_id))
+            snippet = _one_line_snippet(str(hit.get("text") or ""))
+            lines.append(f"- **`{filename}`** (chunk {chunk_id}): {snippet}")
+        return "\n".join(lines)
 
 
 @tool_error_boundary

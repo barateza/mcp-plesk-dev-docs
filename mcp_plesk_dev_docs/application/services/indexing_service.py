@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from typing import Any, List, Set, Optional, Dict, Callable
 from pathlib import Path
 
+from lancedb.index import FTS
+
 from mcp_plesk_dev_docs.infrastructure.parsers import chunking
 from mcp_plesk_dev_docs.infrastructure.repositories.protocols import IDocumentStore
 from mcp_plesk_dev_docs.infrastructure.sources import acquisition, discovery
@@ -329,18 +331,35 @@ class IndexingService:
         loop = asyncio.get_running_loop()
         report = []
 
+        # Native LanceDB FTS. Tantivy-backed FTS was removed in lancedb 0.40
+        # (`use_tantivy=True` now raises), and a native index covers exactly one
+        # field, so only `text` is indexed: filenames are opaque such as
+        # "79359.htm" and carry no terms worth BM25-scoring.
+        #
+        # Failure is re-raised, not logged and swallowed. The old code produced
+        # "job completed, error: null" while no FTS index existed at all, which
+        # silently degraded hybrid search to vector-only.
         try:
             table = self.lancedb_repo.get_table()
             await loop.run_in_executor(
                 self.executor,
-                lambda: table.create_fts_index(
-                    ["text", "filename"], use_tantivy=True, replace=True
+                lambda: table.create_index(
+                    "text",
+                    config=FTS(
+                        language="English",
+                        stem=True,
+                        remove_stop_words=True,
+                        ascii_folding=True,
+                    ),
                 ),
             )
             report.append("FTS index rebuilt successfully.")
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to rebuild FTS index.")
-            report.append("ERROR rebuilding FTS index.")
+            raise RuntimeError(
+                "FTS index rebuild failed; hybrid search would silently degrade "
+                f"to vector-only. Cause: {exc}"
+            ) from exc
 
         await self._call_progress(progress_callback, 3, 4)
 

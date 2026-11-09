@@ -27,7 +27,11 @@ class LanceDbRepository:
     ) -> List[dict]:
         """Perform a full-text search."""
         table = self.get_table()
-        query = table.search(text).limit(limit)
+        # query_type="fts" is REQUIRED. The default is "auto", which embeds the
+        # string and performs a VECTOR search even when an inverted index exists
+        # (measured on lancedb 0.40: auto returned _score=None hits), so the RRF
+        # merge was combining a list with its own near-duplicate.
+        query = table.search(text, query_type="fts").limit(limit)
         if filter_expr:
             query = query.where(filter_expr)
         return query.to_list()

@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-09
+
+### Fixed
+
+- **Hybrid search was not hybrid.** `search_fts` called `table.search(text)` and
+  relied on the default `query_type="auto"`. On lancedb 0.40 that embeds the
+  string and performs a VECTOR search even when an inverted index exists
+  (measured: hits came back with `_score=None`), so the RRF merge was combining
+  the vector list with a near-duplicate of itself. FTS queries now pass
+  `query_type="fts"` explicitly.
+- **The FTS index was never built, and the failure was swallowed.** The rebuild
+  called `create_fts_index(["text", "filename"], use_tantivy=True)`, which raises
+  `ValueError: Tantivy-based FTS has been removed` on lancedb >= 0.40. The
+  exception was logged and then discarded, so `check_sync_status` reported
+  `completed` with `error: null` while no inverted index existed at all. The build
+  now uses native FTS (`create_index("text", config=FTS(...))`, one field, as
+  native indexes cover a single column) and re-raises, failing the job.
+- **FTS candidates are capped per file.** Native FTS ranks chunks, so one long
+  page could fill the candidate list (measured: the top three hits for a UI query
+  were three chunks of the same document). At most two chunks per file now reach
+  the RRF merge.
+
+### Changed
+
+- **Dropped the `tantivy` dependency and raised the `lancedb` floor to
+  `>=0.40.0`.** Nothing in the package imports tantivy; it existed only for the
+  removed Tantivy FTS path.
+
 ## [0.7.0] - 2026-05-26
 
 ### Changed

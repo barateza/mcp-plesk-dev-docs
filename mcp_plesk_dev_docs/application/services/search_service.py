@@ -175,7 +175,11 @@ class SearchService:
             )
             return []
 
-        return [dict(r) for r in raw]
+        # FTS ranks CHUNKS, so one long page can fill the whole candidate list
+        # (measured: the top three hits for a UI query were three chunks of the
+        # same 73624.htm). Cap it at two chunks per file so distinct documents
+        # get a fair share of the RRF merge.
+        return self._deduplicate_by_filename([dict(r) for r in raw], max_per_file=2)
 
     def _get_search_candidates(
         self, query: str, category: Optional[str], n_candidates: int

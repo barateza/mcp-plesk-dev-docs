@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-plesk-dev-docs"
-version = "0.7.0"
+version = "0.7.1"
 description = "A unified MCP server that indexes and retrieves Plesk documentation using vector embeddings and semantic search with reranking"
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,9 @@ requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "fastmcp>=3.2.4",
-    "lancedb>=0.29.1",
+    # Native FTS only: lancedb 0.40 removed Tantivy support, and the code builds
+    # the inverted index with create_index(config=FTS(...)).
+    "lancedb>=0.40.0",
     "numpy>=1.26.0",  # used directly in server.py, tq_index.py, and scripts
     "psutil>=6.1.1",
     "pydantic>=2.10.0",
@@ -41,7 +43,8 @@ dependencies = [
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
-    "tantivy>=0.22.0",
+    # NOTE: tantivy was only ever needed by lancedb's removed Tantivy FTS path;
+    # nothing in this package imports it.
     "lance-namespace==0.6.1",
     "tq-search",
 ]

@@ -1,17 +1,25 @@
-import pytest
-import inspect
 import asyncio
-from unittest.mock import MagicMock, AsyncMock
 import concurrent.futures
+import inspect
+import logging
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # New imports from the service-based architecture
 from fastmcp import Context
 from mcp_plesk_dev_docs.application.services.container import AppContainer
 from mcp_plesk_dev_docs.settings import PleskSettings as Settings
+from mcp_plesk_dev_docs.application.services.search_service import SearchService
+from mcp_plesk_dev_docs.domain.models import CategoryEnum
+from mcp_plesk_dev_docs.formatting.search_formatter import DEFAULT_SNIPPET_CHARS
 import mcp_plesk_dev_docs.infrastructure.parsers.chunking
 
 # New tool imports
-from mcp_plesk_dev_docs.server.tools.search_tools import search_mcp_plesk_dev_docs
+from mcp_plesk_dev_docs.server.tools.search_tools import (
+    SearchTools,
+    search_mcp_plesk_dev_docs,
+)
 from mcp_plesk_dev_docs.server.tools.admin_tools import (
     warmup_server,
     daemon_health,
@@ -356,3 +364,224 @@ async def test_search_snippet_is_truncated_per_result(mock_all_ml_and_io_calls):
     snippet = result.structured_content["results"][0]["snippet"]
     assert len(snippet) <= 800
     assert snippet.endswith("…")
+
+
+# ---------------------------------------------------------------------------
+# FTS-only references (issue #95) and projected get_file_content (issue #96)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def build_search_service():
+    """Return a factory for a real SearchService with a mocked repository.
+
+    The tests below exercise the real service logic (executor hop, FTS
+    filtering, text assembly) instead of the MagicMock the shared fixture wires
+    into the container, which would leave the code under test unexecuted.
+    """
+    services = []
+
+    def _build(repo):
+        settings = MagicMock(spec=Settings)
+        settings.plesk_enable_fts = True
+        settings.plesk_query_cache_enabled = False
+        settings.plesk_query_cache_size = 8
+        settings.plesk_rerank_candidates = 50
+        settings.plesk_min_relevance_threshold = None
+
+        model_runtime = MagicMock()
+        model_runtime.get_reranker.return_value = MagicMock()
+
+        executor = MagicMock(spec=concurrent.futures.ThreadPoolExecutor)
+        executor.submit.side_effect = sync_submit
+
+        service = SearchService(
+            settings, model_runtime, MagicMock(), repo, MagicMock(), executor
+        )
+        services.append(service)
+        return service, model_runtime
+
+    yield _build
+
+    for service in services:
+        service.shutdown()
+
+
+def _file_content_query(table):
+    """Return the terminal `.to_list()` mock of the projected query chain."""
+    where = table.search.return_value.where.return_value
+    return where.select.return_value.limit.return_value
+
+
+@pytest.mark.asyncio
+async def test_resolve_references_never_touches_the_vector_path(build_search_service):
+    """#95: resolve_references is FTS-only — no vector leg, no reranker."""
+    repo = MagicMock()
+    repo.search_fts.return_value = [
+        {"filename": "ApiCli.php", "chunk_id": 3, "text": "Wraps pm_ApiCli."},
+        {"filename": "guide.htm", "chunk_id": 7, "text": "Mentions pm_ApiCli."},
+    ]
+    service, model_runtime = build_search_service(repo)
+    service._get_vector_candidates = MagicMock()
+
+    text = await SearchTools(service).resolve_references(
+        "pm_ApiCli", CategoryEnum.PHP_STUBS
+    )
+
+    repo.search_fts.assert_called_once_with(
+        "pm_ApiCli", limit=10, filter_expr="category = 'php-stubs'"
+    )
+    service._get_vector_candidates.assert_not_called()
+    repo.search_vector.assert_not_called()
+    repo.get_neighbors.assert_not_called()
+    model_runtime.get_reranker.assert_not_called()
+    assert text.index("ApiCli.php") < text.index("guide.htm")
+    assert "**`ApiCli.php`** (chunk 3)" in text
+
+
+@pytest.mark.asyncio
+async def test_resolve_references_keeps_fts_order_and_bounds_each_hit(
+    build_search_service,
+):
+    """#95: FTS order is preserved and every hit is one bounded line."""
+    long_text = "Sentence mentioning pm_ApiCli. " * 200
+    repo = MagicMock()
+    repo.search_fts.return_value = [
+        {"filename": "b.htm", "chunk_id": 2, "text": long_text},
+        {"filename": "b.htm", "chunk_id": 2, "text": long_text},  # duplicate row
+        {"filename": "a.htm", "chunk_id": 1, "text": "short"},
+    ]
+    service, _ = build_search_service(repo)
+
+    text = await SearchTools(service).resolve_references(
+        "pm_ApiCli", CategoryEnum.GUIDE
+    )
+
+    hits = [line for line in text.splitlines() if line.startswith("- ")]
+    assert [line.split("**")[1] for line in hits] == ["`b.htm`", "`a.htm`"]
+    for line in hits:
+        snippet = line.split(": ", 1)[1]
+        assert "\n" not in snippet
+        assert len(snippet) <= DEFAULT_SNIPPET_CHARS
+    assert len(text) < 2 * DEFAULT_SNIPPET_CHARS + 200
+
+
+@pytest.mark.asyncio
+async def test_resolve_references_reports_an_empty_fts_set_without_fallback(
+    build_search_service,
+):
+    """#95: an empty FTS set is reported, never answered from the vector leg."""
+    repo = MagicMock()
+    repo.search_fts.return_value = []
+    service, model_runtime = build_search_service(repo)
+    service._get_vector_candidates = MagicMock()
+
+    text = await SearchTools(service).resolve_references("nope", CategoryEnum.GUIDE)
+
+    assert text == "No references found for 'nope' in guide."
+    service._get_vector_candidates.assert_not_called()
+    repo.search_vector.assert_not_called()
+    model_runtime.get_reranker.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_fts_only_returns_raw_rows_in_order(build_search_service):
+    """#95: the service returns raw FTS rows, in FTS order, without the pipeline."""
+    repo = MagicMock()
+    repo.search_fts.return_value = [
+        {"filename": "b.htm", "chunk_id": 1, "_score": 0.9},
+        {"filename": "a.htm", "chunk_id": 2, "_score": 0.5},
+    ]
+    service, model_runtime = build_search_service(repo)
+    service._get_vector_candidates = MagicMock()
+
+    rows = await service.search_fts_only("symbol", category="api", limit=3)
+
+    assert [row["filename"] for row in rows] == ["b.htm", "a.htm"]
+    repo.search_fts.assert_called_once_with(
+        "symbol", limit=3, filter_expr="category = 'api'"
+    )
+    repo.search_vector.assert_not_called()
+    repo.get_neighbors.assert_not_called()
+    service._get_vector_candidates.assert_not_called()
+    model_runtime.get_reranker.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_search_fts_only_blank_query_skips_the_repository(build_search_service):
+    repo = MagicMock()
+    service, _ = build_search_service(repo)
+
+    assert await service.search_fts_only("   ", category="api") == []
+    repo.search_fts.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_file_content_uses_a_vectorless_projected_query(
+    build_search_service,
+):
+    """#96: filter-only query and a projection without the vector column."""
+    table = MagicMock()
+    _file_content_query(table).to_list.return_value = [
+        {"text": "Second chunk.", "chunk_id": 1, "filename": "doc.htm"},
+        {"text": "First chunk.", "chunk_id": 0, "filename": "doc.htm"},
+    ]
+    repo = MagicMock()
+    repo.get_table.return_value = table
+    service, _ = build_search_service(repo)
+
+    text = await SearchTools(service).get_file_content("doc.htm", CategoryEnum.CLI)
+
+    table.search.assert_called_once_with(None)
+    table.search.return_value.where.assert_called_once_with(
+        "filename = 'doc.htm' AND category = 'cli'"
+    )
+    where = table.search.return_value.where.return_value
+    where.select.assert_called_once_with(["text", "chunk_id", "filename"])
+    where.select.return_value.limit.assert_called_once_with(1000)
+    assert text == "First chunk.\n\nSecond chunk."
+
+
+@pytest.mark.asyncio
+async def test_get_file_content_missing_file_message_is_unchanged(
+    build_search_service,
+):
+    table = MagicMock()
+    _file_content_query(table).to_list.return_value = []
+    repo = MagicMock()
+    repo.get_table.return_value = table
+    service, _ = build_search_service(repo)
+
+    text = await SearchTools(service).get_file_content("gone.htm", CategoryEnum.GUIDE)
+
+    assert text == "File 'gone.htm' not found in category 'guide'."
+
+
+@pytest.mark.asyncio
+async def test_get_file_content_warns_and_flags_truncation(
+    build_search_service, caplog
+):
+    """#96: hitting the chunk cap warns in the log and in the returned text."""
+    caplog.set_level(logging.WARNING, logger="mcp_plesk_dev_docs")
+    table = MagicMock()
+    _file_content_query(table).to_list.return_value = [
+        {"text": f"chunk {i}", "chunk_id": i, "filename": "big.htm"}
+        for i in range(1000)
+    ]
+    repo = MagicMock()
+    repo.get_table.return_value = table
+    service, _ = build_search_service(repo)
+
+    text = await SearchTools(service).get_file_content("big.htm", CategoryEnum.GUIDE)
+
+    assert "[TRUNCATED]" in text
+    assert "only the first 1000" in text
+    warnings = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING and "truncated" in record.getMessage()
+    ]
+    assert len(warnings) == 1
+    assert "big.htm" in warnings[0]
+    assert "guide" in warnings[0]
+    assert "1000" in warnings[0]

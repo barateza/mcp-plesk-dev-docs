@@ -29,15 +29,17 @@ async def test_get_file_content_delegation(search_service_mock):
 
 @pytest.mark.asyncio
 async def test_resolve_references_delegation(search_service_mock):
-    search_service_mock.search_raw = AsyncMock(
-        return_value=[{"text": "ref", "filename": "f.php"}]
+    search_service_mock.search_fts_only = AsyncMock(
+        return_value=[{"text": "ref", "filename": "f.php", "chunk_id": 4}]
     )
-    search_service_mock.search_formatter.format_markdown.return_value = "Formatted Ref"
     tools = SearchTools(search_service_mock)
 
     res = await tools.resolve_references("symbol", CategoryEnum.PHP_STUBS)
-    assert res == "Formatted Ref"
-    search_service_mock.search_raw.assert_called_once_with("symbol", "php-stubs")
+    assert "f.php" in res
+    assert "chunk 4" in res
+    search_service_mock.search_fts_only.assert_called_once_with(
+        "symbol", category="php-stubs", limit=10
+    )
 
 
 @pytest.mark.asyncio

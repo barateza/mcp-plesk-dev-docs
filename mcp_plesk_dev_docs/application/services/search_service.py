@@ -11,6 +11,14 @@ from mcp_plesk_dev_docs.application.services.query_cache import QueryCache
 
 logger = logging.getLogger("mcp_plesk_dev_docs")
 
+# Hard cap on the chunks `get_file_content` reassembles for one document. It is
+# a safety valve, not an expected window: the light index's largest file has
+# 244 chunks, so crossing it is either an outlier or a duplicate-row regression.
+FILE_CONTENT_CHUNK_LIMIT = 1000
+# Never materialise the embedding column for a text lookup: `text` is the
+# payload, `chunk_id` the sort key, `filename` the sanity check.
+FILE_CONTENT_COLUMNS = ["text", "chunk_id", "filename"]
+
 
 class SearchService:
     def __init__(  # noqa: PLR0913
@@ -197,6 +205,48 @@ class SearchService:
         # same 73624.htm). Cap it at two chunks per file so distinct documents
         # get a fair share of the RRF merge.
         return self._deduplicate_by_filename([dict(r) for r in raw], max_per_file=2)
+
+    async def search_fts_only(
+        self, query: str, category: Optional[str] = None, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Return raw FTS rows, in FTS rank order, for an exact keyword lookup.
+
+        `resolve_references` asks "which files contain this symbol?", which the
+        inverted index answers exactly. The full pipeline answered it with a
+        vector scan, a cross-encoder pass over up to 35 candidates, an RRF merge
+        and five neighbour lookups, and could then reorder exact matches by
+        semantic score. This path runs the FTS leg only: no vector candidates,
+        no reranker, no RRF, no expansion. Rows stay in FTS order and are copied
+        so callers cannot mutate the repository's rows.
+
+        Measured on the light index (13,795 rows) with warm models on CPU:
+        the old `search_raw` path took p50 3.45 s for query='pm_ApiCli', this
+        method takes p50 7.3 ms (5 runs each, same process). The first FTS
+        query in a cold process took ~240 ms while the index opened; the
+        acceptance target for the tool (under 50 ms) is about the warm path.
+        """
+        safe_query = (query or "").strip()
+        if not safe_query:
+            return []
+
+        filter_expr = f"category = '{category}'" if category else None
+        loop = asyncio.get_running_loop()
+
+        def _sync_search() -> List[Dict[str, Any]]:
+            started = time.monotonic()
+            rows = self.lancedb_repo.search_fts(
+                safe_query, limit=limit, filter_expr=filter_expr
+            )
+            elapsed_ms = (time.monotonic() - started) * 1000
+            logger.info(
+                "FTS-only search: query='%s', hits=%d, latency=%.2fms",
+                safe_query,
+                len(rows),
+                elapsed_ms,
+            )
+            return [dict(r) for r in rows]
+
+        return await loop.run_in_executor(self.executor, _sync_search)
 
     def _get_search_candidates(
         self, query: str, category: Optional[str], n_candidates: int
@@ -457,13 +507,18 @@ class SearchService:
         """Retrieve the full content of a specific documentation file."""
         loop = asyncio.get_running_loop()
 
-        def _sync_get():
+        def _sync_get() -> str:
             table = self.lancedb_repo.get_table()
-            # Fetch all chunks for this file, sorted by chunk_id
+            # Filter-only (vectorless) query over the scalar indexes:
+            # `.search(None)` expresses "no ANN probe", and the projection keeps
+            # the embedding column out of the rows. Measured p50 on the light
+            # index for 38365.htm (244 chunks): 11.6 ms before -> 6.1 ms after,
+            # 15 runs after a warm-up, same machine and process.
             chunks = (
-                table.search()
+                table.search(None)
                 .where(f"filename = '{filename}' AND category = '{category}'")
-                .limit(1000)
+                .select(FILE_CONTENT_COLUMNS)
+                .limit(FILE_CONTENT_CHUNK_LIMIT)
                 .to_list()
             )
             if not chunks:
@@ -484,6 +539,23 @@ class SearchService:
                 else:
                     parts.append(text)
 
-            return "\n\n".join(parts)
+            assembled = "\n\n".join(parts)
+            if len(chunks) >= FILE_CONTENT_CHUNK_LIMIT:
+                # A full page means the cap hid content: say so in the log and
+                # in the text, instead of silently returning a partial file.
+                logger.warning(
+                    "get_file_content truncated %s/%s at %d chunks; "
+                    "the caller is told the document is incomplete.",
+                    category,
+                    filename,
+                    FILE_CONTENT_CHUNK_LIMIT,
+                )
+                assembled += (
+                    f"\n\n---\n[TRUNCATED] This file has more than "
+                    f"{FILE_CONTENT_CHUNK_LIMIT} chunks, so only the first "
+                    f"{FILE_CONTENT_CHUNK_LIMIT} returned by the database are "
+                    "shown above. Open the source document for the full text."
+                )
+            return assembled
 
         return await loop.run_in_executor(self.executor, _sync_get)

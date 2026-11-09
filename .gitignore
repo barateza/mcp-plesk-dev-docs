@@ -159,3 +159,6 @@ uv.lock
 .dolt/
 *.db
 /.codegraph
+
+# Agent scratch dirs (worktrees, caches, logs) — never commit
+.scratch/

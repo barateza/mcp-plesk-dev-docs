@@ -110,14 +110,9 @@ Work is NOT complete until pushed. Steps:
 
 ## Agent skills
 
-### Issue tracker
-GitHub Issues on github.com/barateza/mcp-plesk-dev-docs. Use the `gh` CLI. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-Single-context: `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
+Issue tracker, triage-label vocabulary and domain-doc rules are configured in
+[`AGENTS.md`](AGENTS.md) — that file is the source of truth for the engineering
+skills; do not duplicate it here.
 
 ## Watch out for
 - **`tq-search` is a local editable dep** in `pyproject.toml`:

@@ -52,6 +52,11 @@ class AppContainer:
     def shutdown(self):
         """Shut down the executor and other resources."""
         self.logger.info("Shutting down AppContainer...")
+        # The search service owns the two-thread retrieval pool; release it
+        # before the shared executor so no leg is left submitting.
+        shutdown_search = getattr(self.search_service, "shutdown", None)
+        if shutdown_search is not None:
+            shutdown_search()
         self.executor.shutdown(wait=True)
         # Clear model caches if possible
         if hasattr(self.model_runtime, "_embedding_model"):

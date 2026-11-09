@@ -6,6 +6,10 @@ database, which can cause corruption, crashes, or memory exhaustion.
 
 Uses a PID file in the system temp directory with cross-platform liveness
 checks via `psutil` (already a project dependency).
+
+A second live instance refuses to start: it prints the holder PID, the lock-file
+path and a recovery hint to stderr, then exits with ``EX_TEMPFAIL`` (75) so a
+caller can tell a lock conflict from a successful run.
 """
 
 import atexit
@@ -20,13 +24,17 @@ logger = logging.getLogger("mcp_plesk_dev_docs.lock")
 
 LOCK_FILE = os.path.join(tempfile.gettempdir(), "mcp_plesk_dev_docs.lock")
 
+# `os.EX_TEMPFAIL` is Unix-only; Windows must still exit with the same code.
+EX_TEMPFAIL = getattr(os, "EX_TEMPFAIL", 75)
+
 
 def acquire_lock() -> None:
     """Acquire the single-instance lock.
 
     If a lock file exists and the PID within it is still alive, the current
-    process exits immediately with a message to stderr.  Stale lock files
-    (PID no longer running) are cleaned up automatically.
+    process prints the holder PID, the lock-file path and a recovery hint to
+    stderr, then exits with ``EX_TEMPFAIL`` (75).  Stale lock files (PID no longer
+    running) are cleaned up automatically.
     """
     if os.path.exists(LOCK_FILE):
         try:
@@ -43,7 +51,13 @@ def acquire_lock() -> None:
                     "Refusing to start a second instance." % pid,
                     file=sys.stderr,
                 )
-                sys.exit(0)
+                print(
+                    "Lock file: %s\n"
+                    "If that process is not running, delete the lock file and "
+                    "retry (exit code %d: EX_TEMPFAIL)." % (LOCK_FILE, EX_TEMPFAIL),
+                    file=sys.stderr,
+                )
+                sys.exit(EX_TEMPFAIL)
             else:
                 logger.warning(
                     "Stale lock file found (PID %d no longer alive); removing.", pid

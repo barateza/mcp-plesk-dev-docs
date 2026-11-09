@@ -235,20 +235,39 @@ class SearchService:
         self._retrieval_executor.shutdown(wait=False)
 
     def _apply_relevance_gate(self, results: List[Dict[str, Any]]) -> Optional[str]:
-        """Check top result against profile threshold. Returns error if below."""
+        """Check the top result against the effective relevance threshold.
+
+        The threshold is ``PLESK_MIN_RELEVANCE_THRESHOLD`` when that setting is
+        explicitly set, otherwise the active profile's ``relevance_gate``. An
+        explicit ``0.0`` disables the gate, so the resolution must test for
+        ``None`` rather than truthiness.
+        """
         if not results:
             return "I could not find a reliable answer."
 
         profile = self.model_runtime.get_profile()
-        min_relevance = (
-            self.settings.plesk_min_relevance_threshold or profile.relevance_gate
+        configured = self.settings.plesk_min_relevance_threshold
+        if configured is None:
+            min_relevance = profile.relevance_gate
+            source = "profile"
+        else:
+            min_relevance = configured
+            source = "env"
+        logger.info(
+            "Relevance gate: threshold=%.4f source=%s profile='%s'.",
+            min_relevance,
+            source,
+            profile.name,
         )
 
-        if results[0].get("_relevance", 0.0) < min_relevance:
+        top_relevance = results[0].get("_relevance", 0.0)
+        if top_relevance < min_relevance:
             logger.info(
-                "Search confidence below threshold (%.4f < %.4f) for profile '%s'.",
-                results[0].get("_relevance", 0.0),
+                "Search confidence below threshold (%.4f < %.4f, source=%s) "
+                "for profile '%s'.",
+                top_relevance,
                 min_relevance,
+                source,
                 profile.name,
             )
             return "I could not find a reliable answer."

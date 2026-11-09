@@ -1,5 +1,5 @@
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
@@ -51,9 +51,15 @@ class AppContainer:
     indexing_executor: Optional[ThreadPoolExecutor] = None
     # These will be added as we extract more services
     job_service: Any = None
+    # Guard so the two shutdown call sites (the MCP lifespan cleanup and
+    # run_server's finally) do not release the pools twice.
+    _shutdown_done: bool = field(default=False, init=False, repr=False)
 
     def shutdown(self):
-        """Shut down the executor and other resources."""
+        """Shut down the executor and other resources (idempotent)."""
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         self.logger.info("Shutting down AppContainer...")
         # The search service owns the two-thread retrieval pool; release it
         # before the shared executor so no leg is left submitting.

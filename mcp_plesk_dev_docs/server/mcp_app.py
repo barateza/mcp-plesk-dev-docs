@@ -1,6 +1,6 @@
-from contextlib import asynccontextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from mcp_plesk_dev_docs.paths import resolve_base_dir
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 
 from fastmcp import FastMCP
 from mcp.types import ToolAnnotations
@@ -11,22 +11,34 @@ from mcp_plesk_dev_docs.application.services.container import AppContainer
 BASE_DIR = resolve_base_dir()
 
 
-def create_mcp_app(container: AppContainer) -> FastMCP:
-    """Create and configure the FastMCP application."""
+def container_lifespan(
+    container: AppContainer,
+) -> Callable[[FastMCP], AbstractAsyncContextManager[dict]]:
+    """Return the lifespan that exposes and later releases *container*.
 
-    # The lifespan is passed to the constructor, not registered with the
-    # `@mcp.lifespan()` decorator. That decorator form silently registers
-    # nothing (on fastmcp 3.4 and 4.1 alike), so `lifespan_context` stayed
-    # empty and EVERY tool died with KeyError: 'container'.
+    The lifespan must be passed to the constructor, not registered with the
+    ``@mcp.lifespan()`` decorator: that form silently registers nothing (on
+    fastmcp 3.4 and 4.1 alike), so ``lifespan_context`` stayed empty and EVERY
+    tool died with ``KeyError: 'container'``.
+    """
+
     @asynccontextmanager
     async def lifespan(mcp_instance: FastMCP) -> AsyncGenerator[dict, None]:
         # Yield the container for access via ctx.request_context.lifespan_context
         yield {"container": container}
 
-        # Cleanup
-        container.executor.shutdown(wait=False)
+        # Release every pool the container owns: the shared and ingest
+        # executors plus the retrieval pool, which are created lazily on
+        # first use. Shutting down only the shared executor used to leak the
+        # other two.
+        container.shutdown()
 
-    mcp = FastMCP("mcp-plesk-dev-docs", lifespan=lifespan)
+    return lifespan
+
+
+def create_mcp_app(container: AppContainer) -> FastMCP:
+    """Create and configure the FastMCP application."""
+    mcp = FastMCP("mcp-plesk-dev-docs", lifespan=container_lifespan(container))
 
     # Register tools
     from mcp_plesk_dev_docs.server.tools.search_tools import (

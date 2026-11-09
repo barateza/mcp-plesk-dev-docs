@@ -67,19 +67,30 @@ jobs:
 
       - name: Update server.json version from tag
         run: |
+          # workflow_dispatch on a branch has no version to take: GITHUB_REF_NAME
+          # would be "main", and the sed below would write that into server.json.
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            echo "::error::server.json is bumped from the release tag; run this workflow on a v* tag."
+            exit 1
+          fi
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Updating server.json version to $VERSION"
           sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/g" server.json
 
       - name: Commit server.json update
         run: |
-          if git diff --staged --quiet; then
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Stage FIRST. `git diff --staged` compares the index with HEAD, so
+          # before `git add` it is always clean: the previous order exited 0 on
+          # every release and never committed the bump, silently leaving
+          # server.json stale. `--cached` is the same comparison, spelled for
+          # what it reads.
+          git add server.json
+          if git diff --cached --quiet; then
             echo "server.json already matches ${GITHUB_REF_NAME#v}; nothing to commit."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add server.json
           git commit -m "chore: bump server.json to ${GITHUB_REF_NAME#v} [skip ci]"
           git push
 

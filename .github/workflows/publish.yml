@@ -55,6 +55,12 @@ jobs:
 
       - name: Publish package distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Idempotent re-runs: if the tag is moved or a run is retried, the
+          # files for that version may already exist. PyPI rejects duplicates
+          # outright (red run for an upload that already succeeded), so skip
+          # them instead. A genuinely new version still publishes normally.
+          skip-existing: true
 
       - name: Checkout repository (for server.json)
         uses: actions/checkout@v4

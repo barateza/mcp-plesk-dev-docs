@@ -1,8 +1,8 @@
-# CONTEXT — mcp-plesk-dev-docs
+# Glossary
 
-An MCP (Model Context Protocol) server that provides semantic search over Plesk developer documentation, powered by hybrid vector+FTS retrieval, cross-encoder reranking, and 4-bit TurboQuant quantization.
-
-## Domain Glossary
+Shared vocabulary for `mcp-plesk-dev-docs`. When naming a domain concept — in an
+issue title, a refactor proposal, a hypothesis, a test name, an ADR — use the
+term exactly as defined here. See `docs/agents/domain.md` for the consumer rules.
 
 | Term | Definition |
 |------|-----------|
@@ -14,10 +14,3 @@ An MCP (Model Context Protocol) server that provides semantic search over Plesk 
 | **Relevance Gate** | A profile-specific minimum `_relevance` threshold applied after reranking |
 | **Neighbor Expansion** | Fetching adjacent chunks (window=1) for top-5 results to provide surrounding context |
 | **Sampling** | MCP sampling protocol — the server asks the client's LLM to synthesize an answer from retrieved chunks with inline citations |
-
-## Key Decisions
-
-- **FTS via Tantivy** on `text` and `filename` columns, not a separate engine
-- **PID-file lock** prevents concurrent LanceDB access
-- **Chunk versioning** (`CHUNK_VERSION = "v15"`) forces re-embedding when chunking logic changes
-- **Off-the-shelf models**, no custom fine-tuning — embeddings from BAAI/bge series, reranker from sentence-transformers

@@ -1,6 +1,11 @@
-# REASONIX.md — mcp-plesk-dev-docs
+# Agent Instructions — mcp-plesk-dev-docs
+
+An MCP (Model Context Protocol) server that provides semantic search over Plesk
+developer documentation, powered by hybrid vector+FTS retrieval, cross-encoder
+reranking, and 4-bit TurboQuant quantization.
 
 ## Stack
+
 - **Python 3.13+** (`requires-python >=3.13`, `.python-version: 3.13`)
 - **FastMCP** (`fastmcp>=3.2.4`) — MCP server framework
 - **LanceDB** (`lancedb>=0.29.1`) — vector database (hybrid search: vector + FTS via Tantivy)
@@ -9,6 +14,7 @@
 - **pydantic-settings** — env-var config (`PleskSettings`)
 
 ## Layout
+
 - `mcp_plesk_dev_docs/` — the package (application, config, domain, formatting, infrastructure, server)
 - `tests/` — 20 flat test files, pytest with `asyncio_mode=auto`
 - `scripts/` — benchmark runner, TOC enrichment, summary-cache backfill
@@ -18,6 +24,7 @@
 - `.specs/features/` — feature specs with design.md, spec.md, tasks.md per feature
 
 ## Commands
+
 ```bash
 uv sync                          # install all deps
 uv run pytest tests/ -q          # 160 tests, ~3s
@@ -29,6 +36,7 @@ uv run mypy mcp_plesk_dev_docs/  # type-check (also runs in pre-commit)
 Run the server: `uv run mcp-plesk-dev-docs` (entry point: `mcp_plesk_dev_docs.server:main`)
 
 ## Conventions
+
 - **Commits**: Conventional Commits (`chore:`, `fix:`, `ci:`, `refactor:`, `security:`)
 - **Line length**: 88 (ruff)
 - **Pre-commit**: ruff, ruff-format, mypy, bandit, pytest (160 tests)
@@ -38,6 +46,7 @@ Run the server: `uv run mcp-plesk-dev-docs` (entry point: `mcp_plesk_dev_docs.se
 - **Shell safety**: Never use `bash -c` with inline code strings. Use single-quoted heredocs (`cat << 'EOF' > file`) to prevent shell expansion. Always use non-interactive flags (`cp -f`, `rm -rf`, `ssh -o BatchMode=yes`).
 
 ## Quick Reference
+
 ```bash
 git pull --rebase                                            # Session start
 gh issue list --state open                                   # Find work
@@ -50,10 +59,13 @@ gh issue close <number> --comment "..."                      # Complete work
 ## Agent Workflow
 
 ### 1. Session Start (Dual-Sync Rule)
+
 MUST run on session initialization: `git pull --rebase`. Use `git status` and `gh issue list` to confirm latest state.
 
 ### 2. Long-Running Tasks (Heartbeat Rule)
+
 NO silent sleeps. Polling background tasks (indexing, benchmarks) MUST:
+
 1. Poll status: `while kill -0 $PID 2>/dev/null; do ... done`
 2. Print heartbeat + timestamp every 60s.
 3. `tail -n 5` relevant logs in each loop for verifiable progress.
@@ -67,6 +79,7 @@ done
 ```
 
 ### 3. Quality & Benchmarking (Hard Restriction)
+
 - **No Speculative Pushing**: Execution of `git push` is FORBIDDEN until `python scripts/benchmark_profiles.py --fail-on-gate` passes.
 - **Evidence-Based**: Include `MRR@5` and `Hit Rate` in final session summary.
 - **Retrieval Integrity**: Verify FTS keyword-exact results after any indexing.
@@ -77,7 +90,9 @@ done
   - **Medium:** 100% Hit Rate, 0.95 MRR (Avg Latency: ~2.6s)
 
 ### 4. Session Completion
+
 Work is NOT complete until pushed. Steps:
+
 1. **File Issues**: Create GitHub issues for remaining/follow-up work.
 2. **Quality Check**: Verify `context_recall` and `faithfulness` meet minimums.
 3. **Update issues**: Close finished, update in-progress.
@@ -86,6 +101,7 @@ Work is NOT complete until pushed. Steps:
 6. **Clean up**: Clear stashes, prune remote branches.
 
 **CRITICAL RULES:**
+
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing — that leaves work stranded locally
 - NEVER say "ready to push when you are" — YOU must push
@@ -94,6 +110,7 @@ Work is NOT complete until pushed. Steps:
 ## Development Guidelines
 
 ### RAG Indexing & Development
+
 - **Apple Silicon (MPS)**: Indexing automatically detects `mps` and reduces `BATCH_SIZE_CHUNKS=256` for stability.
 - **Prefer the `medium` profile** during development (`PLESK_MODEL_PROFILE=medium`). ~3x faster to index than `full`.
 - **Use `reset_db=False` (Incremental Refresh) by default.** Chunk-Level Fingerprinting skips re-embedding identical content. Bump `CHUNK_VERSION` only when modifying structural HTML normalization, chunking boundaries, or embedding enrichment.
@@ -103,6 +120,7 @@ Work is NOT complete until pushed. Steps:
 - Maintain low cyclomatic complexity — decompose functions exceeding Ruff C901 thresholds.
 
 ### Retrieval Integrity
+
 - **FTS Validation**: After any indexing, verify the FTS index is rebuilt and returning keyword-exact results.
 - **AST-Aware Chunking**: For PHP and JS/TS sources, prefer AST-aware chunking (`plesk_enable_ast_chunking`) — preserves class/method boundaries.
 - **Deterministic Tools**: Use `get_file_content` for full document retrieval and `resolve_references` for symbol cross-referencing when vector snippets are insufficient.
@@ -111,15 +129,19 @@ Work is NOT complete until pushed. Steps:
 ## Agent skills
 
 ### Issue tracker
-GitHub Issues on github.com/barateza/mcp-plesk-dev-docs. Use the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+Issues live in GitHub Issues at `barateza/mcp-plesk-dev-docs`, driven by the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
-Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+The five canonical roles use their default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`); all five already exist in the tracker. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
-Single-context: `CONTEXT.md` at root + `docs/adr/`. See `docs/agents/domain.md`.
+
+Single-context: `GLOSSARY.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Watch out for
+
 - **`tq-search` is a local editable dep** in `pyproject.toml`:
   `path = "/Users/gilsonsiqueira/tq-search"`. Won't resolve on other machines.
 - **Concurrent LanceDB access** is prevented by a PID-file lock (`server/lock.py`).

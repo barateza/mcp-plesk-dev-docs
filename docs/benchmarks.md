@@ -312,7 +312,7 @@ python scripts/benchmark_profiles.py \
    --profile medium \
    --engine baseline \
    --capture-baseline \
-   --baseline-file benchmarks/baselines/control-medium.json
+   --baseline-file benchmarks/baselines/control.json
 ```
 
 Evaluate current run against baseline (report only):
@@ -322,7 +322,7 @@ python scripts/benchmark_profiles.py \
    --suite control \
    --profile medium \
    --engine baseline \
-   --baseline-file benchmarks/baselines/control-medium.json \
+   --baseline-file benchmarks/baselines/control.json \
    --gate-config benchmarks/gates/default.json
 ```
 
@@ -333,7 +333,7 @@ python scripts/benchmark_profiles.py \
    --suite control \
    --profile medium \
    --engine baseline \
-   --baseline-file benchmarks/baselines/control-medium.json \
+   --baseline-file benchmarks/baselines/control.json \
    --gate-config benchmarks/gates/default.json \
    --fail-on-gate
 ```

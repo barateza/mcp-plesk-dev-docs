@@ -27,6 +27,8 @@ def make_completed_future(result_value):
 def search_service_fixture():
     mock_settings = MagicMock(spec=Settings)
     mock_settings.plesk_enable_sampling = False
+    mock_settings.plesk_query_cache_enabled = True
+    mock_settings.plesk_query_cache_size = 8
     mock_settings.plesk_rerank_candidates = 50
     mock_settings.plesk_min_relevance_threshold = (
         None  # Default to None for flexibility
@@ -421,3 +423,64 @@ async def test_search_returns_results_when_relevance_is_high(search_service_fixt
     search_service._get_search_candidates.assert_called_once()
     search_service._rerank_and_score.assert_called_once()
     search_service._deduplicate_by_filename.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Query result cache integration
+# ---------------------------------------------------------------------------
+
+
+class _CacheProfile:
+    """Minimal profile stub for the cache integration tests."""
+
+    use_turboquant = False
+    reranker_enabled = False
+    tq_top_k = 25
+    rerank_candidates = 50
+    relevance_gate = 0.0
+
+    def __init__(self, name: str = "pro") -> None:
+        self.name = name
+
+
+def _stub_search_pipeline(search_service):
+    """Replace the expensive pipeline stages with deterministic stubs."""
+    row = {"filename": "a.htm", "text": "content", "_relevance": 0.9}
+    search_service._get_search_candidates = MagicMock(return_value=[row])
+    search_service._rerank_and_score = MagicMock(side_effect=lambda q, c, r: c)
+    search_service._deduplicate_by_filename = MagicMock(
+        side_effect=lambda x, *args, **kwargs: x
+    )
+    search_service._expand_context_with_neighbors = MagicMock(side_effect=lambda x: x)
+
+
+@pytest.mark.asyncio
+async def test_repeated_query_is_served_from_cache(search_service_fixture):
+    service, settings, model_runtime, repo, _ = search_service_fixture
+    settings.plesk_min_relevance_threshold = 0.5
+    model_runtime.get_profile.return_value = _CacheProfile()
+    repo.get_table.return_value.version = 7
+    _stub_search_pipeline(service)
+
+    first, first_error = await service.search("How to create a domain")
+    second, second_error = await service.search("  how to   create a DOMAIN ")
+
+    assert first_error is None
+    assert second_error is None
+    assert second == first
+    assert service._get_search_candidates.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_invalidate_forces_pipeline_rerun(search_service_fixture):
+    service, settings, model_runtime, repo, _ = search_service_fixture
+    settings.plesk_min_relevance_threshold = 0.5
+    model_runtime.get_profile.return_value = _CacheProfile()
+    repo.get_table.return_value.version = 7
+    _stub_search_pipeline(service)
+
+    await service.search("query")
+    service.invalidate()
+    await service.search("query")
+
+    assert service._get_search_candidates.call_count == 2

@@ -38,7 +38,13 @@ class PleskSettings(BaseSettings):
     plesk_index_summaries: bool = False
     plesk_enable_fts: bool = True
     plesk_enable_ast_chunking: bool = False
+    # Deprecated: sampling no longer forces synthesis on the default search
+    # path. Synthesis is opt-in per call via `synthesize=True`; this flag is
+    # kept only for backward-compatible configuration.
     plesk_enable_sampling: bool = False
+    # Bounded in-process LRU for expanded search results.
+    plesk_query_cache_enabled: bool = True
+    plesk_query_cache_size: int = 256
     # Default number of candidates to send to the reranker when not overridden.
     # Historically this default was 50; keep that default for backward compatibility.
     plesk_rerank_candidates: Optional[int] = 50

@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [Unreleased]
+
+### Added
+
+- **Bounded query-result cache.** `SearchService` keeps expanded results in an
+  in-process LRU (default 256 entries) keyed on
+  `(normalized query, category, profile name, LanceDB table version)` and returns
+  a copy of the list on a hit, so a repeat lookup skips embedding, scanning,
+  reranking and neighbour expansion. Ingest invalidates through the table
+  version; `requantize_knowledge` calls `SearchService.invalidate()` because
+  TurboQuant requantization re-ranks rows without bumping it. Configure with
+  `PLESK_QUERY_CACHE_ENABLED` / `PLESK_QUERY_CACHE_SIZE`; hit/miss and latency are
+  logged at INFO.
+
+### Changed
+
+- **Search synthesis is opt-in per call.** The `search_mcp_plesk_dev_docs` tool
+  takes `synthesize: bool = False`; `PLESK_ENABLE_SAMPLING` is deprecated and no
+  longer forces a client sampling round-trip on the default path.
 
 ## [Unreleased]
 

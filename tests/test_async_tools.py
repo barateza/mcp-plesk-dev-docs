@@ -52,9 +52,8 @@ async def mock_all_ml_and_io_calls():
     # --- Mock settings ---
     mock_container.settings = MagicMock(spec=Settings)
     mock_container.settings.plesk_model_profile = "test_profile"
-    mock_container.settings.plesk_enable_sampling = (
-        True  # Assume sampling is enabled for search
-    )
+    # Synthesis is opt-in per call; the deprecated server-wide flag stays off.
+    mock_container.settings.plesk_enable_sampling = False
     mock_container.settings.plesk_rerank_candidates = 50
     mock_container.settings.plesk_min_relevance_threshold = None
 

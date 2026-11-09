@@ -32,7 +32,8 @@ async def mock_search_sampling_dependencies():
     # --- Mock settings ---
     mock_container.settings = MagicMock(spec=Settings)
     mock_container.settings.plesk_model_profile = "pro"
-    mock_container.settings.plesk_enable_sampling = False  # Default to disabled
+    # Deprecated server-wide flag; synthesis is opt-in per call.
+    mock_container.settings.plesk_enable_sampling = False
     mock_container.settings.plesk_rerank_candidates = 50
     mock_container.settings.plesk_min_relevance_threshold = None
 
@@ -79,14 +80,11 @@ async def mock_search_sampling_dependencies():
 
 
 @pytest.mark.asyncio
-async def test_search_mcp_plesk_dev_docs_sampling_enabled(
+async def test_search_mcp_plesk_dev_docs_synthesize_opt_in(
     mock_search_sampling_dependencies,
 ):
-    """Verify search_mcp_plesk_dev_docs calls ctx.sample when sampling is enabled."""
+    """Verify ctx.sample runs only when the caller passes synthesize=True."""
     mock_ctx, mock_container = mock_search_sampling_dependencies
-
-    # Configure settings to enable sampling
-    mock_container.settings.plesk_enable_sampling = True
 
     # Mock sampling result
     mock_sample_result = MagicMock()
@@ -110,7 +108,7 @@ async def test_search_mcp_plesk_dev_docs_sampling_enabled(
     )
 
     result = await search_mcp_plesk_dev_docs(
-        ctx=mock_ctx, query="how to create a domain"
+        ctx=mock_ctx, query="how to create a domain", synthesize=True
     )
 
     mock_ctx.sample.assert_called_once()
@@ -121,14 +119,14 @@ async def test_search_mcp_plesk_dev_docs_sampling_enabled(
 
 
 @pytest.mark.asyncio
-async def test_search_mcp_plesk_dev_docs_sampling_disabled(
+async def test_search_mcp_plesk_dev_docs_synthesize_disabled_by_default(
     mock_search_sampling_dependencies,
 ):
-    """Verify sampling is NOT called when disabled."""
+    """Verify synthesis is not called unless the caller opts in per call."""
     mock_ctx, mock_container = mock_search_sampling_dependencies
 
-    # Configure settings to disable sampling (default, but explicit for clarity)
-    mock_container.settings.plesk_enable_sampling = False
+    # The deprecated server-wide flag must not force a sampling round-trip.
+    mock_container.settings.plesk_enable_sampling = True
 
     # Mock SearchService internal methods to provide search results
     mock_results = [
@@ -158,11 +156,8 @@ async def test_search_mcp_plesk_dev_docs_sampling_disabled(
 async def test_search_mcp_plesk_dev_docs_no_results_no_sampling(
     mock_search_sampling_dependencies,
 ):
-    """Verify sampling is skipped if there are no search results."""
+    """Verify synthesis is skipped if there are no search results."""
     mock_ctx, mock_container = mock_search_sampling_dependencies
-
-    # Configure settings to enable sampling
-    mock_container.settings.plesk_enable_sampling = True
 
     # Mock SearchService internal methods to return no search results
     mock_container.search_service._get_search_candidates.return_value = []
@@ -171,7 +166,9 @@ async def test_search_mcp_plesk_dev_docs_no_results_no_sampling(
         "I could not find a reliable answer."
     )
 
-    result = await search_mcp_plesk_dev_docs(ctx=mock_ctx, query="nonexistent")
+    result = await search_mcp_plesk_dev_docs(
+        ctx=mock_ctx, query="nonexistent", synthesize=True
+    )
 
     mock_ctx.sample.assert_not_called()
     assert "I could not find a reliable answer." in result
@@ -181,11 +178,8 @@ async def test_search_mcp_plesk_dev_docs_no_results_no_sampling(
 async def test_search_mcp_plesk_dev_docs_sampling_failure_graceful(
     mock_search_sampling_dependencies,
 ):
-    """Verify search_mcp_plesk_dev_docs returns results even if sampling fails."""
+    """Verify synthesize=True still returns results when sampling fails."""
     mock_ctx, mock_container = mock_search_sampling_dependencies
-
-    # Configure settings to enable sampling
-    mock_container.settings.plesk_enable_sampling = True
 
     mock_ctx.sample.side_effect = Exception("Sampling API error")
 
@@ -203,7 +197,9 @@ async def test_search_mcp_plesk_dev_docs_sampling_failure_graceful(
     mock_container.search_service._get_search_candidates.return_value = mock_results
     mock_container.search_service._rerank_and_score.return_value = mock_results
 
-    result = await search_mcp_plesk_dev_docs(ctx=mock_ctx, query="test query")
+    result = await search_mcp_plesk_dev_docs(
+        ctx=mock_ctx, query="test query", synthesize=True
+    )
 
     mock_ctx.sample.assert_called_once()
     assert "Synthesized Answer" not in result  # Because sampling failed

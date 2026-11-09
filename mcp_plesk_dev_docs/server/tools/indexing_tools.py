@@ -17,9 +17,15 @@ class IndexingTools:
     Logic for indexing-related tools.
     """
 
-    def __init__(self, indexing_service: Any, job_registry: Any):
+    def __init__(
+        self,
+        indexing_service: Any,
+        job_registry: Any,
+        search_service: Any = None,
+    ):
         self.indexing_service = indexing_service
         self.job_registry = job_registry
+        self.search_service = search_service
 
     async def refresh_knowledge(
         self,
@@ -64,8 +70,14 @@ class IndexingTools:
 
     async def requantize_knowledge(self) -> str:
         """Rebuild the TurboQuant index from stored vectors."""
-        # Domain service rebuilding indices without progress reporting
-        return await self.indexing_service._rebuild_indices(progress_callback=None)
+        # Domain service rebuilding indices without progress reporting.
+        # Requantization re-ranks rows in place without bumping table.version,
+        # so cached search results must be dropped explicitly.
+        try:
+            return await self.indexing_service._rebuild_indices(progress_callback=None)
+        finally:
+            if self.search_service is not None:
+                self.search_service.invalidate()
 
 
 @tool_error_boundary
@@ -118,5 +130,11 @@ async def requantize_knowledge(ctx: Context) -> str:
     Rebuild the TurboQuant index from stored vectors.
     """
     container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
-    tools = IndexingTools(container.indexing_service, container.job_service)
+    # `search_service` is optional so lightweight containers still work;
+    # invalidation is skipped when it is absent.
+    tools = IndexingTools(
+        container.indexing_service,
+        container.job_service,
+        getattr(container, "search_service", None),
+    )
     return await tools.requantize_knowledge()

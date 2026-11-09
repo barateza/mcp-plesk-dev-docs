@@ -69,7 +69,12 @@ class SearchTools:
             return None
 
     async def search_mcp_plesk_dev_docs(
-        self, ctx: Context, query: str, category: Optional[CategoryEnum] = None
+        self,
+        ctx: Context,
+        query: str,
+        category: Optional[CategoryEnum] = None,
+        # NOTE(#87): the `limit` parameter is added here by the parallel branch.
+        synthesize: bool = False,
     ) -> str:
         """
         Search the unified Plesk documentation for a specific query.
@@ -77,6 +82,9 @@ class SearchTools:
         This tool provides access to the most up-to-date documentation for Plesk,
         including guides, CLI references, and API documentation.
         Use this for any questions about how Plesk works, how to use its CLI or APIs.
+
+        Set `synthesize=True` to prepend an LLM-written answer (opt-in; costs a
+        client sampling round-trip).
         """
         cat_str = category.value if isinstance(category, CategoryEnum) else category
         if cat_str:
@@ -91,9 +99,10 @@ class SearchTools:
         formatter = self.search_service.search_formatter
         formatted_results = formatter.format_markdown(expanded_results)
 
-        # 3. Optional Synthesis (MCP-specific ctx usage)
-        settings = self.search_service.settings
-        if settings.plesk_enable_sampling and ctx and expanded_results:
+        # 3. Optional Synthesis (MCP-specific ctx usage).
+        # Synthesis is opt-in per call: `plesk_enable_sampling` is deprecated
+        # and no longer forces a second model turn on the default search path.
+        if synthesize and ctx and expanded_results:
             answer = await self._synthesize_answer(ctx, query, expanded_results)
             if answer:
                 return (
@@ -123,13 +132,17 @@ async def search_mcp_plesk_dev_docs(
     ctx: Context,
     query: str,
     category: Optional[CategoryEnum] = None,
+    # NOTE(#87): the `limit` parameter is added here by the parallel branch.
+    synthesize: bool = False,
 ) -> str:
     """
     Search the unified Plesk documentation for a specific query.
     """
     container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
     search_tools = SearchTools(container.search_service)
-    return await search_tools.search_mcp_plesk_dev_docs(ctx, query, category)
+    return await search_tools.search_mcp_plesk_dev_docs(
+        ctx, query, category, synthesize=synthesize
+    )
 
 
 @tool_error_boundary

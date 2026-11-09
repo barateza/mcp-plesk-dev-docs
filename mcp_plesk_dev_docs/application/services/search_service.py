@@ -6,6 +6,7 @@ from typing import Any, List, Optional, Dict, Tuple
 import numpy as np
 
 from mcp_plesk_dev_docs.infrastructure.repositories.protocols import ISearchRepository
+from mcp_plesk_dev_docs.application.services.query_cache import QueryCache
 
 logger = logging.getLogger("mcp_plesk_dev_docs")
 
@@ -26,6 +27,15 @@ class SearchService:
         self.lancedb_repo = lancedb_repo
         self.search_formatter = search_formatter
         self.executor = executor
+
+        # Bounded LRU for expanded results; see _build_cache_key for the key.
+        cache_size = getattr(settings, "plesk_query_cache_size", 256)
+        if not isinstance(cache_size, int) or cache_size < 1:
+            cache_size = 256
+        cache_enabled = bool(getattr(settings, "plesk_query_cache_enabled", True))
+        self._query_cache: Optional[QueryCache] = (
+            QueryCache(maxsize=cache_size) if cache_enabled else None
+        )
 
     def _sigmoid(self, x: np.ndarray | list[float] | float) -> np.ndarray | float:
         """Map raw logit(s) to [0, 1] probability using the sigmoid function."""
@@ -278,13 +288,80 @@ class SearchService:
 
         return await loop.run_in_executor(self.executor, _sync_search)
 
+    @staticmethod
+    def _normalize_query(query: str) -> str:
+        """Collapse case and whitespace so equivalent queries share a key."""
+        return " ".join((query or "").lower().split())
+
+    def _get_table_version(self) -> Any:
+        """Return the current LanceDB table version, or None if unavailable."""
+        try:
+            return self.lancedb_repo.get_table().version
+        except Exception:
+            # No table yet, or the repository is closed. Caching is skipped;
+            # the search pipeline reports the real failure on its own path.
+            logger.debug(
+                "Query cache disabled: table version unavailable.", exc_info=True
+            )
+            return None
+
+    def _build_cache_key(
+        self, query: str, category: Optional[str], profile: Any
+    ) -> Optional[Tuple[Any, ...]]:
+        """Key expanded results on query, category, profile and table version.
+
+        The table version makes a newly ingested index miss automatically; the
+        profile name covers a profile switch. Returns None when caching is off
+        or the table cannot be reached.
+        """
+        if self._query_cache is None:
+            return None
+        table_version = self._get_table_version()
+        if table_version is None:
+            return None
+        return (
+            self._normalize_query(query),
+            category,
+            profile.name,
+            table_version,
+        )
+
+    def invalidate(self) -> None:
+        """Drop cached results after a change that does not bump table.version.
+
+        Ingest is covered by the version component of the cache key, but
+        TurboQuant requantization re-ranks rows in place, so it must clear the
+        cache explicitly.
+        """
+        if self._query_cache is not None:
+            self._query_cache.clear()
+            logger.info("Search cache invalidated.")
+
     def _search_core(
         self, safe_query: str, category: Optional[str]
     ) -> List[Dict[str, Any]]:
         """Shared core of the search pipeline.
-        Candidates -> rerank -> dedup -> expand.
+
+        Candidates -> rerank -> dedup -> expand, with the expanded result list
+        cached in an in-process LRU keyed on (normalized query, category,
+        profile name, table version). A hit returns a shallow copy so callers
+        cannot mutate the cached list.
         """
+        started = time.monotonic()
         profile = self.model_runtime.get_profile()
+        cache_key = self._build_cache_key(safe_query, category, profile)
+
+        if cache_key is not None and self._query_cache is not None:
+            cached = self._query_cache.get(cache_key)
+            if cached is not None:
+                elapsed_ms = (time.monotonic() - started) * 1000
+                logger.info(
+                    "Search cache: cache=hit query='%s' latency=%.2fms",
+                    safe_query,
+                    elapsed_ms,
+                )
+                return list(cached)
+
         n_candidates = profile.rerank_candidates
         candidates = self._get_search_candidates(safe_query, category, n_candidates)
 
@@ -298,6 +375,18 @@ class SearchService:
 
         # 4. Expand context
         expanded = self._expand_context_with_neighbors(results)
+
+        if cache_key is not None and self._query_cache is not None:
+            # Store a copy so a caller mutating the returned list cannot
+            # mutate the cached entry (rows themselves are shared).
+            self._query_cache.set(cache_key, list(expanded))
+            elapsed_ms = (time.monotonic() - started) * 1000
+            logger.info(
+                "Search cache: cache=miss query='%s' latency=%.2fms",
+                safe_query,
+                elapsed_ms,
+            )
+
         return expanded
 
     async def _run_search_pipeline(

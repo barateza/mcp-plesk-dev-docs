@@ -45,7 +45,7 @@ flowchart TD
     subgraph Pipeline["Retrieval Pipeline"]
         direction TB
         E["1 · Embed query\n(Hardware-accelerated)"]
-        S["2 · Hybrid Search\nVector (LanceDB) + FTS (Tantivy)"]
+        S["2 · Hybrid Search\nVector (LanceDB) + native FTS"]
         R["3 · RRF Merge + Rerank\n(MiniLM-L4-v2)"]
         N["4 · Neighbor Expansion\n(Context Enrichment)"]
         A["5 · AI Synthesis\n(sampling-enabled)"]
@@ -81,7 +81,7 @@ Optimized for Apple Silicon (M2/M3) using MPS acceleration and memory-resident t
 ## Key Features
 
 - **Single-Instance Lock:** PID-based lock prevents concurrent LanceDB access when multiple MCP clients or IDE sessions try to launch the server simultaneously.
-- **Sub-Second Hybrid Search:** Combined Vector + Tantivy FTS with **RAM-cached table connections** for instant retrieval.
+- **Hybrid Search:** Combined Vector + native LanceDB FTS with **RAM-cached table connections** for instant retrieval.
 - **AST-Aware Chunking:** Uses `tree-sitter` to respect class and method boundaries in PHP, JS, and TS documentation.
 - **TurboQuant Acceleration:** Fast 4-bit quantized search for the `full-tq` profile, delivering 10x lower latency for large models.
 - **Neighborhood Retrieval:** Automatically fetches adjacent chunks (prev/next) to provide complete context for grounding.

@@ -6,7 +6,8 @@ Stack, layout and the guidance that applies when changing retrieval behaviour.
 
 - **Python 3.13+** (`requires-python >=3.13`, `.python-version: 3.13`)
 - **FastMCP** (`fastmcp>=3.2.4`) — MCP server framework
-- **LanceDB** (`lancedb>=0.29.1`) — vector database (hybrid search: vector + FTS via Tantivy)
+- **LanceDB** (`lancedb>=0.40.0`) — vector database (hybrid search: vector + native
+  FTS; the Tantivy backend was removed in 0.40)
 - **sentence-transformers** — embeddings (`BAAI/bge-m3`) + cross-encoder reranking
 - **tq-search** — local editable dep for TurboQuant 4-bit quantization (see `hazards.md`)
 - **pydantic-settings** — env-var config (`PleskSettings`)
@@ -35,8 +36,11 @@ Stack, layout and the guidance that applies when changing retrieval behaviour.
 - **Parallel indexing**: sources are indexed in parallel via `ThreadPoolExecutor`.
   LanceDB handles concurrent appends safely; the PID-file lock is what keeps *other
   processes* out — see ADR [0002](../adr/0002-pid-file-lock-for-lancedb-access.md).
-- **Hybrid search** (vector + FTS) is the default; schema changes must preserve the
-  Tantivy FTS index — see ADR [0001](../adr/0001-full-text-search-in-lancedb-via-tantivy.md).
+- **Hybrid search** (vector + FTS) is the default. Queries must pass
+  `query_type="fts"` — the default `"auto"` embeds the string and runs a *vector*
+  search even when an inverted index exists. The native FTS index must be rebuilt
+  after indexing, and a rebuild failure must fail the job — see ADR
+  [0001](../adr/0001-full-text-search-in-lancedb.md).
 - Maintain low cyclomatic complexity — decompose functions exceeding Ruff C901 thresholds.
 
 ## Retrieval integrity

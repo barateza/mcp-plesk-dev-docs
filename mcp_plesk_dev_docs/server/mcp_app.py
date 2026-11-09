@@ -1,19 +1,21 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
+from mcp_plesk_dev_docs.paths import resolve_base_dir
 from typing import AsyncGenerator
 
 from fastmcp import FastMCP
 from mcp_plesk_dev_docs.application.services.container import AppContainer
 
 # Root directory of the project
-BASE_DIR = Path(__file__).parent.parent.parent
+BASE_DIR = resolve_base_dir()
 
 
 def create_mcp_app(container: AppContainer) -> FastMCP:
     """Create and configure the FastMCP application."""
-    mcp = FastMCP("mcp-plesk-dev-docs")
 
-    @mcp.lifespan()  # type: ignore[type-var]
+    # The lifespan is passed to the constructor, not registered with the
+    # `@mcp.lifespan()` decorator. That decorator form silently registers
+    # nothing (on fastmcp 3.4 and 4.1 alike), so `lifespan_context` stayed
+    # empty and EVERY tool died with KeyError: 'container'.
     @asynccontextmanager
     async def lifespan(mcp_instance: FastMCP) -> AsyncGenerator[dict, None]:
         # Yield the container for access via ctx.request_context.lifespan_context
@@ -21,6 +23,8 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
 
         # Cleanup
         container.executor.shutdown(wait=False)
+
+    mcp = FastMCP("mcp-plesk-dev-docs", lifespan=lifespan)
 
     # Register tools
     from mcp_plesk_dev_docs.server.tools.search_tools import (

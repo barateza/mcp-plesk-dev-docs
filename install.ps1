@@ -16,24 +16,12 @@ Write-Host "=== mcp-plesk-dev-docs — Environment Setup ==="
 $uvPath = Get-Command uv -ErrorAction SilentlyContinue
 
 if (-not $uvPath) {
-    Write-Host "[*] Installing the 'uv' package manager..."
-    irm https://astral.sh/uv/install.ps1 | iex
-
-    # Refresh PATH
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "User") + ";" +
-                [System.Environment]::GetEnvironmentVariable("Path", "Machine")
-
-    $uvPath = Get-Command uv -ErrorAction SilentlyContinue
-    if (-not $uvPath) {
-        Write-Host "[!] uv installation succeeded but 'uv' is not on PATH."
-        Write-Host "    Restart your terminal or add %USERPROFILE%\.local\bin to PATH."
-        exit 1
-    }
-    Write-Host "[✓] uv installed."
+    Write-Host "[!] 'uv' is not installed."
+    Write-Host "    Install it first, then re-run this script:"
+    Write-Host "      https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 }
-else {
-    Write-Host "[✓] uv is already available."
-}
+Write-Host "[✓] uv is available."
 
 # ── 2. Create virtual environment ────────────────────────────────────────
 Write-Host "[*] Creating virtual environment..."

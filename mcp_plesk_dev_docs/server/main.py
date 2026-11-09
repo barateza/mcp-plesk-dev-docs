@@ -1,5 +1,5 @@
 import time
-from pathlib import Path
+from mcp_plesk_dev_docs.paths import resolve_base_dir
 
 from mcp_plesk_dev_docs.settings import settings
 from mcp_plesk_dev_docs.server.bootstrap import create_app
@@ -10,7 +10,7 @@ from mcp_plesk_dev_docs.server.lifecycle import (
 )
 
 # Root directory of the project
-BASE_DIR = Path(__file__).parent.parent.parent
+BASE_DIR = resolve_base_dir()
 
 
 def run_server():

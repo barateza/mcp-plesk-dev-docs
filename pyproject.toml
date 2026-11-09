@@ -33,6 +33,11 @@ dependencies = [
     "pydantic>=2.10.0",
     "pydantic-settings>=2.7.1",
     "requests>=2.32.0",  # used in ai_client.py (runtime LLM calls) and enrich_html_toc.py
+    # ai_client.py imports httpx directly. It used to arrive transitively through
+    # fastmcp, but fastmcp 4.x depends on the renamed `httpx2` distribution, which
+    # provides the `httpx2` module — not `httpx` — so an undeclared import here
+    # breaks every fresh install.
+    "httpx>=0.27.0",
     "sentence-transformers>=5.2.2",
     "torch>=2.4.0",
     "markdownify>=0.14.1",
@@ -49,8 +54,13 @@ Documentation = "https://github.com/barateza/mcp-plesk-dev-docs#readme"
 Repository = "https://github.com/barateza/mcp-plesk-dev-docs.git"
 "Bug Tracker" = "https://github.com/barateza/mcp-plesk-dev-docs/issues"
 
-[tool.setuptools]
-packages = ["mcp_plesk_dev_docs"]
+# Auto-discover every subpackage. The previous explicit list
+# (`packages = ["mcp_plesk_dev_docs"]`) shipped the top-level modules only:
+# server/, application/, domain/, infrastructure/, config/ and formatting/
+# were missing from the wheel, so the `mcp_plesk_dev_docs.server:main`
+# console script died with ModuleNotFoundError on a clean install.
+[tool.setuptools.packages.find]
+include = ["mcp_plesk_dev_docs*"]
 
 
 [project.scripts]

@@ -15,26 +15,12 @@ echo "=== mcp-plesk-dev-docs — Environment Setup ==="
 
 # ── 1. Ensure `uv` is available ──────────────────────────────────────────
 if ! command -v uv &> /dev/null; then
-    echo "[*] Installing the 'uv' package manager..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-
-    # Make uv available in the current shell
-    # shellcheck disable=SC1091
-    if [ -f "$HOME/.local/bin/env" ]; then
-        . "$HOME/.local/bin/env"
-    elif [ -f "$HOME/.cargo/env" ]; then
-        . "$HOME/.cargo/env"
-    fi
-
-    if ! command -v uv &> /dev/null; then
-        echo "[!] uv installation succeeded but 'uv' is not on PATH."
-        echo "    Add \$HOME/.local/bin or \$HOME/.cargo/bin to your PATH and re-run."
-        exit 1
-    fi
-    echo "[✓] uv installed."
-else
-    echo "[✓] uv is already available."
+    echo "[!] 'uv' is not installed."
+    echo "    Install it first, then re-run this script:"
+    echo "      https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
 fi
+echo "[✓] uv is available."
 
 # ── 2. Create virtual environment ────────────────────────────────────────
 echo "[*] Creating virtual environment..."

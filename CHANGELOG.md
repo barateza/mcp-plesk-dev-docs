@@ -33,6 +33,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **pytest in pre-commit.** Test suite (160 tests, ~3s) now runs on every commit
   via the pre-commit hook.
 
+### Fixed
+
+- **Published wheel was missing every subpackage.** `[tool.setuptools] packages =
+  ["mcp_plesk_dev_docs"]` shipped the top-level modules only, so the
+  `mcp-plesk-dev-docs` console script died with `ModuleNotFoundError: No module
+  named 'mcp_plesk_dev_docs.server'` on a clean install. Replaced with
+  `[tool.setuptools.packages.find]`; the wheel now carries all 16 packages.
+- **`httpx` was an undeclared dependency.** `infrastructure/ai_client.py` imports
+  it directly but only inherited it transitively from fastmcp; fastmcp 4.x depends
+  on the renamed `httpx2` distribution instead, so a fresh install failed with
+  `ModuleNotFoundError: No module named 'httpx'`. Declared explicitly.
+- **The MCP lifespan never ran.** `create_mcp_app` registered it with the
+  `@mcp.lifespan()` decorator, which silently registers nothing on fastmcp 3.4
+  and 4.1, leaving `lifespan_context` empty so every tool failed with
+  `KeyError: 'container'`. The lifespan is passed to the `FastMCP` constructor now.
+- **Data directories landed inside site-packages.** `BASE_DIR` was derived from
+  `__file__`, so an installed wheel placed `knowledge_base/` and the LanceDB index
+  beside the interpreter's libraries, where a venv rebuild loses them. New
+  `mcp_plesk_dev_docs/paths.py` honours `PLESK_BASE_DIR` and keeps the previous
+  behaviour otherwise.
+- **Installers no longer pipe a remote script into a shell.** `install.sh` and
+  `install.ps1` bootstrapped uv with `curl … | sh` / `irm … | iex`; they now stop
+  with an install link when uv is missing.
+
 ## [0.5.1] - 2026-05-23
 
 ### Added

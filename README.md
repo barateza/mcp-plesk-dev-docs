@@ -74,6 +74,10 @@ Optimized for Apple Silicon (M2/M3) using MPS acceleration and memory-resident t
 | **`medium`** | BAAI/bge-base | **100.0%** | **0.917** | **~0.60s** | ~600 MB |
 | **`full-tq`** | BAAI/bge-m3 | 75.0% | 0.750 | **~0.40s** | ~1300 MB |
 
+**Default profile: `light`.** It scored higher than `full-tq` on this corpus in our own
+runs while using about a sixth of the RAM; `full-tq` (and `full`) stay opt-in via
+`PLESK_MODEL_PROFILE`.
+
 *Metrics measured on Apple M2 Pro with LanceDB connection caching enabled.*
 
 ---
@@ -181,7 +185,7 @@ uv pip install -e ".[dev]"
 Set environment variables in `.env`:
 
 ```env
-PLESK_MODEL_PROFILE=light       # light | medium | full-tq
+PLESK_MODEL_PROFILE=light       # light (default) | medium | full | full-tq
 PLESK_ENABLE_SAMPLING=true     # AI-Synthesized answers
 PLESK_DAEMON_AUTO_WARMUP=true  # Preload models on startup
 PLESK_INDEX_SUMMARIES=true     # Enable file-level summaries

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The default model profile is now `light`.** On this corpus `light` scored
+  higher HR@5 / MRR@5 than `full-tq` in our own benchmarks while using ~200 MB
+  instead of ~1300 MB, and it skips the TurboQuant cache entirely. `full-tq`
+  remains available via `PLESK_MODEL_PROFILE=full-tq`.
+
 ## [0.7.1] - 2026-11-09
 
 ### Fixed

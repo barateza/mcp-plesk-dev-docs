@@ -24,7 +24,9 @@ class PleskSettings(BaseSettings):
     log_handler: Literal["os", "file", "both"] = "os"
 
     # Model Profile & Overrides
-    plesk_model_profile: str = "full-tq"
+    # light is the default: on this corpus it scored higher HR@5 / MRR than
+    # full-tq in our own benchmarks, at ~1/6 of the RAM. full-tq stays opt-in.
+    plesk_model_profile: str = "light"
     plesk_embed_model: Optional[str] = None
     plesk_reranker_model: Optional[str] = None
     plesk_reranker_enabled: Optional[bool] = None

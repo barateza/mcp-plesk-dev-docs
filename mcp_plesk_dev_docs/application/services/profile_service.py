@@ -24,7 +24,7 @@ def get_active_profile() -> ModelProfile:
         Priority (highest to lowest):
             1. PLESK_EMBED_MODEL / PLESK_RERANKER_MODEL  (per-component overrides)
             2. PLESK_MODEL_PROFILE                        (named profile)
-            3. Compiled-in default ("full-tq")
+            3. Compiled-in default ("light")
     """
     profile_name = settings.plesk_model_profile
     profile_name = profile_name.lower().strip()

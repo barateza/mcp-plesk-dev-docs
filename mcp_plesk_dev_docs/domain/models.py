@@ -106,7 +106,7 @@ _PROFILES: dict[str, ModelProfile] = {
     ),
 }
 
-DEFAULT_PROFILE = "full-tq"
+DEFAULT_PROFILE = "light"
 
 
 @dataclass(frozen=True)

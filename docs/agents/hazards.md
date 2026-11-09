@@ -22,3 +22,11 @@ one of these five.
 - **`tree-sitter-language-pack`** replaced `tree-sitter-languages` (no cp313 wheels).
   The code in `infrastructure/parsers/chunking.py` imports it inside a try/except — AST
   chunking degrades gracefully if unavailable.
+- **Sandboxed caches.** `uv` writes to `~/.cache/uv` and Hugging Face to
+  `~/.cache/huggingface`; both are outside the workspace and fail with
+  `Permission denied` in a sandboxed session. Point them inside the checkout:
+  `UV_CACHE_DIR=$PWD/.scratch/uv-cache HF_HOME=$PWD/.cache/hf`. `scripts/bootstrap_index.py`
+  sets `HF_HOME` itself, so only `uv` needs the prefix.
+- **A fresh checkout has no index.** `knowledge_base/` and `storage/` are gitignored, so
+  the quality gate has nothing to query. Run `uv run python scripts/bootstrap_index.py
+  --profile light` first (~15 min on a CPU box; it prints the row count and the indexes).

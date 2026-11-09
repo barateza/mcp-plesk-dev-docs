@@ -26,24 +26,40 @@ done
 
 ## 3. Quality and benchmarking (hard restriction)
 
-- **No speculative pushing**: `git push` is FORBIDDEN until
-  `python scripts/benchmark_profiles.py --fail-on-gate` passes.
+**Gate prerequisites.** The gate benchmarks a *local* index. On a fresh checkout
+`knowledge_base/` and `storage/` are gitignored, so build one first (~15 min for the
+full corpus on a CPU box; weights land in `.cache/hf`):
+
+```bash
+uv run python scripts/bootstrap_index.py --profile light   # prints rows=... and the indexes
+```
+
+- **No speculative pushing**: `git push` is FORBIDDEN until the gate passes:
+  `uv run python scripts/benchmark_profiles.py --profile light --baseline-file benchmarks/baselines/light.json --fail-on-gate`.
+  Without `--baseline-file` the script resolves `benchmarks/baselines/<suite>.json`,
+  and the gate **fails** when no baseline run matches the profile/suite that ran —
+  it no longer passes silently on a mismatch.
+- **Latency is gated only against a baseline measured on the same machine.**
+  `--capture-baseline` records a `machine` fingerprint; a baseline from another
+  platform gates quality only, and the report says so under Warnings.
 - **Evidence-based**: include `MRR@5` and Hit Rate in the final session summary.
 - **Retrieval integrity**: verify FTS keyword-exact results after any indexing.
 - **Verification over inference**: never assume a logic change improved metrics.
   Always rerun the `control` suite and inspect the database directly.
 - **Regression recovery**: if a gate fails, revert the logic change or tune
   parameters until metrics match or exceed the baseline.
-- **Hooks**: the `pre-commit` stage runs ruff, ruff-format, mypy, bandit and pytest
-  (160 tests); the `pre-push` stage runs the quality-gate benchmark. Install with
+- **Hooks**: the `pre-commit` stage runs ruff, ruff-format, mypy, bandit and pytest;
+  the `pre-push` stage runs the quality-gate benchmark. Install with
   `pre-commit install` and `pre-commit install --hook-type pre-push`.
 
-Golden baseline (`benchmarks/baselines/control.json`):
+Golden baseline (`benchmarks/baselines/control.json`, captured on Apple Silicon/MPS):
 
 | Profile | Hit Rate | MRR | Avg latency |
 |---|---|---|---|
 | Light | 100% | 0.917 | ~1.007s |
 | Medium | 100% | 0.95 | ~2.6s |
+
+Latency numbers are machine-specific; quality numbers are not.
 
 ## 4. Session completion
 

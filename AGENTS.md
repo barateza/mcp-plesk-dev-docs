@@ -7,8 +7,8 @@ An MCP server providing semantic search over Plesk developer documentation
 ## Commands
 
 ```bash
-uv sync                          # install all deps
-uv run pytest tests/ -q          # 160 tests, ~3s
+uv sync --extra dev              # install all deps incl. ruff/mypy/bandit
+uv run pytest tests/ -q          # full suite
 uv run ruff check mcp_plesk_dev_docs/ scripts/ tests/
 uv run ruff format               # auto-format
 uv run mypy mcp_plesk_dev_docs/  # type-check
@@ -18,7 +18,9 @@ uv run mcp-plesk-dev-docs        # run the server (entry: mcp_plesk_dev_docs.ser
 ## Hard rules
 
 - **No speculative pushing.** `git push` is FORBIDDEN until the quality gate passes:
-  `uv run python scripts/benchmark_profiles.py --profile medium --fail-on-gate`.
+  `uv run python scripts/benchmark_profiles.py --profile light --baseline-file benchmarks/baselines/light.json --fail-on-gate`.
+  Build the index the gate needs first: `scripts/bootstrap_index.py --profile light`
+  (see `docs/agents/workflow.md`).
   Cite `MRR@5` and Hit Rate in your summary; never assume a change improved metrics.
 - **Work is not complete until `git push` succeeds**, and `git status` shows
   "up to date with origin". Never stop short and hand the push back to the user.

@@ -20,18 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Search synthesis is opt-in per call.** The `search_mcp_plesk_dev_docs` tool
-  takes `synthesize: bool = False`; `PLESK_ENABLE_SAMPLING` is deprecated and no
-  longer forces a client sampling round-trip on the default path.
-
-## [Unreleased]
-
-### Changed
-
 - **The default model profile is now `light`.** On this corpus `light` scored
   higher HR@5 / MRR@5 than `full-tq` in our own benchmarks while using ~200 MB
   instead of ~1300 MB, and it skips the TurboQuant cache entirely. `full-tq`
   remains available via `PLESK_MODEL_PROFILE=full-tq`.
+- **Search output is capped by a new `limit` parameter.**
+  `search_mcp_plesk_dev_docs` now returns the top `limit` deduplicated results
+  (default 5; values outside 1–10 are clamped). The service layer is unchanged —
+  the truncation happens in the tool layer, after neighbour expansion.
+- **Every result body is bounded at ~800 characters.**
+  `SearchFormatter.format_markdown` cuts the body on the last sentence or paragraph
+  boundary and appends `…`, keeping the header, metadata line and documentation URL
+  on every card. The full text stays reachable via `get_file_content`.
+- **The search tool now returns `structuredContent`.** Each row carries `filename`,
+  `category`, `title`, `url`, `chunk_id`, `score` and `snippet`, plus the synthesized
+  answer when sampling ran; the markdown block remains the text content.
+  `outputSchema` is declared at registration and the tool is annotated
+  `readOnlyHint` / `idempotentHint`.
+- **Search synthesis is opt-in per call.** The `search_mcp_plesk_dev_docs` tool
+  takes `synthesize: bool = False`; `PLESK_ENABLE_SAMPLING` is deprecated and no
+  longer forces a client sampling round-trip on the default path.
+- **Measured payload** (35-chunk control corpus, 27,472 characters of chunk text):
+  the default response drops from 30,051 characters of markdown to 4,285
+  (9,065 once the structured block is included).
 
 ## [0.7.1] - 2026-11-09
 

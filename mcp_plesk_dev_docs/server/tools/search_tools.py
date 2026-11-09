@@ -1,11 +1,98 @@
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
 from fastmcp import Context
+from fastmcp.tools import ToolResult
 from mcp.types import SamplingMessage, TextContent
+
 from mcp_plesk_dev_docs.domain.models import CategoryEnum, validate_category
+from mcp_plesk_dev_docs.formatting.search_formatter import (
+    DEFAULT_SNIPPET_CHARS,
+    build_doc_url,
+    format_snippet,
+)
 from mcp_plesk_dev_docs.server.error_handling import tool_error_boundary
 
 logger = logging.getLogger("mcp_plesk_dev_docs")
+
+DEFAULT_LIMIT = 5
+MAX_LIMIT = 10
+
+# Declared when the tool is registered so clients receive `structuredContent`
+# next to the markdown text block.
+SEARCH_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string"},
+                    "category": {"type": "string"},
+                    "title": {"type": "string"},
+                    "url": {"type": ["string", "null"]},
+                    "chunk_id": {"type": ["integer", "null"]},
+                    "score": {"type": "number"},
+                    "snippet": {"type": "string"},
+                },
+                "required": [
+                    "filename",
+                    "category",
+                    "title",
+                    "url",
+                    "chunk_id",
+                    "score",
+                    "snippet",
+                ],
+            },
+        },
+        "synthesized": {"type": ["string", "null"]},
+    },
+    "required": ["results", "synthesized"],
+}
+
+
+def _clamp_limit(limit: int) -> int:
+    """Clamp a caller-supplied result count into the supported 1..10 window."""
+    try:
+        requested = int(limit)
+    except (TypeError, ValueError):
+        return DEFAULT_LIMIT
+    return max(1, min(MAX_LIMIT, requested))
+
+
+def _coerce_chunk_id(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerce_score(value: Any) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _structured_row(formatter: Any, result: Dict[str, Any]) -> Dict[str, Any]:
+    """Build one `structuredContent` row for a search result."""
+    category = str(result.get("category") or "")
+    filename = str(result.get("filename") or "")
+    return {
+        "filename": filename,
+        "category": category,
+        "title": str(result.get("title") or "Untitled"),
+        "url": build_doc_url(
+            getattr(formatter, "source_catalog", None), category, filename
+        ),
+        "chunk_id": _coerce_chunk_id(result.get("chunk_id")),
+        "score": _coerce_score(result.get("_relevance", 0.0)),
+        "snippet": format_snippet(str(result.get("text") or ""), DEFAULT_SNIPPET_CHARS),
+    }
 
 
 class SearchTools:
@@ -73,9 +160,9 @@ class SearchTools:
         ctx: Context,
         query: str,
         category: Optional[CategoryEnum] = None,
-        # NOTE(#87): the `limit` parameter is added here by the parallel branch.
+        limit: int = DEFAULT_LIMIT,
         synthesize: bool = False,
-    ) -> str:
+    ) -> ToolResult:
         """
         Search the unified Plesk documentation for a specific query.
 
@@ -90,27 +177,44 @@ class SearchTools:
         if cat_str:
             validate_category(cat_str, allow_all=False)
 
-        # 1. Domain logic call
+        max_results = _clamp_limit(limit)
+
+        # 1. Domain logic call — SearchService still returns the full candidate
+        # pool; the payload is capped here, in the protocol layer.
         expanded_results, error_msg = await self.search_service.search(query, cat_str)
         if error_msg:
-            return error_msg
+            return self._text_result(error_msg)
+
+        results = expanded_results[:max_results]
 
         # 2. Formatting (Protocol layer)
         formatter = self.search_service.search_formatter
-        formatted_results = formatter.format_markdown(expanded_results)
+        formatted_results = formatter.format_markdown(results)
 
-        # 3. Optional Synthesis (MCP-specific ctx usage).
+        # 3. Optional Synthesis (MCP-specific ctx usage)
         # Synthesis is opt-in per call: `plesk_enable_sampling` is deprecated
         # and no longer forces a second model turn on the default search path.
-        if synthesize and ctx and expanded_results:
-            answer = await self._synthesize_answer(ctx, query, expanded_results)
-            if answer:
-                return (
-                    f"### AI-Synthesized Answer\n\n{answer}\n\n---\n\n"
+        synthesized = None
+        if synthesize and ctx and results:
+            synthesized = await self._synthesize_answer(ctx, query, results)
+            if synthesized:
+                formatted_results = (
+                    f"### AI-Synthesized Answer\n\n{synthesized}\n\n---\n\n"
                     f"{formatted_results}"
                 )
 
-        return formatted_results
+        return ToolResult(
+            content=[TextContent(type="text", text=formatted_results)],
+            structured_content={
+                "results": [_structured_row(formatter, r) for r in results],
+                "synthesized": synthesized,
+            },
+        )
+
+    @staticmethod
+    def _text_result(text: str) -> ToolResult:
+        """Wrap a plain message (e.g. a relevance-gate notice) as a tool result."""
+        return ToolResult(content=[TextContent(type="text", text=text)])
 
     async def get_file_content(self, filename: str, category: CategoryEnum) -> str:
         """Retrieve the full content of a specific documentation file."""
@@ -128,21 +232,52 @@ class SearchTools:
 
 
 @tool_error_boundary
+async def _search_with_error_boundary(
+    ctx: Context,
+    query: str,
+    category: Optional[CategoryEnum],
+    limit: int,
+    synthesize: bool,
+) -> ToolResult:
+    """Run the search tool under the shared error boundary."""
+    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
+    search_tools = SearchTools(container.search_service)
+    return await search_tools.search_mcp_plesk_dev_docs(
+        ctx, query, category, limit, synthesize
+    )
+
+
 async def search_mcp_plesk_dev_docs(
     ctx: Context,
     query: str,
     category: Optional[CategoryEnum] = None,
-    # NOTE(#87): the `limit` parameter is added here by the parallel branch.
+    limit: int = DEFAULT_LIMIT,
     synthesize: bool = False,
-) -> str:
+) -> ToolResult:
     """
     Search the unified Plesk documentation for a specific query.
+
+    This tool provides access to the most up-to-date documentation for Plesk,
+    including guides, CLI references, and API documentation.
+    Use this for any questions about how Plesk works, how to use its CLI or APIs.
+
+    Args:
+        query: Natural-language search query.
+        category: Optional category filter (guide, cli, api, php-stubs, js-sdk).
+        limit: Maximum number of results, default 5. Values outside 1-10 are
+            clamped into that range. Each snippet is capped at ~800 characters;
+            use `get_file_content` with the returned filename for the full text.
     """
-    container = ctx.request_context.lifespan_context["container"]  # type: ignore[union-attr]
-    search_tools = SearchTools(container.search_service)
-    return await search_tools.search_mcp_plesk_dev_docs(
-        ctx, query, category, synthesize=synthesize
+    result = await _search_with_error_boundary(
+        ctx, query, category, limit, synthesize
     )
+    if isinstance(result, str):
+        # The error boundary returns the actionable "[ERROR] ..." guidance as
+        # text; wrap it so the declared outputSchema stays satisfiable.
+        return ToolResult(
+            content=[TextContent(type="text", text=result)], is_error=True
+        )
+    return result
 
 
 @tool_error_boundary

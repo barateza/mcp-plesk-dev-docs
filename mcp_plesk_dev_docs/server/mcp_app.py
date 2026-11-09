@@ -3,6 +3,8 @@ from mcp_plesk_dev_docs.paths import resolve_base_dir
 from typing import AsyncGenerator
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+
 from mcp_plesk_dev_docs.application.services.container import AppContainer
 
 # Root directory of the project
@@ -28,6 +30,7 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
 
     # Register tools
     from mcp_plesk_dev_docs.server.tools.search_tools import (
+        SEARCH_OUTPUT_SCHEMA,
         search_mcp_plesk_dev_docs,
         get_file_content,
         resolve_references,
@@ -44,7 +47,12 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
         requantize_knowledge,
     )
 
-    mcp.tool()(search_mcp_plesk_dev_docs)
+    # Search results are read-only and idempotent, so clients may cache and
+    # parallelise the call; they also carry `structuredContent`.
+    mcp.tool(
+        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+        output_schema=SEARCH_OUTPUT_SCHEMA,
+    )(search_mcp_plesk_dev_docs)
     mcp.tool()(get_file_content)
     mcp.tool()(resolve_references)
     mcp.tool()(warmup_server)

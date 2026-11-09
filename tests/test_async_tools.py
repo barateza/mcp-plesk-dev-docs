@@ -25,6 +25,35 @@ from mcp_plesk_dev_docs.server.tools.indexing_tools import (
 )
 
 
+from mcp.types import TextContent
+
+
+def markdown_text(result) -> str:
+    """Return the markdown text block of a search ToolResult."""
+    return "\n".join(
+        block.text for block in result.content if isinstance(block, TextContent)
+    )
+
+
+def search_service_of(mock_ctx):
+    """Return the mocked SearchService behind the mock context."""
+    return mock_ctx.request_context.lifespan_context["container"].search_service
+
+
+def _search_results(count: int, body: str = "Paragraph body. ") -> list:
+    return [
+        {
+            "filename": f"doc{i}.htm",
+            "text": f"Chunk {i}. {body}",
+            "category": "guide",
+            "title": f"Title {i}",
+            "_relevance": 0.9 - i * 0.01,
+            "chunk_id": i,
+        }
+        for i in range(count)
+    ]
+
+
 # Helper to simulate executor submission by calling the function immediately
 def sync_submit(fn, *args, **kwargs):
     f = concurrent.futures.Future()
@@ -233,13 +262,11 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
     try:
         results = await asyncio.gather(*tasks, return_exceptions=False)
         assert len(results) == 3
-        assert isinstance(results[0], str)
         assert isinstance(results[1], str)
-        assert isinstance(results[2], str)
 
-        assert "result content" in results[0]
+        assert "result content" in markdown_text(results[0])
         assert "SKIPPED cli" in results[1]
-        assert "result content" in results[2]
+        assert "result content" in markdown_text(results[2])
 
         # Verify that underlying services were called
         search_service_mock.search.assert_called()
@@ -251,3 +278,79 @@ async def test_concurrent_calls_via_asyncio_gather_complete_without_deadlock(
 
     except Exception as e:
         pytest.fail(f"Concurrent calls failed or deadlocked: {e}")
+
+
+@pytest.mark.asyncio
+async def test_search_limit_defaults_to_five(mock_all_ml_and_io_calls):
+    """The default call caps the payload at five deduplicated results."""
+    mock_ctx = mock_all_ml_and_io_calls
+    search_service = search_service_of(mock_ctx)
+    search_service.search.return_value = (_search_results(9), None)
+
+    result = await search_mcp_plesk_dev_docs(mock_ctx, query="q")
+
+    formatted = search_service.search_formatter.format_markdown.call_args[0][0]
+    assert len(formatted) == 5
+    assert len(result.structured_content["results"]) == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("requested", "expected"),
+    [(0, 1), (-4, 1), (1, 1), (5, 5), (10, 10), (99, 10)],
+)
+async def test_search_limit_is_clamped(mock_all_ml_and_io_calls, requested, expected):
+    """Out-of-range limits are clamped into the documented 1..10 window."""
+    mock_ctx = mock_all_ml_and_io_calls
+    search_service = search_service_of(mock_ctx)
+    search_service.search.return_value = (_search_results(20), None)
+
+    result = await search_mcp_plesk_dev_docs(mock_ctx, query="q", limit=requested)
+
+    formatted = search_service.search_formatter.format_markdown.call_args[0][0]
+    assert len(formatted) == expected
+    assert len(result.structured_content["results"]) == expected
+
+
+@pytest.mark.asyncio
+async def test_search_returns_structured_results(mock_all_ml_and_io_calls):
+    """Every documented field is present in structuredContent."""
+    mock_ctx = mock_all_ml_and_io_calls
+    search_service = search_service_of(mock_ctx)
+    search_service.search.return_value = (_search_results(3), None)
+    search_service.search_formatter.source_catalog.by_category.return_value = None
+
+    result = await search_mcp_plesk_dev_docs(mock_ctx, query="q", limit=3)
+
+    rows = result.structured_content["results"]
+    assert [row["filename"] for row in rows] == [
+        "doc0.htm",
+        "doc1.htm",
+        "doc2.htm",
+    ]
+    assert rows[0]["category"] == "guide"
+    assert rows[0]["title"] == "Title 0"
+    assert rows[0]["chunk_id"] == 0
+    assert rows[0]["url"] is None
+    assert rows[0]["score"] == pytest.approx(0.9)
+    assert rows[0]["snippet"].startswith("Chunk 0.")
+    assert isinstance(result.structured_content["synthesized"], str)
+    assert result.is_error is False
+    assert "Chunk 0." in markdown_text(result)
+
+
+@pytest.mark.asyncio
+async def test_search_snippet_is_truncated_per_result(mock_all_ml_and_io_calls):
+    """The structured snippet honours the ~800 character budget."""
+    mock_ctx = mock_all_ml_and_io_calls
+    search_service = search_service_of(mock_ctx)
+    search_service.search.return_value = (
+        _search_results(1, body="Sentence body. " * 300),
+        None,
+    )
+
+    result = await search_mcp_plesk_dev_docs(mock_ctx, query="q", limit=1)
+
+    snippet = result.structured_content["results"][0]["snippet"]
+    assert len(snippet) <= 800
+    assert snippet.endswith("…")

@@ -13,7 +13,11 @@ from mcp_plesk_dev_docs.domain.models import CategoryEnum
 from mcp_plesk_dev_docs.domain.models import VALID_CATEGORIES
 
 # New tool imports
-from mcp_plesk_dev_docs.server.tools.search_tools import search_mcp_plesk_dev_docs
+from mcp_plesk_dev_docs.server.tools.search_tools import (
+    SEARCH_OUTPUT_SCHEMA,
+    search_mcp_plesk_dev_docs,
+)
+from mcp.types import TextContent
 from mcp_plesk_dev_docs.server.tools.admin_tools import (
     warmup_server,
     daemon_health,
@@ -21,6 +25,13 @@ from mcp_plesk_dev_docs.server.tools.admin_tools import (
 from mcp_plesk_dev_docs.server.tools.indexing_tools import (
     refresh_knowledge,
 )
+
+
+def markdown_text(result) -> str:
+    """Return the markdown text block of a search ToolResult."""
+    return "\n".join(
+        block.text for block in result.content if isinstance(block, TextContent)
+    )
 
 
 # Mock lancedb.exceptions if not available
@@ -188,6 +199,18 @@ async def test_search_mcp_plesk_dev_docs_schema_exposes_category_enum_with_five_
 
 
 @pytest.mark.asyncio
+async def test_search_tool_declares_output_schema_and_annotations(mcp_app_fixture):
+    """The registered tool declares its structured output and read-only hints."""
+    mcp_instance, _, _ = mcp_app_fixture
+    tool = await mcp_instance.get_tool("search_mcp_plesk_dev_docs")
+
+    assert tool.output_schema == SEARCH_OUTPUT_SCHEMA
+    assert tool.annotations.read_only_hint is True
+    assert tool.annotations.idempotent_hint is True
+    assert tool.parameters["properties"]["limit"]["default"] == 5
+
+
+@pytest.mark.asyncio
 async def test_refresh_knowledge_schema_exposes_category_enum_plus_all(
     mcp_app_fixture,
 ):
@@ -229,7 +252,8 @@ async def test_search_mcp_plesk_dev_docs_rejects_invalid_category_string(
     result = await search_mcp_plesk_dev_docs(
         mock_ctx, query="test", category="invalid-cat"
     )
-    assert result.startswith(
+    assert result.is_error
+    assert markdown_text(result).startswith(
         "[ERROR] Invalid argument: Invalid category: 'invalid-cat'."
     )
 
@@ -244,7 +268,10 @@ async def test_search_mcp_plesk_dev_docs_rejects_all_as_category(
     """
     mock_ctx, _ = mock_server_dependencies
     result = await search_mcp_plesk_dev_docs(mock_ctx, query="test", category="all")
-    assert result.startswith("[ERROR] Invalid argument: Invalid category: 'all'.")
+    assert result.is_error
+    assert markdown_text(result).startswith(
+        "[ERROR] Invalid argument: Invalid category: 'all'."
+    )
 
 
 @pytest.mark.asyncio

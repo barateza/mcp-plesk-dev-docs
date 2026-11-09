@@ -10,6 +10,14 @@ from mcp_plesk_dev_docs.application.services.search_service import SearchService
 
 # New tool import
 from mcp_plesk_dev_docs.server.tools.search_tools import search_mcp_plesk_dev_docs
+from mcp.types import TextContent
+
+
+def markdown_text(result) -> str:
+    """Return the markdown text block of a search ToolResult."""
+    return "\n".join(
+        block.text for block in result.content if isinstance(block, TextContent)
+    )
 
 
 # Helper to simulate executor submission
@@ -110,11 +118,12 @@ async def test_search_mcp_plesk_dev_docs_synthesize_opt_in(
     result = await search_mcp_plesk_dev_docs(
         ctx=mock_ctx, query="how to create a domain", synthesize=True
     )
+    text = markdown_text(result)
 
     mock_ctx.sample.assert_called_once()
-    assert "Synthesized Answer" in result
-    assert "Synthesized answer from LLM" in result
-    assert "file1.html" in result
+    assert "Synthesized Answer" in text
+    assert "Synthesized answer from LLM" in text
+    assert "file1.html" in text
     assert mock_container.search_service.search_formatter.format_markdown.called
 
 
@@ -145,10 +154,11 @@ async def test_search_mcp_plesk_dev_docs_synthesize_disabled_by_default(
     result = await search_mcp_plesk_dev_docs(
         ctx=mock_ctx, query="how to create a domain"
     )
+    text = markdown_text(result)
 
     mock_ctx.sample.assert_not_called()
-    assert "Synthesized Answer" not in result
-    assert "file1.html" in result
+    assert "Synthesized Answer" not in text
+    assert "file1.html" in text
     assert mock_container.search_service.search_formatter.format_markdown.called
 
 
@@ -169,9 +179,10 @@ async def test_search_mcp_plesk_dev_docs_no_results_no_sampling(
     result = await search_mcp_plesk_dev_docs(
         ctx=mock_ctx, query="nonexistent", synthesize=True
     )
+    text = markdown_text(result)
 
     mock_ctx.sample.assert_not_called()
-    assert "I could not find a reliable answer." in result
+    assert "I could not find a reliable answer." in text
 
 
 @pytest.mark.asyncio
@@ -200,8 +211,9 @@ async def test_search_mcp_plesk_dev_docs_sampling_failure_graceful(
     result = await search_mcp_plesk_dev_docs(
         ctx=mock_ctx, query="test query", synthesize=True
     )
+    text = markdown_text(result)
 
     mock_ctx.sample.assert_called_once()
-    assert "Synthesized Answer" not in result  # Because sampling failed
-    assert "file1.html" in result
+    assert "Synthesized Answer" not in text  # Because sampling failed
+    assert "file1.html" in text
     assert mock_container.search_service.search_formatter.format_markdown.called

@@ -28,6 +28,7 @@ from mcp_plesk_dev_docs.benchmark_gates import (
     write_baseline,
 )
 from mcp_plesk_dev_docs.benchmark_suites import BENCHMARK_SUITES
+from mcp_plesk_dev_docs.settings import settings
 from mcp_plesk_dev_docs.benchmark_runner import run_benchmark
 from mcp_plesk_dev_docs.benchmark_reporting import (
     print_autoresearch_summary,
@@ -50,8 +51,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--profiles",
         nargs="+",
         choices=PROFILE_NAMES,
-        default=list(PROFILE_NAMES),
-        help=f"Profiles to benchmark (default: {' '.join(PROFILE_NAMES)}).",
+        default=[settings.plesk_model_profile],
+        help=(
+            "Profiles to benchmark. Defaults to the active PLESK_MODEL_PROFILE "
+            f"({settings.plesk_model_profile}); pass --profile for one profile."
+        ),
     )
     parser.add_argument(
         "--profile",
@@ -231,25 +235,43 @@ def _handle_baseline_and_gates(
 ) -> None:
     """Process baseline capture and quality gate evaluation."""
     baseline_path = args.baseline_file
+    if not baseline_path and (args.capture_baseline or args.fail_on_gate):
+        # The documented gate command omits --baseline-file; resolve the
+        # conventional path instead of silently skipping the gate.
+        baseline_path = f"benchmarks/baselines/{args.suite}.json"
+
     if args.capture_baseline:
-        if not baseline_path:
-            baseline_path = f"benchmarks/baselines/{args.suite}.json"
         write_baseline(baseline_path, all_results)
         print(f"\nBaseline captured to {baseline_path}")
+        return
 
-    if (
-        baseline_path and not args.capture_baseline
-    ):  # Only load if not capturing new baseline
-        baseline_runs = load_baseline(baseline_path)
-        gate_config = load_gate_config(args.gate_config)
-        gate_report = evaluate_quality_gates(all_results, baseline_runs, gate_config)
-        print(format_gate_report(gate_report))
-        if args.fail_on_gate and not gate_report["passed"]:
-            raise SystemExit(2)
+    if not baseline_path:
+        return
+
+    path = Path(baseline_path)
+    if not path.exists():
+        message = (
+            f"[gate] baseline not found: {path}\n"
+            "Capture one on this machine with "
+            f"`--capture-baseline --baseline-file {path}`, then re-run the gate."
+        )
+        if args.fail_on_gate:
+            raise SystemExit(message)
+        print(message)
+        return
+
+    gate_config = load_gate_config(args.gate_config)
+    gate_report = evaluate_quality_gates(
+        all_results, load_baseline(str(path)), gate_config
+    )
+    print(format_gate_report(gate_report))
+    if args.fail_on_gate and not gate_report["passed"]:
+        raise SystemExit(2)
 
 
 def _run_benchmark_cli(args: argparse.Namespace) -> None:
-    profiles_to_run = [args.profile] if args.profile else args.profiles
+    profiles_to_run = [args.profile] if args.profile else list(args.profiles)
+    print(f"Benchmarking profile(s): {', '.join(profiles_to_run)}")
     engines_to_run = (
         ["baseline", "pageindex-pilot"] if args.autoresearch else [args.engine]
     )

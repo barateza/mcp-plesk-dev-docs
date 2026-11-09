@@ -68,6 +68,11 @@ def aggregate_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ]
             if values:
                 base[metric] = float(mean(values))
+        # Preserve the machine fingerprint so the latency gate can tell a real
+        # regression from a baseline measured on different hardware.
+        machines = {item.get("machine") for item in items}
+        if len(machines) == 1 and None not in machines:
+            base["machine"] = machines.pop()
         aggregated.append(base)
 
     aggregated.sort(key=_identity)
@@ -142,6 +147,16 @@ def _check_regression_gates(run, baseline, run_name, config, failures, warnings)
         curr = float(run[metric])
         base = float(baseline[metric])
 
+        if metric == "avg_latency_s":
+            run_machine = run.get("machine")
+            base_machine = baseline.get("machine")
+            if not run_machine or run_machine != base_machine:
+                warnings.append(
+                    "Latency not gated for "
+                    f"{run_name}: baseline machine {base_machine or 'unknown'} "
+                    f"!= current {run_machine or 'unknown'}."
+                )
+                continue
         if "max_drop" in cfg:
             drop = base - curr
             if drop > float(cfg["max_drop"]):
@@ -203,6 +218,7 @@ def evaluate_quality_gates(
     current_runs: list[dict[str, Any]],
     baseline_runs: list[dict[str, Any]],
     gate_config: dict[str, Any],
+    require_match: bool = True,
 ) -> dict[str, Any]:
     current = aggregate_runs(current_runs)
     baseline_map = {_identity(run): run for run in aggregate_runs(baseline_runs)}
@@ -210,23 +226,40 @@ def evaluate_quality_gates(
     failures: list[str] = []
     warnings: list[str] = []
 
+    matched = 0
+    unmatched: list[str] = []
+
     for run in current:
         ident = _identity(run)
         run_name = _identity_string(run)
         baseline = baseline_map.get(ident)
 
         if baseline is None:
-            warnings.append(f"No baseline run matched: {run_name}")
+            unmatched.append(run_name)
+            message = (
+                f"No baseline run matched: {run_name}. "
+                "Pass --baseline-file benchmarks/baselines/<suite>.<profile>.json "
+                "or capture one with --capture-baseline."
+            )
+            if require_match:
+                failures.append(message)
+            else:
+                warnings.append(message)
             continue
 
+        matched += 1
         _check_metrics(run, baseline, run_name, gate_config, failures, warnings)
 
+    # A gate that matched nothing must not report success: that is how a
+    # misconfigured profile or baseline silently disabled the gate before.
     return {
-        "passed": len(failures) == 0,
+        "passed": len(failures) == 0 and (matched > 0 or not require_match),
         "failures": failures,
         "warnings": warnings,
         "current_count": len(current),
         "baseline_count": len(baseline_map),
+        "matched_count": matched,
+        "unmatched": unmatched,
     }
 
 
@@ -236,6 +269,7 @@ def format_gate_report(report: dict[str, Any]) -> str:
         "-" * 60,
         f"Current runs : {report.get('current_count', 0)}",
         f"Baseline runs: {report.get('baseline_count', 0)}",
+        f"Matched runs : {report.get('matched_count', 0)}",
     ]
 
     warnings = report.get("warnings", [])

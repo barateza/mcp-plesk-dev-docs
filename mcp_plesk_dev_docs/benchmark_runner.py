@@ -17,11 +17,13 @@ from __future__ import annotations
 import asyncio
 import gc
 import os
+import platform
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 from unittest.mock import AsyncMock
 
+from mcp_plesk_dev_docs import platform_utils
 from mcp_plesk_dev_docs.infrastructure.ai_client import AIClient
 from mcp_plesk_dev_docs.benchmark_engines import (
     DEFAULT_PILOT_CONFIG,
@@ -39,6 +41,16 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _machine_id() -> str:
+    """Fingerprint the machine + accelerator a run was measured on.
+
+    The latency gate compares against a baseline only when both runs report the
+    same fingerprint; an MPS baseline must not police a CPU host.
+    """
+    device = platform_utils.get_optimal_device()
+    return f"{platform.system().lower()}-{platform.machine().lower()}-{device}"
 
 
 def _rss_mb() -> float:
@@ -78,7 +90,7 @@ def _hit_rank(results: list[dict[str, Any]], relevant: list[str]) -> int | None:
 # ---------------------------------------------------------------------------
 
 
-def evaluate_ragas_metrics(  # noqa: PLR0913
+def evaluate_ragas_metrics(  # noqa: PLR0913, PLR0917
     query: str,
     answer: str,
     retrieved_context: str,
@@ -190,7 +202,7 @@ def _get_selected_engine(
     return engine_name, pilot_config, "manual-engine"
 
 
-def _perform_retrieval(  # noqa: PLR0913
+def _perform_retrieval(  # noqa: PLR0913, PLR0917
     container: AppContainer,
     query_str: str,
     category: CategoryEnum | None,
@@ -223,7 +235,7 @@ def _perform_retrieval(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
-def run_benchmark(  # noqa: PLR0913, PLR0915
+def run_benchmark(  # noqa: PLR0913, PLR0915, PLR0917
     queries: list[dict],
     profile_name: str,
     top_k: int = 10,
@@ -365,6 +377,7 @@ def run_benchmark(  # noqa: PLR0913, PLR0915
     n = len(queries)
     res: dict[str, Any] = {
         "profile": profile_name,
+        "machine": _machine_id(),
         "n_queries": n,
         "hit_rate": sum(hits) / n if n else 0.0,
         "mrr": sum(reciprocal_ranks) / n if n else 0.0,

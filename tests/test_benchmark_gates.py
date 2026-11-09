@@ -126,3 +126,78 @@ def test_format_gate_report_contains_header():
         }
     )
     assert "QUALITY GATE REPORT" in text
+
+
+def test_unmatched_baseline_is_a_failure(tmp_path: Path):
+    baseline_file = tmp_path / "baseline.json"
+    write_baseline(str(baseline_file), [_run(profile="medium")])
+
+    report = evaluate_quality_gates(
+        [_run(profile="light")],
+        load_baseline(str(baseline_file)),
+        load_gate_config(None),
+    )
+
+    assert report["passed"] is False
+    assert report["matched_count"] == 0
+    assert any("No baseline run matched" in f for f in report["failures"])
+
+
+def test_empty_current_runs_cannot_pass():
+    report = evaluate_quality_gates([], [], load_gate_config(None))
+    assert report["passed"] is False
+    assert report["matched_count"] == 0
+
+
+def test_partial_baseline_can_warn_instead_of_fail(tmp_path: Path):
+    baseline_file = tmp_path / "baseline.json"
+    write_baseline(str(baseline_file), [_run(profile="medium")])
+
+    report = evaluate_quality_gates(
+        [_run(profile="light")],
+        load_baseline(str(baseline_file)),
+        load_gate_config(None),
+        require_match=False,
+    )
+
+    assert report["passed"] is True
+    assert any("No baseline run matched" in w for w in report["warnings"])
+
+
+def test_latency_gate_skipped_across_machines(tmp_path: Path):
+    baseline_file = tmp_path / "baseline.json"
+    write_baseline(
+        str(baseline_file), [_run(avg_latency_s=1.0, machine="linux-x86_64-cpu")]
+    )
+
+    report = evaluate_quality_gates(
+        [_run(avg_latency_s=5.0, machine="darwin-arm64-mps")],
+        load_baseline(str(baseline_file)),
+        load_gate_config(None),
+    )
+
+    assert report["passed"] is True, report["failures"]
+    assert any("Latency not gated" in w for w in report["warnings"])
+
+
+def test_latency_gate_enforced_on_same_machine(tmp_path: Path):
+    baseline_file = tmp_path / "baseline.json"
+    machine = "linux-x86_64-cpu"
+    write_baseline(str(baseline_file), [_run(avg_latency_s=1.0, machine=machine)])
+
+    report = evaluate_quality_gates(
+        [_run(avg_latency_s=5.0, machine=machine)],
+        load_baseline(str(baseline_file)),
+        load_gate_config(None),
+    )
+
+    assert report["passed"] is False
+    assert any("avg_latency_s" in f for f in report["failures"])
+
+
+def test_aggregate_keeps_machine_only_when_unanimous():
+    unanimous = aggregate_runs([_run(machine="a"), _run(machine="a")])
+    assert unanimous[0]["machine"] == "a"
+
+    mixed = aggregate_runs([_run(machine="a"), _run(machine="b")])
+    assert "machine" not in mixed[0]

@@ -48,7 +48,7 @@ flowchart TD
         S["2 · Hybrid Search\nVector (LanceDB) + native FTS"]
         R["3 · RRF Merge + Rerank\n(MiniLM-L4-v2)"]
         N["4 · Neighbor Expansion\n(Context Enrichment)"]
-        A["5 · AI Synthesis\n(sampling-enabled)"]
+        A["5 · AI Synthesis\n(opt-in per call)"]
         E --> S --> R --> N --> A
     end
 
@@ -186,8 +186,8 @@ Set environment variables in `.env`:
 
 ```env
 PLESK_MODEL_PROFILE=light       # light (default) | medium | full | full-tq
-PLESK_ENABLE_SAMPLING=true     # AI-Synthesized answers
-PLESK_DAEMON_AUTO_WARMUP=true  # Preload models on startup
+PLESK_QUERY_CACHE_ENABLED=true  # Result cache (256 entries by default)
+PLESK_DAEMON_AUTO_WARMUP=true   # Preload models on startup
 PLESK_INDEX_SUMMARIES=true     # Enable file-level summaries
 OPENROUTER_API_KEY=sk-or-v1-...
 ```

@@ -17,7 +17,9 @@ Tools allow the AI client (e.g., Claude) to perform actions or retrieve data fro
 1. Performs Hybrid Search (Vector + FTS).
 2. Reranks top 50 candidates using a cross-encoder.
 3. Automatically expands context for the top 5 results by fetching adjacent chunks (neighbor retrieval).
-4. If `PLESK_ENABLE_SAMPLING` is enabled, it synthesizes a concise answer before returning result cards.
+4. Returns the top `limit` results (default 5) with ~800-character snippets and
+   `structuredContent`. Pass `synthesize=true` to prepend an LLM-written answer;
+   synthesis is opt-in per call and no longer driven by server config.
 
 ### `refresh_knowledge`
 **Description:** Synchronizes the local vector index with the documentation sources.
@@ -87,7 +89,10 @@ Resources provide direct access to structured data, such as Tables of Contents.
 
 Key environment variables that affect MCP behavior:
 
-- `PLESK_ENABLE_SAMPLING`: Enable/disable AI-synthesized answers in `search_plesk_unified`.
+- `PLESK_ENABLE_SAMPLING`: **Deprecated.** Synthesis is opt-in per call
+  (`synthesize=true`); this flag no longer forces a client sampling round-trip.
+- `PLESK_QUERY_CACHE_ENABLED` / `PLESK_QUERY_CACHE_SIZE`: Result cache toggle and
+  entry cap (default 256); hits skip embedding, scanning, reranking and expansion.
 - `PLESK_MIN_RELEVANCE_THRESHOLD`: Minimum relevance score (0-1) required for a result to be returned.
 - `PLESK_RERANK_CANDIDATES`: Number of candidates passed from vector search to the reranker (default: 50).
 - `PLESK_INDEX_SUMMARIES`: Enable LLM-generated file summaries during indexing.

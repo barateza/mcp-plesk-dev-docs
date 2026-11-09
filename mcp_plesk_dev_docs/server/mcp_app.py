@@ -50,7 +50,7 @@ def create_mcp_app(container: AppContainer) -> FastMCP:
     # Search results are read-only and idempotent, so clients may cache and
     # parallelise the call; they also carry `structuredContent`.
     mcp.tool(
-        annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
+        annotations=ToolAnnotations(read_only_hint=True, idempotent_hint=True),
         output_schema=SEARCH_OUTPUT_SCHEMA,
     )(search_mcp_plesk_dev_docs)
     mcp.tool()(get_file_content)

@@ -334,7 +334,9 @@ async def test_search_returns_structured_results(mock_all_ml_and_io_calls):
     assert rows[0]["url"] is None
     assert rows[0]["score"] == pytest.approx(0.9)
     assert rows[0]["snippet"].startswith("Chunk 0.")
-    assert isinstance(result.structured_content["synthesized"], str)
+    # Synthesis is opt-in per call (issue #88): the field is present and null
+    # unless the caller passes synthesize=True.
+    assert result.structured_content["synthesized"] is None
     assert result.is_error is False
     assert "Chunk 0." in markdown_text(result)
 

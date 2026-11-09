@@ -1,6 +1,6 @@
 """Protocol interfaces for repository dependencies."""
 
-from typing import List, Optional, Protocol, Set
+from typing import Any, List, Optional, Protocol, Set
 
 
 class IVectorRepository(Protocol):
@@ -30,7 +30,7 @@ class IFtsRepository(Protocol):
 class ISearchRepository(IVectorRepository, IFtsRepository, Protocol):
     """Combined interface for the search service repository (vector + FTS)."""
 
-    pass
+    def get_table(self) -> Any: ...
 
 
 class IDocumentStore(Protocol):

@@ -79,6 +79,10 @@ mcp-plesk-dev-docs = "mcp_plesk_dev_docs.server:main"
 # The server will automatically detect and use GPU acceleration if available.
 dev = [
     "pytest>=8.0.0",
+    # The async fixtures need the plugin explicitly here: `uv sync --dev` installs
+    # [dependency-groups].dev, but `pip install -e ".[dev]"` (CI, contributors)
+    # only sees this extra, and without it every async test errors.
+    "pytest-asyncio>=1.3.0",
     "requests>=2.32.0",
     "ruff>=0.3.0",
     "pre-commit>=3.6.0",

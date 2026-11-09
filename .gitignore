@@ -141,6 +141,8 @@ knowledge_base/
 # Benchmark output files
 benchmark_output.txt
 *.benchmark.json
+# Machine-local baselines: captured per host, never the CI reference
+benchmarks/baselines/*.local.json
 
 # uv package manager
 .uv/

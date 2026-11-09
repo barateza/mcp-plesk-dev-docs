@@ -338,6 +338,27 @@ python scripts/benchmark_profiles.py \
    --fail-on-gate
 ```
 
+### Machine-local baselines
+
+A baseline captured on your own hardware records a `machine` fingerprint. The
+latency gate then compares only runs with the same fingerprint, while quality
+gates (Hit Rate, MRR) always apply. Capture a local reference on a fresh
+checkout of the machine you develop on, and keep it out of version control:
+
+```bash
+python scripts/capture_local_baseline.py --profile light --samples 5
+```
+
+`benchmarks/baselines/*.local.json` is gitignored. The script runs one fresh
+process per sample (the gate also runs one process per invocation, so
+`--repeat` inside `benchmark_profiles.py` would not be comparable), refuses to
+record while the machine is busy (CPU utilisation above `--max-busy-percent`,
+default 30%; pass `--wait-seconds` to wait for it to settle, or `--force` to
+accept inflated timings), and stores the sample count, CPU load and 1-minute load
+average in the artifact. Until a local artifact exists, the committed Apple
+Silicon baselines still gate quality on a CPU host, but the latency gate is
+reported as a warning instead of a failure.
+
 The default gate config validates:
 
 1. Maximum regression for `hit_rate`.

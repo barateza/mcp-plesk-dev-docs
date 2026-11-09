@@ -268,9 +268,7 @@ async def search_mcp_plesk_dev_docs(
             clamped into that range. Each snippet is capped at ~800 characters;
             use `get_file_content` with the returned filename for the full text.
     """
-    result = await _search_with_error_boundary(
-        ctx, query, category, limit, synthesize
-    )
+    result = await _search_with_error_boundary(ctx, query, category, limit, synthesize)
     if isinstance(result, str):
         # The error boundary returns the actionable "[ERROR] ..." guidance as
         # text; wrap it so the declared outputSchema stays satisfiable.

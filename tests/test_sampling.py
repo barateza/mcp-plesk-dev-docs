@@ -124,6 +124,10 @@ async def test_search_mcp_plesk_dev_docs_synthesize_opt_in(
     assert "Synthesized Answer" in text
     assert "Synthesized answer from LLM" in text
     assert "file1.html" in text
+    # The structured payload must carry the same synthesized answer.
+    structured_answer = result.structured_content["synthesized"]
+    assert structured_answer is not None
+    assert structured_answer.startswith("Synthesized answer from LLM")
     assert mock_container.search_service.search_formatter.format_markdown.called
 
 

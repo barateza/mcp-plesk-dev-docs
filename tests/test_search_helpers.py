@@ -488,6 +488,8 @@ async def test_invalidate_forces_pipeline_rerun(search_service_fixture):
     await service.search("query")
 
     assert service._get_search_candidates.call_count == 2
+
+
 # Concurrent retrieval legs
 # ---------------------------------------------------------------------------
 

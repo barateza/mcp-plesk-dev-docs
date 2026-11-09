@@ -52,7 +52,7 @@ class SearchService:
             QueryCache(maxsize=cache_size) if cache_enabled else None
         )
 
-    def _sigmoid(self, x: np.ndarray | list[float] | float) -> np.ndarray | float:
+    def _sigmoid(self, x: np.ndarray | list[float] | float) -> np.ndarray:
         """Map raw logit(s) to [0, 1] probability using the sigmoid function."""
         return 1.0 / (1.0 + np.exp(-np.asarray(x, dtype=np.float64)))
 
@@ -340,7 +340,7 @@ class SearchService:
             cat = r.get("category")
             cid = r.get("chunk_id")
 
-            if fname is None or cid is None:
+            if fname is None or cat is None or cid is None:
                 expanded_results.append(r)
                 continue
 

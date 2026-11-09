@@ -32,6 +32,16 @@ echo "[*] Installing project and dev dependencies..."
 uv pip install -e ".[dev]"
 echo "[✓] Dependencies installed."
 
+# ── 4. Install git hooks (lint/type/test on commit, gate on push) ───────
+if uv run pre-commit --version > /dev/null 2>&1; then
+    echo "[*] Installing pre-commit hooks..."
+    uv run pre-commit install
+    uv run pre-commit install --hook-type pre-push
+    echo "[✓] Hooks installed (pre-commit: ruff/mypy/pytest, pre-push: quality gate)."
+else
+    echo "[!] pre-commit not available; skipping hook installation."
+fi
+
 # ── Done ─────────────────────────────────────────────────────────────────
 echo ""
 echo "=== Setup complete! ==="

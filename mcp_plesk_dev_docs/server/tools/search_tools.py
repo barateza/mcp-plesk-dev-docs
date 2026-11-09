@@ -141,7 +141,9 @@ class SearchTools:
                 f"<context>\n{context_text}\n</context>"
             )
 
-            sample_result = await ctx.sample(
+            # FastMCP 4 typings dropped Context.sample; the call stays behind
+            # the try/except above and degrades to no synthesis.
+            sample_result = await ctx.sample(  # type: ignore[attr-defined]
                 messages=[
                     SamplingMessage(
                         role="user",

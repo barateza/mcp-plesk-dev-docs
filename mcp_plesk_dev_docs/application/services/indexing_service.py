@@ -28,7 +28,7 @@ BATCH_SIZE_CHUNKS_MPS = 256
 
 
 class IndexingService:
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         settings: Any,
         model_runtime: Any,

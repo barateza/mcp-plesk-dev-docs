@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Union
 
 from lancedb.index import Bitmap, BTree, IvfPq
 
@@ -29,7 +29,10 @@ class LanceDbRepository:
         return self.storage_runtime.get_table()
 
     def search_vector(
-        self, vector: List[float], limit: int = 10, filter_expr: Optional[str] = None
+        self,
+        vector: Union[str, List[float]],
+        limit: int = 10,
+        filter_expr: Optional[str] = None,
     ) -> List[dict]:
         """Perform a vector search."""
         table = self.get_table()

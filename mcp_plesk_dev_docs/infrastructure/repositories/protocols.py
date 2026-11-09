@@ -1,13 +1,18 @@
 """Protocol interfaces for repository dependencies."""
 
-from typing import Any, List, Optional, Protocol, Set
+from typing import Any, List, Optional, Protocol, Set, Union
 
 
 class IVectorRepository(Protocol):
     """Interface for vector search operations."""
 
     def search_vector(
-        self, vector: List[float], limit: int = 10, filter_expr: Optional[str] = None
+        self,
+        # A string is embedded by the table's registered embedding function;
+        # a list is searched as-is (TurboQuant path).
+        vector: Union[str, List[float]],
+        limit: int = 10,
+        filter_expr: Optional[str] = None,
     ) -> List[dict]: ...
 
     def get_neighbors(

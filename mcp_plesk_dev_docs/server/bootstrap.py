@@ -111,7 +111,11 @@ def build_settings_for_profile(profile_name: str) -> Any:
     """Create settings for a profile without mutating global state."""
     from mcp_plesk_dev_docs.settings import PleskSettings
 
-    return PleskSettings(_env_file=None, plesk_model_profile=profile_name)
+    # _env_file is a pydantic-settings runtime kwarg that its typed __init__
+    # does not declare.
+    return PleskSettings(  # type: ignore[call-arg]
+        _env_file=None, plesk_model_profile=profile_name
+    )
 
 
 def create_app(base_dir: Path, settings) -> AppContainer:

@@ -133,7 +133,7 @@ uv run python scripts/benchmark_profiles.py --profile medium --fail-on-gate
 If your changes improve metrics, you should capture a new baseline:
 
 ```bash
-uv run python scripts/benchmark_profiles.py --profile medium --capture-baseline --baseline-file benchmarks/baselines/control-medium.json
+uv run python scripts/benchmark_profiles.py --profile medium --capture-baseline --baseline-file benchmarks/baselines/control.json
 ```
 
 ### Retrieval integrity

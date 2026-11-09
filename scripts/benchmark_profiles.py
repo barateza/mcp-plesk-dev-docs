@@ -34,6 +34,10 @@ from mcp_plesk_dev_docs.benchmark_reporting import (
     print_result,
     print_summary_table,
 )
+from mcp_plesk_dev_docs.domain.models import _PROFILES
+
+# The CLI must only advertise profiles the runtime can resolve (issue #94).
+PROFILE_NAMES: list[str] = list(_PROFILES)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -45,11 +49,13 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profiles",
         nargs="+",
-        default=["local", "pro", "sandbox"],
-        help="Profiles to benchmark (default: light medium full full-tq)",
+        choices=PROFILE_NAMES,
+        default=list(PROFILE_NAMES),
+        help=f"Profiles to benchmark (default: {' '.join(PROFILE_NAMES)}).",
     )
     parser.add_argument(
         "--profile",
+        choices=PROFILE_NAMES,
         help="Benchmark a single profile (shortcut for --profiles X).",
     )
     parser.add_argument(

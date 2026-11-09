@@ -6,7 +6,14 @@ one of these five.
 - **`tq-search` is a local editable dep** in `pyproject.toml`:
   `path = "/Users/gilsonsiqueira/tq-search"`. Won't resolve on other machines.
 - **Concurrent LanceDB access** is prevented by a PID-file lock (`server/lock.py`).
-  If the server won't start, check for a stale lock file in `storage/`.
+  A second live instance prints the holder PID and the lock-file path to
+  stderr and exits with code **75** (`EX_TEMPFAIL`), never 0 — a zero exit
+  always means the server ran to completion. The lock file is
+  `mcp_plesk_dev_docs.lock` in the system temp directory
+  (`tempfile.gettempdir()`; `/tmp` on Linux, `%TEMP%` on Windows), *not* in
+  `storage/`. Stop the holder process first; delete the file only when that PID
+  is really gone (a live PID is honoured even if the holder is stuck). Stale or
+  corrupt lock files are replaced automatically at startup.
 - **`plesk_unified.egg-info/`** is stale from the pre-rename era. Only
   `mcp_plesk_dev_docs.egg-info/` is current. Delete the old one if it causes confusion.
 - **`knowledge_base/` sources** are downloaded at runtime (git clone / zip fetch) by

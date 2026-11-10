@@ -44,7 +44,14 @@ dependencies = [
     # The TurboQuant cache is written and read directly as safetensors (mmap),
     # so it must be declared even though it used to arrive transitively.
     "safetensors>=0.4.0",
-    "torch>=2.4.0",
+    # CUDA build selection. torch 2.6 is the newest release published with
+    # cu124 wheels, which carry Maxwell (sm_50) kernels and need only driver
+    # >= 525. Newer releases ship cu126/cu128/cu13x wheels: the cu13x ones
+    # require driver >= 580 and no longer include Maxwell, so on a GTX 860M
+    # (driver 550, compute 5.0) a newer torch resolves but leaves CUDA
+    # unusable. Blackwell (sm_100/120) users must override this pin.
+    "torch>=2.4.0,<2.7; sys_platform == 'linux'",
+    "torch>=2.4.0; sys_platform != 'linux'",
     "markdownify>=0.14.1",
     # NOTE: tantivy was only ever needed by lancedb's removed Tantivy FTS path;
     # nothing in this package imports it.

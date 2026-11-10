@@ -30,3 +30,13 @@ one of these five.
 - **A fresh checkout has no index.** `knowledge_base/` and `storage/` are gitignored, so
   the quality gate has nothing to query. Run `uv run python scripts/bootstrap_index.py
   --profile light` first (~15 min on a CPU box; it prints the row count and the indexes).
+- **The local GPU is a Maxwell card and needs the cu124 torch line.**
+  `nvidia-smi` reports a GTX 860M (compute **5.0**, 2 GB) on driver
+  `550.163.01` (CUDA 12.4). PyPI's default `torch` wheel is now a cu13x build:
+  it requires driver >= 580 and ships no `sm_50` kernels, so it installs cleanly
+  but `torch.cuda.is_available()` stays `False` ("driver too old", or error 304
+  when the device is sandboxed). Linux therefore pins `torch<2.7` in
+  `pyproject.toml`; a matching install must report `sm_50` in
+  `torch.cuda.get_arch_list()` before the GPU can be used. The light profile
+  needs only ~210 MiB of VRAM, and on this CPU box it cuts the control-suite
+  latency from ~2.8 s to ~0.6 s.

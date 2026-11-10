@@ -167,6 +167,14 @@ cd mcp-plesk-dev-docs
 uv pip install -e ".[dev]"
 ```
 
+On Linux the install resolves `torch` to the cu124 line (`<2.7`, pinned in
+`pyproject.toml`): it is the last release whose wheels carry Maxwell (`sm_50`)
+kernels and need only driver >= 525. CUDA 13 wheels require driver >= 580 and
+ship no `sm_50`, so on an older driver they install but leave CUDA unusable.
+Check with `python -c "import torch; print(torch.cuda.get_arch_list())"` — the
+list must contain `sm_50` for a Maxwell card. Blackwell (RTX 50-series) users
+should raise the pin for the Linux marker and install a cu128 wheel.
+
 2. **Run Initial Indexing:**
    Generate the offline vector database and full-text search indexes:
    ```bash

@@ -359,6 +359,11 @@ average in the artifact. Until a local artifact exists, the committed Apple
 Silicon baselines still gate quality on a CPU host, but the latency gate is
 reported as a warning instead of a failure.
 
+Measured on the local CPU box with the same 20-query control suite: **2.76 s**
+on CPU (`linux-x86_64-cpu`) and **0.62 s** on the GTX 860M
+(`linux-x86_64-cuda`), with identical HR@5 100% / MRR@5 0.975. The light
+profile uses ~210 MiB of the card's 2 GB, so CUDA is worth enabling there.
+
 The default gate config validates:
 
 1. Maximum regression for `hit_rate`.

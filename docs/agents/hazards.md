@@ -41,7 +41,8 @@ one of these five.
   needs only ~210 MiB of VRAM, and on this CPU box it cuts the control-suite
   latency from ~2.8 s to ~0.6 s. The deployed server venv is rebuilt with
   `scripts/provision_mcp_server_venv.sh` (torch cu124 installed first, then the
-  package); rebuilding it with a plain `uv pip install` would reinstall a newer
+  package, or `--local .` to install this checkout); rebuilding it with a plain
+  `uv pip install` would reinstall a newer
   torch and silently return the server to CPU. The MCP client respawns the
   server when its process is killed, so swapping `venv` -> `venv.new` and
   killing the old PID is the whole restart.
